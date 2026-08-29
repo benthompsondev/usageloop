@@ -1,7 +1,9 @@
 import unittest
 import os
 from pathlib import Path
+import sys
 import tempfile
+import time
 from unittest.mock import patch
 
 from sentinel._conpty import ConPtyError, ConPtyResult, run_conpty
@@ -80,6 +82,35 @@ class InteractiveCodexTriggerTests(unittest.TestCase):
                 exit_grace_seconds=0.1,
             )
         self.assertEqual("process_exited", result.terminal_outcome)
+
+    @unittest.skipUnless(os.name == "nt", "Windows ConPTY fixture")
+    def test_conpty_child_receives_terminal_standard_handles(self):
+        captured = bytearray()
+
+        def capture_output(output_fd, activity):
+            try:
+                while chunk := os.read(output_fd, 4096):
+                    captured.extend(chunk)
+                    activity[0] = time.monotonic()
+            finally:
+                os.close(output_fd)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("sentinel._conpty._drain_output", side_effect=capture_output):
+                result = run_conpty(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import sys; print(f'terminal={sys.stdin.isatty() and sys.stdout.isatty()}')",
+                    ],
+                    cwd=Path(directory),
+                    min_runtime_seconds=0,
+                    quiet_seconds=0.1,
+                    max_runtime_seconds=2,
+                    exit_grace_seconds=0.1,
+                )
+        self.assertEqual(0, result.exit_code)
+        self.assertIn(b"terminal=True", captured)
 
     @patch("sentinel.trigger.conpty_available", return_value=True)
     @patch("sentinel.trigger.run_conpty")

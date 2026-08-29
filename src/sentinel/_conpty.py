@@ -83,7 +83,7 @@ if os.name == "nt":
 _PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = 0x00020016
 _EXTENDED_STARTUPINFO_PRESENT = 0x00080000
 _CREATE_UNICODE_ENVIRONMENT = 0x00000400
-_CREATE_NO_WINDOW = 0x08000000
+_STARTF_USESTDHANDLES = 0x00000100
 _HANDLE_FLAG_INHERIT = 0x00000001
 _WAIT_OBJECT_0 = 0x00000000
 _WAIT_TIMEOUT = 0x00000102
@@ -181,6 +181,7 @@ def run_conpty(
 
         startup = _STARTUPINFOEXW()
         startup.StartupInfo.cb = ctypes.sizeof(_STARTUPINFOEXW)
+        startup.StartupInfo.dwFlags = _STARTF_USESTDHANDLES
         startup.lpAttributeList = attribute_list
         command_line = ctypes.create_unicode_buffer(subprocess.list2cmdline(list(command)))
         application = str(Path(command[0]))
@@ -190,7 +191,7 @@ def run_conpty(
             None,
             None,
             False,
-            _EXTENDED_STARTUPINFO_PRESENT | _CREATE_UNICODE_ENVIRONMENT | _CREATE_NO_WINDOW,
+            _EXTENDED_STARTUPINFO_PRESENT | _CREATE_UNICODE_ENVIRONMENT,
             None,
             str(cwd),
             ctypes.cast(ctypes.byref(startup), wintypes.LPVOID),
