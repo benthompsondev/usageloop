@@ -1,0 +1,31 @@
+# Personal agent config (committed guide is AGENTS.md)
+CLAUDE.md
+.claude/
+.codex/
+.agents/
+
+# Secrets - never commit
+.env
+.env.*
+*.pem
+*.key
+*credentials*
+*secret*
+
+# Python and local runtime state
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+.coverage
+.pytest_cache/
+.ruff_cache/
+
+# Sentinel observations are user-local, never repository data
+*.jsonl
+
+# Platform noise
+.DS_Store
+Thumbs.db
