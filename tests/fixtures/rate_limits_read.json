@@ -1,0 +1,27 @@
+{
+  "rateLimits": {
+    "limitId": "codex",
+    "primary": {"usedPercent": 12, "windowDurationMins": 300, "resetsAt": 2000010000},
+    "secondary": {"usedPercent": 34, "windowDurationMins": 10080, "resetsAt": 2000604800},
+    "rateLimitReachedType": null
+  },
+  "rateLimitsByLimitId": {
+    "codex": {
+      "limitId": "codex",
+      "primary": {"usedPercent": 12, "windowDurationMins": 300, "resetsAt": 2000010000},
+      "secondary": {"usedPercent": 34, "windowDurationMins": 10080, "resetsAt": 2000604800},
+      "rateLimitReachedType": null
+    },
+    "codex_other": {
+      "limitId": "codex_other",
+      "limitName": "not persisted",
+      "primary": {"usedPercent": 88, "windowDurationMins": 30, "resetsAt": 2000001000},
+      "secondary": null,
+      "rateLimitReachedType": null
+    }
+  },
+  "rateLimitResetCredits": {
+    "availableCount": 2,
+    "credits": [{"id": "must-not-be-normalized-or-logged", "status": "available"}]
+  }
+}

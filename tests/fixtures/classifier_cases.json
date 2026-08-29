@@ -1,0 +1,31 @@
+{
+  "anchored": [
+    {"observed_at": 2000000000, "usedPercent": 1, "windowDurationMins": 300, "resetsAt": 2000010000},
+    {"observed_at": 2000000010, "usedPercent": 1, "windowDurationMins": 300, "resetsAt": 2000010000},
+    {"observed_at": 2000000020, "usedPercent": 2, "windowDurationMins": 300, "resetsAt": 2000010000},
+    {"observed_at": 2000000030, "usedPercent": 2, "windowDurationMins": 300, "resetsAt": 2000010000}
+  ],
+  "sliding": [
+    {"observed_at": 2000000000, "usedPercent": 0, "windowDurationMins": 300, "resetsAt": 2000018000},
+    {"observed_at": 2000000010, "usedPercent": 0, "windowDurationMins": 300, "resetsAt": 2000018010},
+    {"observed_at": 2000000020, "usedPercent": 0, "windowDurationMins": 300, "resetsAt": 2000018020},
+    {"observed_at": 2000000030, "usedPercent": 0, "windowDurationMins": 300, "resetsAt": 2000018030}
+  ],
+  "jitter": [
+    {"observed_at": 2000000000, "usedPercent": 10, "windowDurationMins": 300, "resetsAt": 2000010000},
+    {"observed_at": 2000000010, "usedPercent": 10, "windowDurationMins": 300, "resetsAt": 2000010001},
+    {"observed_at": 2000000020, "usedPercent": 10, "windowDurationMins": 300, "resetsAt": 2000009999},
+    {"observed_at": 2000000030, "usedPercent": 11, "windowDurationMins": 300, "resetsAt": 2000010000}
+  ],
+  "duration_change": [
+    {"observed_at": 2000000000, "usedPercent": 1, "windowDurationMins": 300, "resetsAt": 2000010000},
+    {"observed_at": 2000000010, "usedPercent": 1, "windowDurationMins": 290, "resetsAt": 2000010000},
+    {"observed_at": 2000000020, "usedPercent": 1, "windowDurationMins": 300, "resetsAt": 2000010000}
+  ],
+  "reset_between": [
+    {"observed_at": 2000000000, "usedPercent": 80, "windowDurationMins": 300, "resetsAt": 2000000015},
+    {"observed_at": 2000000010, "usedPercent": 81, "windowDurationMins": 300, "resetsAt": 2000000015},
+    {"observed_at": 2000000020, "usedPercent": 0, "windowDurationMins": 300, "resetsAt": 2000018020},
+    {"observed_at": 2000000030, "usedPercent": 0, "windowDurationMins": 300, "resetsAt": 2000018020}
+  ]
+}

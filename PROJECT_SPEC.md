@@ -2,9 +2,10 @@
 
 ## Goal
 
-Provide a trustworthy Windows-first CLI that measures whether the currently
-exposed approximately five-hour Codex subscription window has a fixed reset
-timestamp or a reset timestamp that slides with wall-clock time.
+Provide the verified observation foundation for a later consumer-friendly
+window-chaining product: a trustworthy Windows-first CLI that measures whether
+the currently exposed approximately five-hour Codex subscription window has a
+fixed reset timestamp or a reset timestamp that slides with wall-clock time.
 
 ## Why
 
@@ -55,6 +56,11 @@ safe history, reconnect behavior, setup script, tests, and documentation.
 Out of scope: prompts, keepalives, reset consumption, private endpoints,
 credential reads, API keys, UI scraping, GUI/tray, startup tasks, schedulers,
 telemetry, quota manipulation, and global PATH changes.
+
+Later product direction, explicitly not part of Phase 1: minimal post-rollover
+triggers, Claude Code observation/triggering, scheduling, verification loops,
+and a consumer Windows interface. None of those may be inferred from or added
+to this observer without a new approved design and security review.
 
 Ask Ben first before any security-boundary, protocol-method, dependency,
 publishing, deployment, or persistence expansion.

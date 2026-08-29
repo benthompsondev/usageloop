@@ -11,8 +11,19 @@ rate-limit snapshots through a local `codex app-server`. See
 
 ## Commands
 
-The implementation is not built yet. During Phase 1 development, keep these
-commands current in the same change that makes them real.
+```powershell
+# One-time local setup (creates only .venv inside this repo)
+pwsh -NoProfile -File .\scripts\setup.ps1
+
+# Run
+.\sentinel.ps1 doctor
+.\sentinel.ps1 status
+.\sentinel.ps1 sample
+.\sentinel.ps1 watch
+
+# Verify without contacting OpenAI
+pwsh -NoProfile -File .\scripts\verify.ps1
+```
 
 ## Structure
 
@@ -20,6 +31,9 @@ commands current in the same change that makes them real.
 - `tests/` - deterministic unit and fixture-based protocol tests.
 - `scripts/` - local PowerShell setup and verification helpers.
 - `docs/` - research and design evidence.
+
+Phase 1 is infrastructure for a later window-chaining product, not permission
+to implement triggers, Claude support, scheduling, or consumer UI in this repo.
 
 ## Boundaries
 

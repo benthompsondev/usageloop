@@ -2,8 +2,8 @@
 
 ## 2026-08-29
 
-- **Did:** Verified the installed Codex schema and current upstream app-server source before scaffolding.
-- **Learned:** Rate-limit reads now expose both a compatibility snapshot and a multi-bucket map; update notifications are sparse.
-- **Verified with:** Codex CLI 0.146.0 schema generation and current `openai/codex` source inspection.
-- **Blocked on:** Nothing at scaffold time.
-- **Next:** Build the classifier and protocol client test-first.
+- **Did:** Built the Phase 1 observer test-first, added local setup, and verified it through the real app-server.
+- **Learned:** The native app Codex can be newer than the npm shim; live selection must report the executable it actually uses.
+- **Verified with:** 31 deterministic tests, compile/CLI checks, live doctor, and a four-sample session that found a fixed reset timestamp.
+- **Blocked on:** Nothing in the Phase 1 observer scope.
+- **Next:** Treat this commit as the observation foundation when the later window-chaining product is designed.

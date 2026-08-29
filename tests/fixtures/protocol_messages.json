@@ -1,0 +1,39 @@
+{
+  "initialize_result": {
+    "id": 1,
+    "result": {
+      "userAgent": "codex_cli_rs/0.146.0",
+      "codexHome": "C:/fake/codex-home",
+      "platformFamily": "windows",
+      "platformOs": "windows"
+    }
+  },
+  "rate_notification": {
+    "method": "account/rateLimits/updated",
+    "params": {
+      "rateLimits": {
+        "limitId": "codex",
+        "primary": {"usedPercent": 13, "windowDurationMins": 300, "resetsAt": 2000010000},
+        "secondary": null,
+        "planType": null
+      }
+    }
+  },
+  "rate_response": {
+    "id": 2,
+    "result": {
+      "rateLimits": {
+        "limitId": "codex",
+        "primary": {"usedPercent": 12, "windowDurationMins": 300, "resetsAt": 2000010000},
+        "secondary": {"usedPercent": 34, "windowDurationMins": 10080, "resetsAt": 2000604800}
+      }
+    }
+  },
+  "auth_error": {
+    "id": 2,
+    "error": {
+      "code": -32600,
+      "message": "chatgpt authentication required to read rate limits"
+    }
+  }
+}
