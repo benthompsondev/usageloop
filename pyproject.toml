@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-window-sentinel"
-version = "0.2.0"
-description = "Observe Codex windows and verify one bounded post-rollover trigger"
+version = "0.3.0"
+description = "Observe Codex windows and safely verify bounded rollover or bootstrap triggers"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

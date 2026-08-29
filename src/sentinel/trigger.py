@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ._conpty import ConPtyError, conpty_available, run_conpty
+from .transport import build_codex_command
 
 
 @dataclass(frozen=True)
@@ -32,8 +33,8 @@ class TriggerDescription:
 
 @dataclass(frozen=True)
 class TriggerRunResult:
-    succeeded: bool
-    category: str
+    terminal_outcome: str
+    request_possibly_sent: bool
 
 
 class Trigger(Protocol):
@@ -63,8 +64,7 @@ class InteractiveCodexTrigger:
         )
 
     def command(self) -> list[str]:
-        return [
-            str(self.executable),
+        arguments = [
             "-c",
             f"model_reasoning_effort={self.config.reasoning_effort}",
             "-m",
@@ -78,10 +78,11 @@ class InteractiveCodexTrigger:
             str(self.workspace),
             self.config.prompt,
         ]
+        return build_codex_command(self.executable, *arguments)
 
     def run(self) -> TriggerRunResult:
         if not conpty_available():
-            return TriggerRunResult(False, "interactive_tty_unavailable")
+            return TriggerRunResult("interactive_tty_unavailable", False)
         try:
             self.workspace.mkdir(parents=True, exist_ok=True)
             result = run_conpty(
@@ -92,8 +93,14 @@ class InteractiveCodexTrigger:
                 max_runtime_seconds=self.config.max_runtime_seconds,
                 exit_grace_seconds=self.config.exit_grace_seconds,
             )
-        except (ConPtyError, OSError):
-            return TriggerRunResult(False, "trigger_process_failed")
-        if result.ended_early:
-            return TriggerRunResult(False, "trigger_process_exited_early")
-        return TriggerRunResult(True, "turn_completed")
+        except ConPtyError as exc:
+            return TriggerRunResult(
+                "runtime_error" if exc.process_started else "launch_failed",
+                exc.process_started,
+            )
+        except OSError:
+            return TriggerRunResult("launch_failed", False)
+        outcome = result.terminal_outcome
+        if outcome in {"process_exited", "process_exited_early"} and result.exit_code != 0:
+            outcome += "_nonzero"
+        return TriggerRunResult(outcome, True)

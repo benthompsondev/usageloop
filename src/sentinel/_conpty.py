@@ -14,14 +14,16 @@ from typing import Sequence
 
 
 class ConPtyError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, process_started: bool = False):
+        super().__init__(message)
+        self.process_started = process_started
 
 
 @dataclass(frozen=True)
 class ConPtyResult:
     runtime_seconds: float
     exit_code: int
-    ended_early: bool
+    terminal_outcome: str
 
 
 if os.name == "nt":
@@ -130,6 +132,7 @@ def run_conpty(
     reader: threading.Thread | None = None
     input_fd: int | None = None
     output_fd: int | None = None
+    process_started = False
 
     security = _SECURITY_ATTRIBUTES(
         ctypes.sizeof(_SECURITY_ATTRIBUTES),
@@ -194,6 +197,7 @@ def run_conpty(
             ctypes.byref(process_info),
         ):
             raise _last_error("Could not start the interactive Codex process")
+        process_started = True
         _close_handle(kernel32, process_info.hThread)
         process_info.hThread = wintypes.HANDLE()
 
@@ -213,19 +217,25 @@ def run_conpty(
         reader.start()
         output_fd = None
 
-        ended_early = False
+        terminal_outcome = "runtime_cap_reached"
         while True:
             now = time.monotonic()
             wait_result = kernel32.WaitForSingleObject(process_info.hProcess, 100)
             if wait_result == _WAIT_OBJECT_0:
-                ended_early = now - started < min_runtime_seconds
+                terminal_outcome = (
+                    "process_exited_early"
+                    if now - started < min_runtime_seconds
+                    else "process_exited"
+                )
                 break
             if wait_result != _WAIT_TIMEOUT:
                 raise _last_error("Could not monitor the interactive Codex process")
             elapsed = now - started
             if elapsed >= max_runtime_seconds:
+                terminal_outcome = "runtime_cap_reached"
                 break
             if elapsed >= min_runtime_seconds and now - activity[0] >= quiet_seconds:
+                terminal_outcome = "output_quiet"
                 break
 
         if kernel32.WaitForSingleObject(process_info.hProcess, 0) != _WAIT_OBJECT_0:
@@ -246,7 +256,13 @@ def run_conpty(
         if not kernel32.GetExitCodeProcess(process_info.hProcess, ctypes.byref(exit_code)):
             raise _last_error("Could not read the interactive Codex exit code")
         runtime = time.monotonic() - started
-        return ConPtyResult(runtime, int(exit_code.value), ended_early)
+        return ConPtyResult(runtime, int(exit_code.value), terminal_outcome)
+    except ConPtyError as exc:
+        if process_started and not exc.process_started:
+            raise ConPtyError(str(exc), process_started=True) from exc
+        raise
+    except OSError as exc:
+        raise ConPtyError("The interactive Codex process encountered a local I/O error.", process_started=process_started) from exc
     finally:
         if input_fd is not None:
             try:

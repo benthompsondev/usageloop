@@ -7,10 +7,11 @@ Phase 1 observes the real ChatGPT/Codex subscription windows through the local
 Codex app-server and classifies the approximately five-hour window as
 `ANCHORED`, `UNANCHORED`, `ABSENT`, `EXHAUSTED`, or `UNKNOWN`.
 
-Phase 2 adds one deliberately small product proof: after Sentinel has evidence
-of a genuine rollover, `sentinel chain` can send one minimal request through
-the normal interactive Codex CLI and then prove whether the new window actually
-anchored.
+Phase 2 adds the smallest product proof. `sentinel chain` handles a proven
+rollover, while the explicit `sentinel bootstrap --confirm` path can start a
+first window when no historical anchored reset exists. Both paths allow one
+minimal request through the normal interactive Codex CLI and report success
+only when fresh observations prove that the window anchored.
 
 ## Boundaries
 
@@ -21,7 +22,10 @@ Sentinel does:
 - use several observations and conservative timestamp tolerances;
 - run the stable interactive `codex [PROMPT]` TUI under Windows ConPTY for the
   one approved trigger;
-- stop at one trigger attempt per observed rollover boundary;
+- launch native Codex executables directly and Windows `.cmd` shims through
+  `cmd.exe`, never by passing a shim to `CreateProcessW`;
+- persist reservation, launch, possibly-sent, verified, and recoverable/guarded
+  failure states before deciding whether another request is safe;
 - require post-trigger `ANCHORED` evidence before reporting verified success.
 
 Sentinel does not:
@@ -48,8 +52,9 @@ stores only allowlisted quota evidence and sanitized trigger events in:
 %LOCALAPPDATA%\CodexWindowSentinel\sentinel.jsonl
 ```
 
-Trigger log records may contain the rollover timestamp, selected model,
-reasoning level, sanitized outcome, and observed classifier state. They never
+Trigger log records may contain a safe attempt identifier, trigger mode,
+rollover timestamp when applicable, selected model, reasoning level, sanitized
+process outcome, lifecycle state, and observed classifier state. They never
 contain the two-character input, Codex output, credentials, or account data.
 
 The interactive trigger timing strategy was adapted from the MIT-licensed
@@ -83,6 +88,8 @@ OpenAI API key.
 .\sentinel.ps1 chain --dry-run
 .\sentinel.ps1 chain
 .\sentinel.ps1 chain --json
+.\sentinel.ps1 bootstrap --dry-run
+.\sentinel.ps1 bootstrap --confirm
 ```
 
 - `doctor` verifies native Codex discovery, version, app-server handshake,
@@ -94,9 +101,13 @@ OpenAI API key.
 - `chain --dry-run` applies every eligibility gate and reports the exact
   mechanism, model, reasoning level, input length, and retry bound without
   sending a request.
-- `chain` takes four five-second preflight observations. Only proven
-  `UNANCHORED` evidence can reach the trigger. It then takes four five-second
-  verification observations and succeeds only if their reset timestamp is fixed.
+- `chain` takes four observations over 30 seconds, matching the normal high
+  confidence sample path. Only high-confidence `UNANCHORED` evidence can reach
+  the trigger. It then takes the same strength of verification observations.
+- `bootstrap --dry-run` checks first-window eligibility without a reservation or
+  request. `bootstrap --confirm` is the explicit opt-in that may send one request.
+  It additionally requires every five-hour observation to report zero percent
+  used and applies a full 18,000-second cooldown after any possibly sent request.
 
 The Phase 2 defaults are internal and injectable: `gpt-5.4-mini`, `low`
 reasoning, and the two-character input `ok`. The installed native model catalog
@@ -105,18 +116,30 @@ implementation time. Sentinel has no fallback or automatic escalation.
 
 ## Trigger Safety Gates
 
-Before any request, `chain` requires all of the following:
+Before any request, both trigger paths require high-confidence `UNANCHORED`
+evidence from four observations spanning at least 30 seconds and a unique weekly
+window below 99% used and not blocked.
 
-1. Four observations classify the five-hour window as `UNANCHORED`.
-2. Safe history contains a recent prior `ANCHORED` reset timestamp that is now past.
-3. At least 15 seconds have passed since that reset.
-4. A unique weekly window is exposed, below 99% used, and not explicitly blocked.
-5. No trigger attempt is already recorded for that reset boundary.
+`chain` additionally requires:
 
-Sentinel writes the attempt reservation before starting Codex. If the process
-fails, exits successfully without anchoring, or Sentinel restarts, that boundary
-does not get a second request. This is intentionally conservative because an
-observer cannot prove that a failed-looking process consumed zero quota.
+1. Safe history contains a recent prior `ANCHORED` reset timestamp that is now past.
+2. At least 15 seconds have passed since that reset.
+3. No possibly sent request is already recorded for that reset boundary.
+
+`bootstrap --confirm` instead requires explicit opt-in, zero percent five-hour
+usage across the evidence set, and no possibly sent bootstrap request during the
+previous full five-hour window. It does not invent a historical rollover.
+
+Sentinel writes the reservation and `launch_attempted` state before starting
+Codex. A definite failure before process creation becomes `failed_recoverable`
+and does not burn the opportunity. Once process creation may have occurred,
+Sentinel always performs read-only verification and blocks another request even
+when the terminal outcome is ambiguous. A fresh bare reservation is treated as
+active for two minutes, then becomes recoverable after a restart.
+
+Terminal/process outcomes such as `process_exited`, `output_quiet`, or
+`runtime_cap_reached` never claim that a Codex turn completed. The quota observer
+is the authority for anchoring.
 
 ## Controlled Live Rollover Test
 
@@ -131,6 +154,16 @@ seconds, run exactly:
 Run `chain --dry-run` at any time to inspect the decision without quota use. If
 the real window is already anchored, `chain` reports `ALREADY_ANCHORED` and sends
 nothing. Do not manufacture a rollover for testing.
+
+For the single controlled first-window proof on an untouched account, first
+confirm that the intended Codex account is active, then run exactly:
+
+```powershell
+.\sentinel.ps1 bootstrap --confirm
+```
+
+Do not repeat it if Sentinel reports that a request was possibly sent, even when
+anchoring could not be verified.
 
 ## Classifier Semantics
 
@@ -170,6 +203,9 @@ Live read-only checks are explicit:
 - `ROLLOVER_BOUNDARY_UNKNOWN`: run `sample` during an anchored window, then retry
   only after that recorded reset.
 - `ATTEMPT_ALREADY_RECORDED`: Sentinel will not spend a second request for that rollover.
+- `BOOTSTRAP_COOLDOWN`: a bootstrap request may already have been sent within one full window.
+- `TRIGGER_NOT_SENT`: process creation definitely did not occur; the opportunity is recoverable.
+- `VERIFICATION_UNAVAILABLE`: a request may have been sent, so Sentinel blocked a retry.
 - `ANCHOR_NOT_VERIFIED`: the request path ran, but evidence did not prove a fixed reset.
 - `UNKNOWN`: collect a fresh `sample` and treat the state as undetermined.
 

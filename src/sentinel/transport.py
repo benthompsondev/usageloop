@@ -60,7 +60,7 @@ def find_codex_executable(
 def read_codex_version(executable: Path, timeout: float = 10.0) -> str:
     try:
         result = subprocess.run(
-            _command(executable, "--version"),
+            build_codex_command(executable, "--version"),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -91,7 +91,7 @@ class CodexProcessTransport:
             return
         try:
             self._process = subprocess.Popen(
-                _command(self.executable, "app-server", "--stdio"),
+                build_codex_command(self.executable, "app-server", "--stdio"),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -181,7 +181,8 @@ class CodexProcessTransport:
         self.close()
 
 
-def _command(executable: Path, *arguments: str) -> list[str]:
+def build_codex_command(executable: Path, *arguments: str) -> list[str]:
+    """Build a CreateProcess-safe command for native binaries and Windows shims."""
     if os.name == "nt" and executable.suffix.lower() in {".cmd", ".bat"}:
         return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", str(executable), *arguments]
     return [str(executable), *arguments]

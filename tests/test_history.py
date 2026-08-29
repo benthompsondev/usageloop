@@ -67,12 +67,26 @@ class SafeHistoryTests(unittest.TestCase):
         self.assertEqual("authentication_unavailable", row["category"])
         self.assertEqual({"event", "timestamp", "sentinel_version", "category"}, set(row))
 
-    def test_trigger_log_excludes_prompt_credentials_and_output(self):
+    def test_trigger_state_log_excludes_prompt_credentials_and_output(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sentinel.jsonl"
             history = SafeHistory(path)
-            history.record_trigger_attempt(2000010000, "gpt-5.4-mini", "low")
-            history.record_trigger_result(2000010000, "anchor_not_verified", "UNANCHORED")
+            attempt = history.reserve_trigger(
+                mode="bootstrap",
+                idempotency_key="bootstrap:test",
+                boundary_reset_at=None,
+                model="gpt-5.4-mini",
+                reasoning_effort="low",
+                now=2000010000,
+            )
+            history.transition_trigger(attempt.attempt_id, "launch_attempted", now=2000010001)
+            history.transition_trigger(
+                attempt.attempt_id,
+                "failed_guarded",
+                outcome="anchor_not_verified",
+                observed_state="UNANCHORED",
+                now=2000010032,
+            )
             serialized = path.read_text(encoding="utf-8").lower()
 
         for forbidden in (
@@ -87,6 +101,25 @@ class SafeHistoryTests(unittest.TestCase):
             self.assertNotIn(forbidden, serialized)
         self.assertIn('"model":"gpt-5.4-mini"', serialized)
         self.assertIn('"reasoning_effort":"low"', serialized)
+
+    def test_trigger_attempt_lifecycle_round_trips_latest_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            history = SafeHistory(Path(directory) / "sentinel.jsonl")
+            attempt = history.reserve_trigger(
+                mode="rollover",
+                idempotency_key="rollover:2000010000",
+                boundary_reset_at=2000010000,
+                model="gpt-5.4-mini",
+                reasoning_effort="low",
+                now=2000010015,
+            )
+            history.transition_trigger(attempt.attempt_id, "launch_attempted", now=2000010016)
+            history.transition_trigger(attempt.attempt_id, "request_possibly_sent", now=2000010017)
+            loaded = SafeHistory(history.path).trigger_attempts()
+
+        self.assertEqual(1, len(loaded))
+        self.assertEqual("request_possibly_sent", loaded[0].state)
+        self.assertEqual("rollover:2000010000", loaded[0].idempotency_key)
 
 
 if __name__ == "__main__":

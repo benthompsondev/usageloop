@@ -24,20 +24,23 @@ def snapshot(observed_at, reset_at, *, used=0, weekly_used=10):
 
 def anchored(start=BOUNDARY + 20, *, used=1, weekly_used=10):
     reset = start + 17_000
-    return [snapshot(start + offset, reset, used=used, weekly_used=weekly_used) for offset in (0, 5, 10, 15)]
-
-
-def unanchored(start=BOUNDARY + 20, *, weekly_used=10):
     return [
-        snapshot(start + offset, start + offset + 18_000, weekly_used=weekly_used)
-        for offset in (0, 5, 10, 15)
+        snapshot(start + offset, reset, used=used, weekly_used=weekly_used)
+        for offset in (0, 10, 20, 30)
+    ]
+
+
+def unanchored(start=BOUNDARY + 20, *, used=0, weekly_used=10):
+    return [
+        snapshot(start + offset, start + offset + 18_000, used=used, weekly_used=weekly_used)
+        for offset in (0, 10, 20, 30)
     ]
 
 
 class FakeTrigger:
     def __init__(self, result=None):
         self.calls = 0
-        self.result = result or TriggerRunResult(True, "turn_completed")
+        self.result = result or TriggerRunResult("process_exited", True)
 
     def describe(self):
         return TriggerDescription(
@@ -66,8 +69,8 @@ class ChainCoordinatorTests(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def coordinator(self, trigger):
-        return ChainCoordinator(trigger, self.history, ChainPolicy())
+    def coordinator(self, trigger, policy=None):
+        return ChainCoordinator(trigger, self.history, policy or ChainPolicy())
 
     def test_already_anchored_does_not_trigger(self):
         trigger = FakeTrigger()
@@ -75,11 +78,18 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ALREADY_ANCHORED", result.status)
         self.assertEqual(0, trigger.calls)
 
-    def test_rollover_unanchored_triggers_once(self):
+    def test_ordinary_chain_rollover_still_triggers_once(self):
         trigger = FakeTrigger()
         result = self.coordinator(trigger).run(unanchored(), lambda: anchored())
         self.assertEqual("ANCHOR_VERIFIED", result.status)
         self.assertEqual(1, trigger.calls)
+        self.assertTrue(result.request_possibly_sent)
+
+    def test_weak_unanchored_evidence_does_not_trigger(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run(unanchored()[:3], lambda: anchored())
+        self.assertEqual("EVIDENCE_TOO_WEAK", result.status)
+        self.assertEqual(0, trigger.calls)
 
     def test_weekly_exhausted_skips_trigger(self):
         trigger = FakeTrigger()
@@ -87,66 +97,186 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("WEEKLY_EXHAUSTED", result.status)
         self.assertEqual(0, trigger.calls)
 
-    def test_dry_run_performs_zero_triggers(self):
+    def test_dry_run_performs_zero_triggers_and_reservations(self):
         trigger = FakeTrigger()
         result = self.coordinator(trigger).run(unanchored(), lambda: anchored(), dry_run=True)
         self.assertEqual("DRY_RUN", result.status)
         self.assertEqual(0, trigger.calls)
-        self.assertEqual(0, self.history.trigger_attempt_count(BOUNDARY))
+        self.assertEqual([], self.history.trigger_attempts())
 
-    def test_trigger_process_failure_is_bounded(self):
-        trigger = FakeTrigger(TriggerRunResult(False, "trigger_process_failed"))
+    def test_failed_launch_before_request_does_not_burn_rollover(self):
+        failed = FakeTrigger(TriggerRunResult("launch_failed", False))
+        first = self.coordinator(failed).run(unanchored(), lambda: anchored())
+        self.assertEqual("TRIGGER_NOT_SENT", first.status)
+        self.assertFalse(first.request_possibly_sent)
+
+        working = FakeTrigger()
+        second = self.coordinator(working).run(unanchored(BOUNDARY + 60), lambda: anchored())
+        self.assertEqual("ANCHOR_VERIFIED", second.status)
+        self.assertEqual(1, working.calls)
+
+    def test_ambiguous_terminal_outcome_still_verifies_observed_anchor(self):
+        trigger = FakeTrigger(TriggerRunResult("process_exited_early", True))
         result = self.coordinator(trigger).run(unanchored(), lambda: anchored())
-        self.assertEqual("TRIGGER_FAILED", result.status)
-        self.assertEqual(1, trigger.calls)
-        again = self.coordinator(trigger).run(unanchored(), lambda: anchored())
-        self.assertEqual("ATTEMPT_ALREADY_RECORDED", again.status)
-        self.assertEqual(1, trigger.calls)
-
-    def test_successful_process_without_anchor_fails_verification(self):
-        trigger = FakeTrigger()
-        result = self.coordinator(trigger).run(unanchored(), lambda: unanchored(BOUNDARY + 60))
-        self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
-        self.assertEqual("UNANCHORED", result.classification.state)
-        self.assertEqual(1, trigger.calls)
-
-    def test_successful_trigger_requires_fixed_reset_evidence(self):
-        trigger = FakeTrigger()
-        result = self.coordinator(trigger).run(unanchored(), lambda: anchored(BOUNDARY + 60))
         self.assertEqual("ANCHOR_VERIFIED", result.status)
-        self.assertEqual("ANCHORED", result.classification.state)
+        self.assertEqual("process_exited_early", result.terminal_outcome)
 
-    def test_repeated_polling_does_not_double_trigger(self):
-        trigger = FakeTrigger()
+    def test_possible_request_without_anchor_is_not_retried(self):
+        trigger = FakeTrigger(TriggerRunResult("output_quiet", True))
         first = self.coordinator(trigger).run(unanchored(), lambda: unanchored(BOUNDARY + 60))
         second = self.coordinator(trigger).run(unanchored(BOUNDARY + 100), lambda: anchored())
         self.assertEqual("ANCHOR_NOT_VERIFIED", first.status)
         self.assertEqual("ATTEMPT_ALREADY_RECORDED", second.status)
         self.assertEqual(1, trigger.calls)
 
-    def test_restart_recovers_around_rollover_boundary(self):
-        first_trigger = FakeTrigger(TriggerRunResult(False, "trigger_process_failed"))
-        first = self.coordinator(first_trigger).run(unanchored(), lambda: anchored())
-        self.assertEqual("TRIGGER_FAILED", first.status)
+    def test_ambiguous_request_with_verification_failure_is_guarded(self):
+        trigger = FakeTrigger(TriggerRunResult("runtime_error", True))
 
-        restarted_trigger = FakeTrigger()
-        restarted = ChainCoordinator(
-            restarted_trigger, SafeHistory(self.history.path), ChainPolicy()
-        ).run(unanchored(BOUNDARY + 40), lambda: anchored())
-        self.assertEqual("ATTEMPT_ALREADY_RECORDED", restarted.status)
-        self.assertEqual(0, restarted_trigger.calls)
+        def unavailable():
+            raise RuntimeError("fixture transport unavailable")
+
+        first = self.coordinator(trigger).run(unanchored(), unavailable)
+        second = self.coordinator(trigger).run(unanchored(BOUNDARY + 100), lambda: anchored())
+        self.assertEqual("VERIFICATION_UNAVAILABLE", first.status)
+        self.assertEqual("ATTEMPT_ALREADY_RECORDED", second.status)
+        self.assertEqual(1, trigger.calls)
+
+    def test_restart_during_fresh_reservation_blocks_then_recovers_after_lease(self):
+        description = FakeTrigger().describe()
+        reservation = self.history.reserve_trigger(
+            mode="rollover",
+            idempotency_key=f"rollover:{BOUNDARY}",
+            boundary_reset_at=BOUNDARY,
+            model=description.model,
+            reasoning_effort=description.reasoning_effort,
+            now=BOUNDARY + 30,
+        )
+        self.assertEqual("reserved", reservation.state)
+
+        trigger = FakeTrigger()
+        result = ChainCoordinator(
+            trigger, SafeHistory(self.history.path), ChainPolicy()
+        ).run(unanchored(BOUNDARY + 60), lambda: anchored())
+        self.assertEqual("ATTEMPT_ALREADY_RECORDED", result.status)
+        self.assertEqual(0, trigger.calls)
 
         recovered = ChainCoordinator(
-            restarted_trigger, SafeHistory(self.history.path), ChainPolicy()
-        ).run(anchored(BOUNDARY + 80), lambda: anchored())
-        self.assertEqual("ALREADY_ANCHORED", recovered.status)
+            trigger, SafeHistory(self.history.path), ChainPolicy()
+        ).run(unanchored(BOUNDARY + 180), lambda: anchored())
+        self.assertEqual("ANCHOR_VERIFIED", recovered.status)
+        self.assertEqual(1, trigger.calls)
+
+    def test_restart_after_launch_attempt_blocks_a_second_request(self):
+        reservation = self.history.reserve_trigger(
+            mode="rollover",
+            idempotency_key=f"rollover:{BOUNDARY}",
+            boundary_reset_at=BOUNDARY,
+            model="gpt-5.4-mini",
+            reasoning_effort="low",
+            now=BOUNDARY + 30,
+        )
+        self.history.transition_trigger(reservation.attempt_id, "launch_attempted", now=BOUNDARY + 31)
+
+        trigger = FakeTrigger()
+        result = ChainCoordinator(
+            trigger, SafeHistory(self.history.path), ChainPolicy()
+        ).run(unanchored(BOUNDARY + 60), lambda: anchored())
+        self.assertEqual("ATTEMPT_ALREADY_RECORDED", result.status)
+        self.assertEqual(0, trigger.calls)
 
     def test_reset_buffer_blocks_an_early_attempt(self):
         trigger = FakeTrigger()
         policy = ChainPolicy(reset_buffer_seconds=60)
-        result = ChainCoordinator(trigger, self.history, policy).run(unanchored(), lambda: anchored())
+        result = self.coordinator(trigger, policy).run(unanchored(), lambda: anchored())
         self.assertEqual("RESET_BUFFER", result.status)
         self.assertEqual(0, trigger.calls)
+
+
+class BootstrapCoordinatorTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.history = SafeHistory(Path(self.directory.name) / "sentinel.jsonl")
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def coordinator(self, trigger):
+        return ChainCoordinator(trigger, self.history, ChainPolicy())
+
+    def test_bootstrap_eligible_triggers_once_and_verifies(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run_bootstrap(
+            unanchored(), lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("ANCHOR_VERIFIED", result.status)
+        self.assertEqual("bootstrap", result.mode)
+        self.assertEqual(1, trigger.calls)
+
+    def test_bootstrap_requires_explicit_confirmation(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run_bootstrap(
+            unanchored(), lambda: anchored(), confirmed=False
+        )
+        self.assertEqual("CONSENT_REQUIRED", result.status)
+        self.assertEqual(0, trigger.calls)
+
+    def test_bootstrap_already_anchored_does_not_trigger(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run_bootstrap(
+            anchored(used=0), lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("ALREADY_ANCHORED", result.status)
+        self.assertEqual(0, trigger.calls)
+
+    def test_bootstrap_weak_unknown_evidence_does_not_trigger(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run_bootstrap(
+            unanchored()[:3], lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("EVIDENCE_TOO_WEAK", result.status)
+        self.assertEqual(0, trigger.calls)
+
+    def test_bootstrap_nonzero_five_hour_usage_does_not_trigger(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run_bootstrap(
+            unanchored(used=1), lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("BOOTSTRAP_USAGE_UNSUITABLE", result.status)
+        self.assertEqual(0, trigger.calls)
+
+    def test_bootstrap_weekly_exhausted_does_not_trigger(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run_bootstrap(
+            unanchored(weekly_used=100), lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("WEEKLY_EXHAUSTED", result.status)
+        self.assertEqual(0, trigger.calls)
+
+    def test_bootstrap_cooldown_prevents_duplicate_attempt(self):
+        trigger = FakeTrigger()
+        first = self.coordinator(trigger).run_bootstrap(
+            unanchored(), lambda: unanchored(BOUNDARY + 60), confirmed=True
+        )
+        second = self.coordinator(trigger).run_bootstrap(
+            unanchored(BOUNDARY + 100), lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("ANCHOR_NOT_VERIFIED", first.status)
+        self.assertEqual("BOOTSTRAP_COOLDOWN", second.status)
+        self.assertEqual(1, trigger.calls)
+
+    def test_bootstrap_failed_launch_is_recoverable(self):
+        failed = FakeTrigger(TriggerRunResult("launch_failed", False))
+        first = self.coordinator(failed).run_bootstrap(
+            unanchored(), lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("TRIGGER_NOT_SENT", first.status)
+
+        working = FakeTrigger()
+        second = self.coordinator(working).run_bootstrap(
+            unanchored(BOUNDARY + 60), lambda: anchored(), confirmed=True
+        )
+        self.assertEqual("ANCHOR_VERIFIED", second.status)
+        self.assertEqual(1, working.calls)
 
 
 if __name__ == "__main__":

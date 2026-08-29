@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import re
 from typing import Any
+import uuid
 
 from . import __version__
 from .classifier import Classification
@@ -18,6 +20,18 @@ _SAFE_CATEGORY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SAFE_VERSION = re.compile(r"^[A-Za-z0-9 ._+/-]{1,80}$")
 _SAFE_MODEL = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 _SAFE_REASONING = re.compile(r"^[a-z]{1,16}$")
+_SAFE_ATTEMPT_ID = re.compile(r"^[a-f0-9]{32}$")
+_SAFE_IDEMPOTENCY_KEY = re.compile(r"^[a-z0-9:_-]{1,96}$")
+_ATTEMPT_STATES = {
+    "reserved",
+    "launch_attempted",
+    "request_possibly_sent",
+    "verified",
+    "failed_recoverable",
+    "failed_guarded",
+}
+_ATTEMPT_MODES = {"rollover", "bootstrap"}
+_OBSERVED_STATES = {"ANCHORED", "UNANCHORED", "ABSENT", "EXHAUSTED", "UNKNOWN"}
 _EVIDENCE_KEYS = {
     "sample_count",
     "elapsed_seconds",
@@ -31,6 +45,17 @@ _EVIDENCE_KEYS = {
     "blocked_reason",
     "notification_count",
 }
+
+
+@dataclass(frozen=True)
+class TriggerAttempt:
+    attempt_id: str
+    mode: str
+    idempotency_key: str
+    boundary_reset_at: int | None
+    state: str
+    created_at: float
+    updated_at: float
 
 
 class SafeHistory:
@@ -80,6 +105,119 @@ class SafeHistory:
                 "current": current,
             }
         )
+
+    def reserve_trigger(
+        self,
+        *,
+        mode: str,
+        idempotency_key: str,
+        boundary_reset_at: int | None,
+        model: str,
+        reasoning_effort: str,
+        now: float,
+    ) -> TriggerAttempt:
+        if mode not in _ATTEMPT_MODES:
+            raise ValueError("Unsupported trigger mode.")
+        if not _SAFE_IDEMPOTENCY_KEY.fullmatch(idempotency_key):
+            raise ValueError("Unsafe idempotency key.")
+        attempt = TriggerAttempt(
+            attempt_id=uuid.uuid4().hex,
+            mode=mode,
+            idempotency_key=idempotency_key,
+            boundary_reset_at=int(boundary_reset_at) if boundary_reset_at is not None else None,
+            state="reserved",
+            created_at=float(now),
+            updated_at=float(now),
+        )
+        self._append(
+            {
+                "event": "trigger_state",
+                "timestamp": _iso_timestamp(now),
+                "occurred_at": float(now),
+                "sentinel_version": __version__,
+                "attempt_id": attempt.attempt_id,
+                "mode": mode,
+                "idempotency_key": idempotency_key,
+                "boundary_reset_at": attempt.boundary_reset_at,
+                "state": "reserved",
+                "model": model if _SAFE_MODEL.fullmatch(model) else "unknown",
+                "reasoning_effort": (
+                    reasoning_effort if _SAFE_REASONING.fullmatch(reasoning_effort) else "unknown"
+                ),
+            }
+        )
+        return attempt
+
+    def transition_trigger(
+        self,
+        attempt_id: str,
+        state: str,
+        *,
+        outcome: str | None = None,
+        observed_state: str | None = None,
+        now: float,
+    ) -> None:
+        if not _SAFE_ATTEMPT_ID.fullmatch(attempt_id):
+            raise ValueError("Unsafe attempt identifier.")
+        if state not in _ATTEMPT_STATES or state == "reserved":
+            raise ValueError("Unsupported trigger state transition.")
+        row: dict[str, Any] = {
+            "event": "trigger_state",
+            "timestamp": _iso_timestamp(now),
+            "occurred_at": float(now),
+            "sentinel_version": __version__,
+            "attempt_id": attempt_id,
+            "state": state,
+        }
+        if outcome is not None:
+            row["outcome"] = outcome if _SAFE_CATEGORY.fullmatch(outcome) else "unexpected_error"
+        if observed_state is not None:
+            row["observed_state"] = (
+                observed_state if observed_state in _OBSERVED_STATES else "UNKNOWN"
+            )
+        self._append(row)
+
+    def trigger_attempts(self) -> list[TriggerAttempt]:
+        attempts: dict[str, TriggerAttempt] = {}
+        for row in self._read_rows():
+            if row.get("event") != "trigger_state":
+                continue
+            attempt_id = row.get("attempt_id")
+            state = row.get("state")
+            occurred_at = row.get("occurred_at")
+            if (
+                not isinstance(attempt_id, str)
+                or not _SAFE_ATTEMPT_ID.fullmatch(attempt_id)
+                or state not in _ATTEMPT_STATES
+                or not isinstance(occurred_at, (int, float))
+                or isinstance(occurred_at, bool)
+            ):
+                continue
+            if state == "reserved":
+                mode = row.get("mode")
+                key = row.get("idempotency_key")
+                boundary = row.get("boundary_reset_at")
+                if (
+                    mode not in _ATTEMPT_MODES
+                    or not isinstance(key, str)
+                    or not _SAFE_IDEMPOTENCY_KEY.fullmatch(key)
+                    or (boundary is not None and not isinstance(boundary, int))
+                ):
+                    continue
+                attempts[attempt_id] = TriggerAttempt(
+                    attempt_id,
+                    mode,
+                    key,
+                    boundary,
+                    state,
+                    float(occurred_at),
+                    float(occurred_at),
+                )
+            elif attempt_id in attempts:
+                attempts[attempt_id] = replace(
+                    attempts[attempt_id], state=state, updated_at=float(occurred_at)
+                )
+        return sorted(attempts.values(), key=lambda item: (item.created_at, item.attempt_id))
 
     def record_trigger_attempt(
         self,

@@ -6,8 +6,9 @@ this file only adds what is specific to this repository.
 ## What This Repo Is
 
 A Windows-first CLI that reads ChatGPT/Codex subscription rate-limit snapshots
-through a local `codex app-server`. Phase 2 adds one bounded, normal interactive
-Codex request after a proven rollover, followed by Phase 1 verification. See
+through a local `codex app-server`. Phase 2 adds bounded normal interactive
+Codex requests after a proven rollover or explicit first-window bootstrap,
+followed by Phase 1 verification. See
 `PROJECT_SPEC.md` for the contract.
 
 ## Commands
@@ -22,6 +23,7 @@ pwsh -NoProfile -File .\scripts\setup.ps1
 .\sentinel.ps1 sample
 .\sentinel.ps1 watch
 .\sentinel.ps1 chain --dry-run
+.\sentinel.ps1 bootstrap --dry-run
 
 # Verify without contacting OpenAI
 pwsh -NoProfile -File .\scripts\verify.ps1
@@ -35,17 +37,21 @@ pwsh -NoProfile -File .\scripts\verify.ps1
 - `docs/` - research and design evidence.
 
 Phase 1 remains the observation foundation. Phase 2 is limited to the approved
-Codex-only, one-shot trigger and verification loop.
+Codex-only rollover/bootstrap trigger and verification loop.
 
 ## Boundaries
 
 Always:
 
-- Keep runtime behavior observation-only.
+- Keep the app-server account/quota path observation-only; the only model request
+  is the approved interactive trigger after every safety gate passes.
 - Use only the local Codex app-server for account communication.
 - Log allowlisted quota fields and sanitized error categories only.
 - Identify a five-hour window by duration, never by `primary` position alone.
-- Reserve at most one trigger attempt for each observed rollover boundary.
+- Require high-confidence four-sample evidence before any quota-consuming decision.
+- Persist the trigger lifecycle; recover only definite pre-launch failures.
+- Reserve at most one possibly sent trigger for each rollover boundary or
+  five-hour bootstrap cooldown.
 - Use the normal interactive Codex TUI through Windows ConPTY, then require
   Phase 1 to observe `ANCHORED` before reporting verified success.
 
@@ -57,7 +63,7 @@ Never:
 - Use `codex exec`, private endpoints, or direct credentials to trigger a window.
 - Log the trigger input, model output, or process output.
 - Add telemetry, global PATH changes, admin requirements, or auto-start behavior.
-- Add retries beyond the one reserved attempt for a rollover boundary.
+- Retry when a request may already have been submitted.
 - Push without Ben's explicit authorization and the required push workflow.
 
 Ask Ben first:

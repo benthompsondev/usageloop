@@ -1,4 +1,4 @@
-"""Command-line interface for observation and one bounded Codex rollover trigger."""
+"""Command-line interface for observation and bounded Codex window triggers."""
 
 from __future__ import annotations
 
@@ -66,6 +66,18 @@ def create_parser() -> argparse.ArgumentParser:
     )
     chain.add_argument("--dry-run", action="store_true", help="Evaluate and show the trigger plan without sending a request.")
     chain.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    bootstrap = commands.add_parser(
+        "bootstrap",
+        help="Explicitly start and verify a first five-hour Codex window.",
+    )
+    bootstrap.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Confirm that one eligible minimal Codex request may be sent.",
+    )
+    bootstrap.add_argument("--dry-run", action="store_true", help="Evaluate eligibility without reserving or sending a request.")
+    bootstrap.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser
 
 
@@ -221,6 +233,33 @@ def run_watch(*, interval: float) -> int:
 
 
 def run_chain(*, dry_run: bool, json_output: bool) -> int:
+    return _run_trigger_command(
+        mode="rollover",
+        dry_run=dry_run,
+        json_output=json_output,
+        confirmed=True,
+    )
+
+
+def run_bootstrap(*, confirmed: bool, dry_run: bool, json_output: bool) -> int:
+    if not confirmed and not dry_run:
+        message = "Bootstrap requires explicit opt-in. Re-run with --confirm to allow one eligible request."
+        if json_output:
+            print(json.dumps({"status": "CONSENT_REQUIRED", "reason": message}, indent=2))
+        else:
+            print(message, file=sys.stderr)
+        return 3
+    return _run_trigger_command(
+        mode="bootstrap",
+        dry_run=dry_run,
+        json_output=json_output,
+        confirmed=confirmed,
+    )
+
+
+def _run_trigger_command(
+    *, mode: str, dry_run: bool, json_output: bool, confirmed: bool
+) -> int:
     history = SafeHistory()
     session = connect()
     output = sys.stderr if json_output else sys.stdout
@@ -237,7 +276,7 @@ def run_chain(*, dry_run: bool, json_output: bool) -> int:
             observations.append(snapshot)
             print(f"{label} [{index + 1}/4]", file=output)
             if index < 3:
-                time.sleep(5.0)
+                time.sleep(10.0)
         classification = classify(observations)
         for snapshot in observations:
             history.record_observation(snapshot, classification, session.codex_version)
@@ -246,11 +285,19 @@ def run_chain(*, dry_run: bool, json_output: bool) -> int:
     try:
         preflight = collect("Preflight")
         coordinator = ChainCoordinator(trigger, history, ChainPolicy())
-        result = coordinator.run(
-            preflight,
-            lambda: collect("Verification"),
-            dry_run=dry_run,
-        )
+        if mode == "bootstrap":
+            result = coordinator.run_bootstrap(
+                preflight,
+                lambda: collect("Verification"),
+                confirmed=confirmed,
+                dry_run=dry_run,
+            )
+        else:
+            result = coordinator.run(
+                preflight,
+                lambda: collect("Verification"),
+                dry_run=dry_run,
+            )
         if json_output:
             payload = result.to_dict()
             payload["codex_version"] = session.codex_version
@@ -277,6 +324,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_watch(interval=args.interval)
         if args.command == "chain":
             return run_chain(dry_run=args.dry_run, json_output=args.json)
+        if args.command == "bootstrap":
+            return run_bootstrap(
+                confirmed=args.confirm,
+                dry_run=args.dry_run,
+                json_output=args.json,
+            )
         raise AssertionError("unreachable command")
     except KeyboardInterrupt:
         print("Stopped.")
@@ -344,13 +397,20 @@ def _format_chain(result: ChainResult) -> str:
         f"Chain result: {result.status}",
         f"Why: {result.reason}",
         f"Anchored: {'yes' if result.anchored else 'no'}",
-        f"Request sent: {'yes' if result.trigger_attempted else 'no'}",
+        f"Request possibly sent: {'yes' if result.request_possibly_sent else 'no'}",
         f"Classifier: {result.classification.state} ({result.classification.confidence})",
         f"Trigger: normal interactive Codex TUI via Windows ConPTY",
         f"Model/reasoning: {description.model} / {description.reasoning_effort}",
         f"Minimal input: {description.prompt_characters} characters (contents are not logged)",
-        "Retry bound: one trigger attempt per observed rollover boundary",
     ]
+    if result.terminal_outcome is not None:
+        lines.append(f"Terminal/process outcome: {result.terminal_outcome}")
+    if result.attempt_state is not None:
+        lines.append(f"Persisted attempt state: {result.attempt_state}")
+    if result.mode == "bootstrap":
+        lines.append("Retry bound: one full five-hour cooldown after any possibly sent request")
+    else:
+        lines.append("Retry bound: one possibly sent request per observed rollover boundary")
     if result.boundary_reset_at is not None:
         lines.append(f"Rollover boundary: {_reset_iso(result.boundary_reset_at)}")
     return "\n".join(lines)
@@ -361,6 +421,10 @@ def _chain_exit_code(result: ChainResult) -> int:
         return 0
     if result.status in {
         "NOT_ELIGIBLE",
+        "EVIDENCE_TOO_WEAK",
+        "CONSENT_REQUIRED",
+        "BOOTSTRAP_USAGE_UNSUITABLE",
+        "BOOTSTRAP_COOLDOWN",
         "WEEKLY_UNAVAILABLE",
         "WEEKLY_EXHAUSTED",
         "ROLLOVER_BOUNDARY_UNKNOWN",

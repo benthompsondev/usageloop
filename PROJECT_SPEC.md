@@ -4,8 +4,9 @@
 
 Provide the verified Codex foundation for a later consumer-friendly
 window-chaining product. Phase 1 measures fixed versus sliding reset behavior.
-Phase 2 sends one minimal normal interactive Codex request only after a proven
-rollover, then reports success only if Phase 1 observes a fixed new reset.
+Phase 2 sends one minimal normal interactive Codex request after either a proven
+rollover or explicit first-run bootstrap eligibility, then reports success only
+if Phase 1 observes a fixed new reset.
 
 ## Why
 
@@ -18,25 +19,28 @@ rollover, then reports success only if Phase 1 observes a fixed new reset.
 
 ## Phase 2 Smallest Runnable Slice
 
-- Observe four snapshots through `account/rateLimits/read`.
+- Observe four snapshots over 30 seconds through `account/rateLimits/read`.
 - Trigger only with `UNANCHORED` evidence, a recent known anchored boundary, a
   15-second reset buffer, an available weekly window below 99%, and no prior
   attempt for that boundary.
 - Launch the base interactive Codex TUI under Windows ConPTY with a minimal
   initial message, `gpt-5.4-mini`, and `low` reasoning.
 - Observe four more snapshots and report verified success only for `ANCHORED`.
-- One command: `sentinel chain`, with `sentinel chain --dry-run` for inspection.
+- Provide `sentinel chain` for known rollovers and explicit
+  `sentinel bootstrap --confirm` for a first window with no historical boundary.
+- Persist an attempt lifecycle that distinguishes reserved, launch-attempted,
+  request-possibly-sent, verified, failed-recoverable, and failed-guarded states.
 
 ## Phase 2 Done Means
 
-- [ ] `chain`, `chain --dry-run`, and `chain --json` use the existing observer.
-- [ ] Weekly, reset-buffer, rollover-boundary, and persisted duplicate gates run
+- [x] `chain`, `bootstrap`, dry-run, and JSON paths use the existing observer.
+- [x] Weekly, reset-buffer, rollover-boundary, bootstrap, and duplicate gates run
   before any trigger process starts.
-- [ ] The trigger uses the interactive TUI, not `codex exec`, and does not read credentials.
-- [ ] One failed or unverifiable attempt cannot trigger again at the same boundary.
-- [ ] Safe JSONL trigger events exclude input and process output.
-- [ ] Deterministic tests cover every requested trigger and restart path.
-- [ ] Live verification does not manufacture a rollover or spend quota while anchored.
+- [x] Native executables and `.cmd` shims launch safely through interactive ConPTY.
+- [x] Definite pre-launch failures recover; possibly sent requests cannot repeat.
+- [x] Safe JSONL trigger events exclude input and process output.
+- [x] Deterministic tests cover the trigger, bootstrap, and restart paths.
+- [x] Live verification does not manufacture a rollover or spend quota while anchored.
 
 ## Architecture and Data Flow
 
@@ -46,8 +50,8 @@ rollover, then reports success only if Phase 1 observes a fixed new reset.
 4. Normalize `rateLimitsByLimitId` when present, falling back to `rateLimits`.
 5. Select an approximately 300-minute window by duration, then classify a
    sequence with explicit jitter tolerances and conservative ambiguity rules.
-6. For `chain`, require conservative eligibility and persist a one-attempt
-   reservation keyed by the previously anchored reset timestamp.
+6. Require high-confidence eligibility. Key `chain` to the previously anchored
+   reset; give `bootstrap` an explicit idempotency key and full-window cooldown.
 7. Launch the same installed Codex executable in its stable interactive mode
    through Windows ConPTY. Codex owns authentication and the model request.
 8. Poll the app-server again and require fixed-reset evidence.
@@ -59,8 +63,8 @@ create the token-count events that normally carry that notification.
 
 ## Scope Boundaries
 
-In scope: Phase 1 observation plus one Codex-only, post-rollover interactive
-trigger and bounded verification attempt.
+In scope: Phase 1 observation plus Codex-only, bounded rollover and explicit
+first-window bootstrap trigger/verification paths.
 
 Out of scope: Claude support, keepalives, reset credits, private endpoints,
 credential reads, API keys, UI scraping, GUI/tray, startup tasks, schedulers,
@@ -110,3 +114,5 @@ False `UNKNOWN` is preferable to a false anchored or unanchored result.
 | 2026-08-29 | Phase 2 uses interactive `codex [PROMPT]` under Windows ConPTY | Current CCLimitPing evidence shows `codex exec` can consume tokens without anchoring; the installed CLI documents the base command as the stable TUI. |
 | 2026-08-29 | Default trigger is `gpt-5.4-mini`, `low`, and a two-character message | The installed native model catalog describes this available model as small and cost-efficient and confirms `low` support. No model fallback or escalation is allowed. |
 | 2026-08-29 | One attempt per anchored rollover boundary | Observer verification can detect failure, but it cannot prove an unverified request consumed zero quota. Retrying would risk duplicate spend. |
+| 2026-08-29 | Bootstrap requires explicit confirmation, zero-percent high-confidence UNANCHORED evidence, and a full-window cooldown | A new user has no historical rollover to prove, so bootstrap uses current evidence without fabricating history. |
+| 2026-08-29 | Definite pre-process failures are recoverable; any launch ambiguity is guarded | This preserves a real bootstrap opportunity without risking duplicate quota use. |
