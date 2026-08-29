@@ -1,4 +1,4 @@
-# Phase 1 Implementation Plan
+# Phase 1 and Phase 2 Implementation Plan
 
 **Goal:** Ship an observation-only CLI that classifies the approximately
 five-hour Codex rate-limit window from repeated official app-server reads.
@@ -63,3 +63,16 @@ The CLI owns orchestration, display, reconnects, and allowlisted local history.
 The build is accepted only when deterministic tests pass, the live handshake and
 read succeed or yield an honestly documented environment blocker, and the source
 scan shows no credential reads, private endpoint calls, or model-turn methods.
+
+## Phase 2: One Codex Rollover Trigger
+
+- [x] Inspect the accepted Phase 1 commit, installed native CLI/model catalog,
+  official CLI reference, and current CCLimitPing trigger/changelog.
+- [x] Define deterministic eligibility, weekly protection, reset buffer,
+  persistent duplicate guard, bounded failure, and restart tests first.
+- [x] Add a standard-library Windows ConPTY transport and an injectable
+  interactive Codex trigger with no `exec` path or model escalation.
+- [x] Add a one-shot coordinator that reports success only after Phase 1
+  classifies the post-trigger samples as `ANCHORED`.
+- [x] Run the full suite, live doctor, read-only sample, dry-run, safety scan,
+  diff review, quality gate, and one local commit.

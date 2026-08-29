@@ -85,9 +85,25 @@ Official source:
   and duration-based bucket selection. Its executable discovery informed the
   Windows resolver, but its behavior and assumptions were not treated as
   protocol authority.
-- `wavever/CCLimitPing` reads credential material and calls WHAM/private backend
-  routes directly. That architecture violates Sentinel's security contract and
-  was rejected completely.
+- Current `wavever/CCLimitPing` commit `d2d521c` and its v0.9.0 changelog were
+  inspected for Phase 2. Its private usage reads and credential handling remain
+  rejected. Its MIT-licensed v0.4.2 trigger lesson was retained: headless
+  `codex exec` did not reliably anchor the subscription window, while the base
+  interactive `codex [PROMPT]` TUI under a PTY did. Sentinel adapts its bounded
+  quiet-period and shutdown strategy for Windows ConPTY. Attribution is in
+  `THIRD_PARTY_NOTICES.md`.
+
+## Phase 2 Installed Trigger Evidence
+
+- The native executable remains `codex-cli 0.150.0-alpha.12.2` and supports a
+  positional initial prompt on the base interactive command.
+- Official CLI documentation identifies the base `codex` command as the stable
+  terminal UI and `codex exec` as the separate non-interactive mode.
+- `codex debug models` reported `gpt-5.4-mini` as visible on this installation,
+  described it as small, fast, and cost-efficient, and listed `low` reasoning
+  as supported. Sentinel has no fallback model list and does not escalate.
+- Windows ConPTY was exercised locally with a benign console command. Its child
+  output was captured rather than attached to the calling terminal.
 
 ## Stability Warning
 

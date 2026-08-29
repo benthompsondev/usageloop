@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-window-sentinel"
-version = "0.1.0"
-description = "Observation-only classifier for Codex subscription rate-limit windows"
+version = "0.2.0"
+description = "Observe Codex windows and verify one bounded post-rollover trigger"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

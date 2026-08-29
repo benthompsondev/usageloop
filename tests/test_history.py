@@ -67,6 +67,27 @@ class SafeHistoryTests(unittest.TestCase):
         self.assertEqual("authentication_unavailable", row["category"])
         self.assertEqual({"event", "timestamp", "sentinel_version", "category"}, set(row))
 
+    def test_trigger_log_excludes_prompt_credentials_and_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel.jsonl"
+            history = SafeHistory(path)
+            history.record_trigger_attempt(2000010000, "gpt-5.4-mini", "low")
+            history.record_trigger_result(2000010000, "anchor_not_verified", "UNANCHORED")
+            serialized = path.read_text(encoding="utf-8").lower()
+
+        for forbidden in (
+            "prompt",
+            "token",
+            "email",
+            "account_id",
+            "auth.json",
+            "conversation",
+            "process_output",
+        ):
+            self.assertNotIn(forbidden, serialized)
+        self.assertIn('"model":"gpt-5.4-mini"', serialized)
+        self.assertIn('"reasoning_effort":"low"', serialized)
+
 
 if __name__ == "__main__":
     unittest.main()

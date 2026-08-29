@@ -1,4 +1,4 @@
-"""Command-line interface for the observation-only Phase 1 utility."""
+"""Command-line interface for observation and one bounded Codex rollover trigger."""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ import time
 from typing import Any, Sequence
 
 from . import __version__
+from ._conpty import conpty_available
+from .chain import ChainCoordinator, ChainPolicy, ChainResult
 from .classifier import Classification, classify
 from .history import SafeHistory, default_history_path
 from .protocol import AppServerClient
@@ -24,6 +26,7 @@ from .transport import (
     find_codex_executable,
     read_codex_version,
 )
+from .trigger import InteractiveCodexTrigger, TriggerConfig
 
 
 @dataclass
@@ -56,6 +59,13 @@ def create_parser() -> argparse.ArgumentParser:
 
     watch = commands.add_parser("watch", help="Continuously poll and print state transitions.")
     watch.add_argument("--interval", type=_positive_float, default=30.0, help="Polling interval in seconds (default: 30).")
+
+    chain = commands.add_parser(
+        "chain",
+        help="Trigger one eligible post-rollover Codex window and verify it anchored.",
+    )
+    chain.add_argument("--dry-run", action="store_true", help="Evaluate and show the trigger plan without sending a request.")
+    chain.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser
 
 
@@ -111,8 +121,9 @@ def run_doctor() -> int:
         print(f"Codex version: {session.codex_version}")
         print(f"App-server handshake: OK ({session.platform_os})")
         print(f"Subscription rate limits: available ({len(snapshot.windows)} window(s))")
+        print(f"Interactive trigger transport: {'available' if conpty_available() else 'unavailable'} (Windows ConPTY)")
         print(f"Safe log: {default_history_path()}")
-        print("Boundary: read-only rate-limit request; no prompts, tokens, auth files, or private endpoints.")
+        print("Doctor boundary: read-only checks only; no model request was sent.")
         return 0
     finally:
         session.close()
@@ -209,6 +220,50 @@ def run_watch(*, interval: float) -> int:
                 session.close()
 
 
+def run_chain(*, dry_run: bool, json_output: bool) -> int:
+    history = SafeHistory()
+    session = connect()
+    output = sys.stderr if json_output else sys.stdout
+    trigger = InteractiveCodexTrigger(
+        session.executable,
+        history.path.parent / "trigger-workspace",
+        TriggerConfig(),
+    )
+
+    def collect(label: str) -> list[QuotaSnapshot]:
+        observations: list[QuotaSnapshot] = []
+        for index in range(4):
+            snapshot, _notification_count = _read_snapshot(session)
+            observations.append(snapshot)
+            print(f"{label} [{index + 1}/4]", file=output)
+            if index < 3:
+                time.sleep(5.0)
+        classification = classify(observations)
+        for snapshot in observations:
+            history.record_observation(snapshot, classification, session.codex_version)
+        return observations
+
+    try:
+        preflight = collect("Preflight")
+        coordinator = ChainCoordinator(trigger, history, ChainPolicy())
+        result = coordinator.run(
+            preflight,
+            lambda: collect("Verification"),
+            dry_run=dry_run,
+        )
+        if json_output:
+            payload = result.to_dict()
+            payload["codex_version"] = session.codex_version
+            payload["sentinel_version"] = __version__
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print()
+            print(_format_chain(result))
+        return _chain_exit_code(result)
+    finally:
+        session.close()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = create_parser().parse_args(argv)
     try:
@@ -220,6 +275,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_sample(count=args.count, interval=args.interval)
         if args.command == "watch":
             return run_watch(interval=args.interval)
+        if args.command == "chain":
+            return run_chain(dry_run=args.dry_run, json_output=args.json)
         raise AssertionError("unreachable command")
     except KeyboardInterrupt:
         print("Stopped.")
@@ -279,6 +336,39 @@ def _format_status(payload: dict[str, Any]) -> str:
     if evidence:
         lines.append("Evidence: " + json.dumps(evidence, sort_keys=True, separators=(",", ":")))
     return "\n".join(lines)
+
+
+def _format_chain(result: ChainResult) -> str:
+    description = result.trigger
+    lines = [
+        f"Chain result: {result.status}",
+        f"Why: {result.reason}",
+        f"Anchored: {'yes' if result.anchored else 'no'}",
+        f"Request sent: {'yes' if result.trigger_attempted else 'no'}",
+        f"Classifier: {result.classification.state} ({result.classification.confidence})",
+        f"Trigger: normal interactive Codex TUI via Windows ConPTY",
+        f"Model/reasoning: {description.model} / {description.reasoning_effort}",
+        f"Minimal input: {description.prompt_characters} characters (contents are not logged)",
+        "Retry bound: one trigger attempt per observed rollover boundary",
+    ]
+    if result.boundary_reset_at is not None:
+        lines.append(f"Rollover boundary: {_reset_iso(result.boundary_reset_at)}")
+    return "\n".join(lines)
+
+
+def _chain_exit_code(result: ChainResult) -> int:
+    if result.status in {"ANCHOR_VERIFIED", "ALREADY_ANCHORED", "DRY_RUN"}:
+        return 0
+    if result.status in {
+        "NOT_ELIGIBLE",
+        "WEEKLY_UNAVAILABLE",
+        "WEEKLY_EXHAUSTED",
+        "ROLLOVER_BOUNDARY_UNKNOWN",
+        "RESET_BUFFER",
+        "ATTEMPT_ALREADY_RECORDED",
+    }:
+        return 3
+    return 4
 
 
 def _remaining_seconds(window: QuotaWindow | None, observed_at: float) -> int | None:

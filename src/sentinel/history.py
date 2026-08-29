@@ -16,6 +16,8 @@ from .quota import QuotaSnapshot, QuotaWindow
 
 _SAFE_CATEGORY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SAFE_VERSION = re.compile(r"^[A-Za-z0-9 ._+/-]{1,80}$")
+_SAFE_MODEL = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
+_SAFE_REASONING = re.compile(r"^[a-z]{1,16}$")
 _EVIDENCE_KEYS = {
     "sample_count",
     "elapsed_seconds",
@@ -79,6 +81,84 @@ class SafeHistory:
             }
         )
 
+    def record_trigger_attempt(
+        self,
+        boundary_reset_at: int,
+        model: str,
+        reasoning_effort: str,
+    ) -> None:
+        self._append(
+            {
+                "event": "trigger_attempt",
+                "timestamp": _iso_timestamp(datetime.now(timezone.utc).timestamp()),
+                "sentinel_version": __version__,
+                "boundary_reset_at": int(boundary_reset_at),
+                "model": model if _SAFE_MODEL.fullmatch(model) else "unknown",
+                "reasoning_effort": (
+                    reasoning_effort if _SAFE_REASONING.fullmatch(reasoning_effort) else "unknown"
+                ),
+            }
+        )
+
+    def record_trigger_result(
+        self,
+        boundary_reset_at: int,
+        outcome: str,
+        observed_state: str,
+    ) -> None:
+        safe_outcome = outcome if _SAFE_CATEGORY.fullmatch(outcome) else "unexpected_error"
+        allowed_states = {"ANCHORED", "UNANCHORED", "ABSENT", "EXHAUSTED", "UNKNOWN"}
+        self._append(
+            {
+                "event": "trigger_result",
+                "timestamp": _iso_timestamp(datetime.now(timezone.utc).timestamp()),
+                "sentinel_version": __version__,
+                "boundary_reset_at": int(boundary_reset_at),
+                "outcome": safe_outcome,
+                "observed_state": observed_state if observed_state in allowed_states else "UNKNOWN",
+            }
+        )
+
+    def trigger_attempt_count(self, boundary_reset_at: int) -> int:
+        return sum(
+            1
+            for row in self._read_rows()
+            if row.get("event") == "trigger_attempt"
+            and row.get("boundary_reset_at") == int(boundary_reset_at)
+        )
+
+    def latest_anchored_reset_before(
+        self,
+        now: float,
+        *,
+        max_age_seconds: float = 21600,
+    ) -> int | None:
+        candidates: list[int] = []
+        for row in self._read_rows():
+            if row.get("event") != "observation" or row.get("classification") != "ANCHORED":
+                continue
+            observed_at = row.get("observed_at")
+            if not isinstance(observed_at, (int, float)) or isinstance(observed_at, bool):
+                continue
+            if observed_at < now - max_age_seconds or observed_at > now + 60:
+                continue
+            windows = row.get("windows")
+            if not isinstance(windows, list):
+                continue
+            for window in windows:
+                if not isinstance(window, dict):
+                    continue
+                duration = window.get("duration_minutes")
+                reset = window.get("resets_at")
+                if (
+                    isinstance(duration, int)
+                    and 270 <= duration <= 330
+                    and isinstance(reset, int)
+                    and reset <= now
+                ):
+                    candidates.append(reset)
+        return max(candidates) if candidates else None
+
     def load_recent(
         self,
         *,
@@ -110,6 +190,23 @@ class SafeHistory:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8", newline="\n") as stream:
             stream.write(json.dumps(row, separators=(",", ":"), ensure_ascii=True) + "\n")
+
+    def _read_rows(self) -> list[dict[str, Any]]:
+        if not self.path.is_file():
+            return []
+        try:
+            lines = self.path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+        rows: list[dict[str, Any]] = []
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                rows.append(row)
+        return rows
 
 
 def default_history_path() -> Path:

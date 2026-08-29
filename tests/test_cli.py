@@ -36,11 +36,15 @@ class CliShapeTests(unittest.TestCase):
 
     def test_parser_supports_required_commands_and_status_json(self):
         parser = create_parser()
-        for command in ("doctor", "sample", "watch"):
+        for command in ("doctor", "sample", "watch", "chain"):
             self.assertEqual(command, parser.parse_args([command]).command)
         status = parser.parse_args(["status", "--json"])
         self.assertEqual("status", status.command)
         self.assertTrue(status.json)
+
+        chain = parser.parse_args(["chain", "--dry-run", "--json"])
+        self.assertTrue(chain.dry_run)
+        self.assertTrue(chain.json)
 
 
 if __name__ == "__main__":

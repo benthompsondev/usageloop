@@ -1,11 +1,11 @@
-# Project Spec: Codex Window Sentinel
+# Project Spec: Codex Window Sentinel, Phases 1 and 2
 
 ## Goal
 
-Provide the verified observation foundation for a later consumer-friendly
-window-chaining product: a trustworthy Windows-first CLI that measures whether
-the currently exposed approximately five-hour Codex subscription window has a
-fixed reset timestamp or a reset timestamp that slides with wall-clock time.
+Provide the verified Codex foundation for a later consumer-friendly
+window-chaining product. Phase 1 measures fixed versus sliding reset behavior.
+Phase 2 sends one minimal normal interactive Codex request only after a proven
+rollover, then reports success only if Phase 1 observes a fixed new reset.
 
 ## Why
 
@@ -16,23 +16,27 @@ fixed reset timestamp or a reset timestamp that slides with wall-clock time.
 - Portfolio story: a small local-first diagnostic tool that favors measurement
   and official interfaces over private endpoint shortcuts.
 
-## Smallest Runnable Version
+## Phase 2 Smallest Runnable Slice
 
-- Input: read-only `account/rateLimits/read` responses from a child
-  `codex app-server` process.
-- Output: current quota windows plus `ANCHORED`, `UNANCHORED`, `ABSENT`,
-  `EXHAUSTED`, or `UNKNOWN`, with concise evidence and JSON output.
-- One command: `sentinel sample` after local setup.
+- Observe four snapshots through `account/rateLimits/read`.
+- Trigger only with `UNANCHORED` evidence, a recent known anchored boundary, a
+  15-second reset buffer, an available weekly window below 99%, and no prior
+  attempt for that boundary.
+- Launch the base interactive Codex TUI under Windows ConPTY with a minimal
+  initial message, `gpt-5.4-mini`, and `low` reasoning.
+- Observe four more snapshots and report verified success only for `ANCHORED`.
+- One command: `sentinel chain`, with `sentinel chain --dry-run` for inspection.
 
-## Done Means
+## Phase 2 Done Means
 
-- [ ] `doctor`, `status`, `sample`, `watch`, and `status --json` work.
-- [ ] Five-hour selection uses actual duration and preserves other windows.
-- [ ] Multiple observations, not a single timestamp, drive anchored/unanchored results.
-- [ ] Safe local JSONL logging contains no account, auth, prompt, or conversation data.
-- [ ] Deterministic tests cover the requested classifier and protocol scenarios.
-- [ ] Live doctor and sampling run against the installed Codex runtime without model turns.
-- [ ] README explains what, why, run, verify, privacy, troubleshooting, and removal.
+- [ ] `chain`, `chain --dry-run`, and `chain --json` use the existing observer.
+- [ ] Weekly, reset-buffer, rollover-boundary, and persisted duplicate gates run
+  before any trigger process starts.
+- [ ] The trigger uses the interactive TUI, not `codex exec`, and does not read credentials.
+- [ ] One failed or unverifiable attempt cannot trigger again at the same boundary.
+- [ ] Safe JSONL trigger events exclude input and process output.
+- [ ] Deterministic tests cover every requested trigger and restart path.
+- [ ] Live verification does not manufacture a rollover or spend quota while anchored.
 
 ## Architecture and Data Flow
 
@@ -42,7 +46,12 @@ fixed reset timestamp or a reset timestamp that slides with wall-clock time.
 4. Normalize `rateLimitsByLimitId` when present, falling back to `rateLimits`.
 5. Select an approximately 300-minute window by duration, then classify a
    sequence with explicit jitter tolerances and conservative ambiguity rules.
-6. Render text or JSON and append only allowlisted fields to a user-local JSONL log.
+6. For `chain`, require conservative eligibility and persist a one-attempt
+   reservation keyed by the previously anchored reset timestamp.
+7. Launch the same installed Codex executable in its stable interactive mode
+   through Windows ConPTY. Codex owns authentication and the model request.
+8. Poll the app-server again and require fixed-reset evidence.
+9. Render text or JSON and append only allowlisted fields to a user-local JSONL log.
 
 `account/rateLimits/updated` is accepted as a sparse, opportunistic signal but
 never replaces polling because a dedicated observation-only process does not
@@ -50,17 +59,15 @@ create the token-count events that normally carry that notification.
 
 ## Scope Boundaries
 
-In scope: local CLI, app-server process management, read-only quota requests,
-safe history, reconnect behavior, setup script, tests, and documentation.
+In scope: Phase 1 observation plus one Codex-only, post-rollover interactive
+trigger and bounded verification attempt.
 
-Out of scope: prompts, keepalives, reset consumption, private endpoints,
+Out of scope: Claude support, keepalives, reset credits, private endpoints,
 credential reads, API keys, UI scraping, GUI/tray, startup tasks, schedulers,
-telemetry, quota manipulation, and global PATH changes.
+installers, telemetry, public release work, and global PATH changes.
 
-Later product direction, explicitly not part of Phase 1: minimal post-rollover
-triggers, Claude Code observation/triggering, scheduling, verification loops,
-and a consumer Windows interface. None of those may be inferred from or added
-to this observer without a new approved design and security review.
+Later product direction, explicitly not part of this slice: Claude Code,
+scheduling, packaging, and a consumer Windows interface.
 
 Ask Ben first before any security-boundary, protocol-method, dependency,
 publishing, deployment, or persistence expansion.
@@ -100,3 +107,6 @@ False `UNKNOWN` is preferable to a false anchored or unanchored result.
 | 2026-08-29 | Installed schema plus current `openai/codex` source are authoritative | Protocol behavior is evolving and must not come from memory. |
 | 2026-08-29 | Poll read requests; notifications are opportunistic | Upstream emits rate-limit updates from token-count events, which Sentinel intentionally does not create. |
 | 2026-08-29 | Default sample is four observations at 10-second intervals | A 30-second baseline is clear at Unix-second resolution without an excessive wait. |
+| 2026-08-29 | Phase 2 uses interactive `codex [PROMPT]` under Windows ConPTY | Current CCLimitPing evidence shows `codex exec` can consume tokens without anchoring; the installed CLI documents the base command as the stable TUI. |
+| 2026-08-29 | Default trigger is `gpt-5.4-mini`, `low`, and a two-character message | The installed native model catalog describes this available model as small and cost-efficient and confirms `low` support. No model fallback or escalation is allowed. |
+| 2026-08-29 | One attempt per anchored rollover boundary | Observer verification can detect failure, but it cannot prove an unverified request consumed zero quota. Retrying would risk duplicate spend. |
