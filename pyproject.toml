@@ -4,16 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-window-sentinel"
-version = "0.3.0"
-description = "Observe Codex windows and safely verify bounded rollover or bootstrap triggers"
+version = "0.4.0"
+description = "Keep subscription coding windows ready with guarded local provider automation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Ben Thompson" }]
-dependencies = []
+dependencies = ["PySide6-Essentials>=6.8,<7"]
+
+[project.optional-dependencies]
+build = ["PyInstaller>=6.14,<7"]
 
 [project.scripts]
 sentinel = "sentinel.cli:main"
+window-sentinel = "sentinel.app:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

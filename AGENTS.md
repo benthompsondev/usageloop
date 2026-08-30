@@ -5,11 +5,10 @@ this file only adds what is specific to this repository.
 
 ## What This Repo Is
 
-A Windows-first CLI that reads ChatGPT/Codex subscription rate-limit snapshots
-through a local `codex app-server`. Phase 2 adds one bounded subscription-backed
-turn through that same app-server after a proven rollover or explicit
-first-window bootstrap, followed by Phase 1 verification. See
-`PROJECT_SPEC.md` for the contract.
+A Windows-first desktop app and CLI that read ChatGPT/Codex subscription
+rate-limit snapshots through a local `codex app-server`. The PySide6 shell keeps
+the hardened observer and guarded trigger core intact. See `PROJECT_SPEC.md` and
+`docs/WINDOWS_APP_DESIGN.md` for the contract.
 
 ## Commands
 
@@ -27,17 +26,21 @@ pwsh -NoProfile -File .\scripts\setup.ps1
 
 # Verify without contacting OpenAI
 pwsh -NoProfile -File .\scripts\verify.ps1
+
+# Build the windowed app and per-user installer
+pwsh -NoProfile -File .\scripts\build-windows.ps1
 ```
 
 ## Structure
 
-- `src/sentinel/` - transport, protocol, normalization, classification, CLI.
+- `src/sentinel/` - transport, protocol, normalization, classification, CLI,
+  provider adapters, and the PySide6 shell.
 - `tests/` - deterministic unit and fixture-based protocol tests.
 - `scripts/` - local PowerShell setup and verification helpers.
 - `docs/` - research and design evidence.
 
-Phase 1 remains the observation foundation. Phase 2 is limited to the approved
-Codex-only rollover/bootstrap trigger and verification loop.
+Phase 1 remains the observation foundation. The desktop app exposes the approved
+Codex-only rollover/bootstrap loop and detection-only Claude status.
 
 ## Boundaries
 
@@ -58,6 +61,10 @@ Always:
 - Resolve the trigger model from `model/list` at request time. Never persist a
   model name, and never select a model carrying an `upgrade` pointer.
 - Prefer the installed native Codex executable over an older PATH shim.
+- Keep countdowns local between verified observations.
+- Treat a provider version change as a reason to rerun the capability probe;
+  pause only when that check fails, is ambiguous, or finds changed semantics.
+- Keep automation off and Start with Windows off on first run.
 
 Never:
 
@@ -71,11 +78,13 @@ Never:
 - Use `codex exec`, private endpoints, or direct credentials to trigger a window.
 - Opt into `experimentalApi`, or send parameters that require it.
 - Log the trigger input, model output, or thread contents.
-- Add telemetry, global PATH changes, admin requirements, or auto-start behavior.
+- Add telemetry, global PATH changes, admin requirements, or automatic opt-in.
+- Automatically anchor Claude until the exact minimal fresh-window operation is
+  proven.
 - Retry when a request may already have been submitted.
 - Push without Ben's explicit authorization and the required push workflow.
 
 Ask Ben first:
 
 - Any new runtime dependency, protocol method beyond the allowlist above,
-  security-boundary change, GUI, scheduled task, deployment, or publishing action.
+  security-boundary change, scheduled task, deployment, or publishing action.

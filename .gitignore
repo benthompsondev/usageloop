@@ -16,9 +16,11 @@ CLAUDE.md
 __pycache__/
 *.pyc
 .venv/
+.build-venv/
 *.egg-info/
 dist/
 build/
+packaging/windowsentinel.ico
 .coverage
 .pytest_cache/
 .ruff_cache/

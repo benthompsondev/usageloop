@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repoRoot '.venv\Scripts\python.exe'
 $sentinel = Join-Path $repoRoot '.venv\Scripts\sentinel.exe'
+$desktop = Join-Path $repoRoot '.venv\Scripts\window-sentinel.exe'
 
 if (-not (Test-Path -LiteralPath $python) -or -not (Test-Path -LiteralPath $sentinel)) {
     throw 'Run scripts\setup.ps1 before verification.'
@@ -18,6 +19,9 @@ try {
 
     & $sentinel --help | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'CLI smoke test failed.' }
+
+    & $desktop --help | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Desktop entry-point smoke test failed.' }
 }
 finally {
     Pop-Location

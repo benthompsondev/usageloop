@@ -1,12 +1,12 @@
-# Project Spec: Codex Window Sentinel, Phases 1 and 2
+# Project Spec: Window Sentinel
 
 ## Goal
 
-Provide the verified Codex foundation for a later consumer-friendly
-window-chaining product. Phase 1 measures fixed versus sliding reset behavior.
-Phase 2 sends one minimal subscription-backed app-server turn after either a proven
-rollover or explicit first-run bootstrap eligibility, then reports success only
-if Phase 1 observes a fixed new reset.
+Ship the verified Codex observer and guarded trigger as a simple per-user Windows
+app. Phase 1 measures fixed versus sliding reset behavior. Phase 2 sends one
+minimal subscription-backed app-server turn after a proven rollover or explicit
+first-run bootstrap, then reports success only if Phase 1 observes a fixed new
+reset. The desktop shell makes that core usable without a terminal.
 
 ## Why
 
@@ -61,17 +61,16 @@ if Phase 1 observes a fixed new reset.
 never replaces polling because a dedicated observation-only process does not
 create the token-count events that normally carry that notification.
 
-## Scope Boundaries
+## Windows App Scope
 
-In scope: Phase 1 observation plus Codex-only, bounded rollover and explicit
-first-window bootstrap trigger/verification paths.
+In scope: the existing Codex observer and guarded trigger, a thin PySide6 window
+and tray, local countdowns, opt-in per-user startup, background workers, cached
+Claude detection/status, and a per-user PyInstaller/Inno Setup package.
 
-Out of scope: Claude support, keepalives, reset credits, private endpoints,
-credential reads, API keys, UI scraping, GUI/tray, startup tasks, schedulers,
-installers, telemetry, public release work, and global PATH changes.
-
-Later product direction, explicitly not part of this slice: Claude Code,
-scheduling, packaging, and a consumer Windows interface.
+Out of scope: Claude automatic anchoring until its exact fresh-window operation
+is proven, keepalives, reset credits, private endpoints, credential reads, API
+keys, UI scraping, updater services, public release work, telemetry, and global
+PATH changes.
 
 Ask Ben first before any security-boundary, protocol-method, dependency,
 publishing, deployment, or persistence expansion.
@@ -107,7 +106,7 @@ False `UNKNOWN` is preferable to a false anchored or unanchored result.
 
 | Date | Decision | Why |
 | --- | --- | --- |
-| 2026-08-29 | Python standard library only at runtime, compatible with Python 3.11+ | Python 3.12 is absent locally; no system install is needed and current runtimes can run the utility. |
+| 2026-08-29 | Python standard library only in the provider core, compatible with Python 3.11+ | Python 3.12 is absent locally; no system install is needed and current runtimes can run the utility. |
 | 2026-08-29 | Installed schema plus current `openai/codex` source are authoritative | Protocol behavior is evolving and must not come from memory. |
 | 2026-08-29 | Poll read requests; notifications are opportunistic | Upstream emits rate-limit updates from token-count events, which Sentinel intentionally does not create. |
 | 2026-08-29 | Default sample is four observations at 10-second intervals | A 30-second baseline is clear at Unix-second resolution without an excessive wait. |
@@ -128,3 +127,5 @@ False `UNKNOWN` is preferable to a false anchored or unanchored result.
 | 2026-08-30 | Require one unique current default from `model/list` | Catalog ordering is not a safe model-selection signal when default metadata is missing or contradictory. |
 | 2026-08-30 | Require the dedicated trigger workspace to be empty and non-redirected | A stale file, local instruction, link, or junction would violate the controlled-workspace boundary. |
 | 2026-08-30 | Block cross-mode attempts within the same five-hour opportunity | Concurrent `chain` and `bootstrap` commands must not each reserve a turn merely because their mode names differ. |
+| 2026-08-30 | Add a PySide6 thin shell without moving provider policy into the GUI | The hardened core remains authoritative while normal users get one understandable control, local countdowns, tray behavior, and a per-user installer. |
+| 2026-08-30 | Treat provider version changes as capability-probe events, not automatic failures | Automation may continue when the required methods and semantics still pass the lightweight compatibility check. |

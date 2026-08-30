@@ -38,12 +38,13 @@ if (-not (Test-Path -LiteralPath $venvPath)) {
 }
 
 $venvPython = Join-Path $venvPath 'Scripts\python.exe'
-& $venvPython -m pip install --editable $repoRoot
+& $venvPython -m pip install --editable "${repoRoot}[build]"
 if ($LASTEXITCODE -ne 0) {
     throw 'Failed to install Sentinel in the local virtual environment.'
 }
 
-Write-Output 'Codex Window Sentinel is ready.'
+Write-Output 'Window Sentinel is ready.'
+Write-Output 'Desktop: .\.venv\Scripts\window-sentinel.exe'
 Write-Output 'Run: .\sentinel.ps1 doctor'
 Write-Output 'Then: .\sentinel.ps1 sample'
 Write-Output 'Inspect Phase 2 safely: .\sentinel.ps1 chain --dry-run'

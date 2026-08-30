@@ -1,17 +1,23 @@
-# Codex Window Sentinel
+# Window Sentinel
 
-Codex Window Sentinel is the verified Codex foundation for a later
-consumer-friendly window-chaining app.
+Window Sentinel is a small Windows app that keeps subscription coding windows
+ready without asking a normal user to manage terminals or config files. Its one
+primary control is **Keep my 5-hour windows ready**.
 
 Phase 1 observes the real ChatGPT/Codex subscription windows through the local
 Codex app-server and classifies the approximately five-hour window as
 `ANCHORED`, `UNANCHORED`, `ABSENT`, `EXHAUSTED`, or `UNKNOWN`.
 
-Phase 2 adds the smallest product proof. `sentinel chain` handles a proven
+The guarded Codex provider handles the product proof. `sentinel chain` handles a proven
 rollover, while the explicit `sentinel bootstrap --confirm` path can start a
 first window when no historical anchored reset exists. Both paths allow one
 minimal request through the local Codex app-server and report success
 only when fresh observations prove that the window anchored.
+
+The PySide6 desktop shell adds provider cards, local countdowns, background
+workers, a system tray, and optional per-user startup. Claude is detected and
+can show cached status, but automatic Claude anchoring remains deliberately
+disabled until its exact minimal fresh-window operation is proven.
 
 ## Boundaries
 
@@ -27,7 +33,10 @@ Sentinel does:
   `cmd.exe`, never by passing a shim to `CreateProcessW`;
 - persist reservation, launch, possibly-sent, verified, and recoverable/guarded
   failure states before deciding whether another request is safe;
-- require post-trigger `ANCHORED` evidence before reporting verified success.
+- require post-trigger `ANCHORED` evidence before reporting verified success;
+- rerun a lightweight capability probe when a provider binary changes, and
+  continue only when required behavior remains compatible;
+- advance visible countdowns locally without provider traffic.
 
 Sentinel does not:
 
@@ -36,7 +45,8 @@ Sentinel does not:
 - use `codex exec`, an API key, UI scraping, or reset credits;
 - log trigger input or model/process output;
 - retry with another model;
-- support Claude, scheduling, startup tasks, GUI/tray behavior, or packaging yet.
+- automatically anchor Claude, create scheduled tasks, update itself, or opt the
+  user into startup or automation.
 
 ## Architecture and Privacy
 
@@ -62,10 +72,27 @@ The original interactive trigger timing strategy was adapted from the MIT-licens
 [CCLimitPing](https://github.com/wavever/CCLimitPing). See
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-## Requirements and Setup
+## Install and First Run
+
+Normal users run `WindowSentinel-Setup.exe`. It installs for the current Windows
+user, needs no administrator rights or separate Python installation, and adds a
+Start Menu shortcut. On first launch:
+
+1. Confirm that Codex and Claude Code are detected as expected.
+2. Turn on **Keep my 5-hour windows ready** only if you want guarded provider
+   automation. Leaving it off means zero provider-triggering activity.
+3. If Codex has no historical anchored reset, choose **Start my first window
+   now** and approve the explicit one-request bootstrap explanation.
+4. Optionally enable **Start Window Sentinel with Windows** under Advanced.
+
+Closing the window keeps it in the system tray. Use **Quit Window Sentinel** in
+the tray menu to exit completely.
+
+## Source Requirements and Setup
 
 - Windows 10 or Windows 11.
-- Python 3.11 or newer. Python 3.12 is preferred but not required.
+- Python 3.11 or newer for source development. The packaged app includes its
+  runtime; Python 3.12 is preferred but not required.
 - A current installed Codex CLI/app signed into the intended ChatGPT subscription.
 
 From this repository in PowerShell:
@@ -78,7 +105,21 @@ Setup creates only `.venv` inside the repository and installs Sentinel there.
 It does not need administrator rights, change the global PATH, or install an
 OpenAI API key.
 
-## Commands
+Open the desktop app from source with:
+
+```powershell
+.\.venv\Scripts\window-sentinel.exe
+```
+
+Build the runnable app and per-user installer with:
+
+```powershell
+pwsh -NoProfile -File .\scripts\build-windows.ps1
+```
+
+The CLI remains available for diagnostics and controlled provider testing.
+
+## CLI Commands
 
 ```powershell
 .\sentinel.ps1 doctor
@@ -238,9 +279,13 @@ position, reset timestamp, model, or trigger path will remain valid.
 
 ## Remove Completely
 
-Sentinel makes no PATH, startup, scheduled-task, or system-wide changes. Close
-it, delete the project folder, and optionally remove its safe local state:
+Use Windows **Installed apps** to uninstall Window Sentinel. The uninstaller
+removes its per-user startup registration and installed files. Sentinel never
+changes the global PATH or creates a scheduled task. To remove its safe local
+history and preferences as well, delete:
 
 ```powershell
 Remove-Item -LiteralPath "$env:LOCALAPPDATA\CodexWindowSentinel" -Recurse
 ```
+
+For a source checkout, delete the project folder after quitting the app.
