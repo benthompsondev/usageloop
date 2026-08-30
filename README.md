@@ -130,6 +130,16 @@ window below 99% used and not blocked.
 usage across the evidence set, and no possibly sent bootstrap request during the
 previous full five-hour window. It does not invent a historical rollover.
 
+The interactive child receives a copy of the current environment with only
+`TERM=xterm-256color` enforced, so an automation parent's `TERM=dumb` cannot add
+an unseen confirmation gate. Sentinel launches only inside its empty dedicated
+`%LOCALAPPDATA%\CodexWindowSentinel\trigger-workspace` directory. If Codex shows
+its one-time trust screen, Sentinel confirms only the complete expected prompt
+for that exact path after the user-authorized trigger has passed every quota
+gate. Codex then persists trust for that one workspace in its normal user config.
+Any content in the workspace, different path, TERM warning, trust-write error, or
+other startup prompt fails closed. Sentinel never trusts the user's current repo.
+
 Sentinel writes the reservation and `launch_attempted` state before starting
 Codex. A definite failure before process creation becomes `failed_recoverable`
 and does not burn the opportunity. Once process creation may have occurred,
@@ -137,9 +147,10 @@ Sentinel always performs read-only verification and blocks another request even
 when the terminal outcome is ambiguous. A fresh bare reservation is treated as
 active for two minutes, then becomes recoverable after a restart.
 
-Terminal/process outcomes such as `process_exited`, `output_quiet`, or
-`runtime_cap_reached` never claim that a Codex turn completed. The quota observer
-is the authority for anchoring.
+The ConPTY controller distinguishes terminal startup, the exact trust screen,
+the main composer, positional-prompt submission, and observable turn activity.
+It still does not claim semantic model completion. The quota observer remains
+the authority for anchoring.
 
 ## Controlled Live Rollover Test
 

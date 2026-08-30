@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import threading
 import time
-from typing import Sequence
+from typing import Mapping, Protocol, Sequence
 
 
 class ConPtyError(RuntimeError):
@@ -24,6 +24,16 @@ class ConPtyResult:
     runtime_seconds: float
     exit_code: int
     terminal_outcome: str
+
+
+class TerminalController(Protocol):
+    def receive(self, chunk: bytes) -> bytes: ...
+
+    @property
+    def stop_outcome(self) -> str | None: ...
+
+    @property
+    def response_delay_seconds(self) -> float: ...
 
 
 if os.name == "nt":
@@ -113,6 +123,8 @@ def run_conpty(
     quiet_seconds: float,
     max_runtime_seconds: float,
     exit_grace_seconds: float,
+    environment: Mapping[str, str] | None = None,
+    controller: TerminalController | None = None,
 ) -> ConPtyResult:
     if not conpty_available():
         raise ConPtyError("Windows ConPTY is unavailable on this system.")
@@ -133,6 +145,7 @@ def run_conpty(
     input_fd: int | None = None
     output_fd: int | None = None
     process_started = False
+    environment_buffer = _environment_block(environment) if environment is not None else None
 
     security = _SECURITY_ATTRIBUTES(
         ctypes.sizeof(_SECURITY_ATTRIBUTES),
@@ -192,7 +205,11 @@ def run_conpty(
             None,
             False,
             _EXTENDED_STARTUPINFO_PRESENT | _CREATE_UNICODE_ENVIRONMENT,
-            None,
+            (
+                ctypes.cast(environment_buffer, wintypes.LPVOID)
+                if environment_buffer is not None
+                else None
+            ),
             str(cwd),
             ctypes.cast(ctypes.byref(startup), wintypes.LPVOID),
             ctypes.byref(process_info),
@@ -211,7 +228,7 @@ def run_conpty(
         activity = [started]
         reader = threading.Thread(
             target=_drain_output,
-            args=(output_fd, activity),
+            args=(output_fd, activity, input_fd, controller),
             name="sentinel-codex-conpty-output",
             daemon=True,
         )
@@ -232,10 +249,21 @@ def run_conpty(
             if wait_result != _WAIT_TIMEOUT:
                 raise _last_error("Could not monitor the interactive Codex process")
             elapsed = now - started
+            controlled_outcome = controller.stop_outcome if controller is not None else None
+            if controlled_outcome is not None and (
+                controlled_outcome != "turn_activity_observed"
+                or elapsed >= min_runtime_seconds
+            ):
+                terminal_outcome = controlled_outcome
+                break
             if elapsed >= max_runtime_seconds:
                 terminal_outcome = "runtime_cap_reached"
                 break
-            if elapsed >= min_runtime_seconds and now - activity[0] >= quiet_seconds:
+            if (
+                controller is None
+                and elapsed >= min_runtime_seconds
+                and now - activity[0] >= quiet_seconds
+            ):
                 terminal_outcome = "output_quiet"
                 break
 
@@ -289,13 +317,25 @@ def run_conpty(
         _close_handle(kernel32, output_write)
 
 
-def _drain_output(output_fd: int, activity: list[float]) -> None:
+def _drain_output(
+    output_fd: int,
+    activity: list[float],
+    input_fd: int | None = None,
+    controller: TerminalController | None = None,
+) -> None:
     try:
         while True:
             chunk = os.read(output_fd, 4096)
             if not chunk:
                 return
             activity[0] = time.monotonic()
+            if controller is not None:
+                response = controller.receive(chunk)
+                if response and input_fd is not None:
+                    delay = max(0.0, controller.response_delay_seconds)
+                    if delay:
+                        time.sleep(delay)
+                    os.write(input_fd, response)
     except OSError:
         return
     finally:
@@ -310,6 +350,12 @@ def _write_control_c(input_fd: int) -> None:
         os.write(input_fd, b"\x03")
     except OSError:
         pass
+
+
+def _environment_block(environment: Mapping[str, str]) -> ctypes.Array[ctypes.c_wchar]:
+    entries = [f"{key}={value}" for key, value in environment.items()]
+    entries.sort(key=str.upper)
+    return ctypes.create_unicode_buffer("\0".join(entries) + "\0\0")
 
 
 def _configure_kernel32(kernel32: ctypes.WinDLL) -> None:

@@ -26,7 +26,11 @@ from .transport import (
     find_codex_executable,
     read_codex_version,
 )
-from .trigger import InteractiveCodexTrigger, TriggerConfig
+from .trigger import (
+    InteractiveCodexTrigger,
+    TriggerConfig,
+    dedicated_trigger_workspace,
+)
 
 
 @dataclass
@@ -265,8 +269,8 @@ def _run_trigger_command(
     output = sys.stderr if json_output else sys.stdout
     trigger = InteractiveCodexTrigger(
         session.executable,
-        history.path.parent / "trigger-workspace",
-        TriggerConfig(),
+        dedicated_trigger_workspace(history.path),
+        TriggerConfig(allow_workspace_trust=confirmed),
     )
 
     def collect(label: str) -> list[QuotaSnapshot]:
