@@ -66,3 +66,22 @@
 - **Blocked on:** Nothing. Provider, updater, and scheduler code untouched.
 - **Next:** Publish the first release so the updater can be tested from an
   older installed build.
+
+## 2026-08-30 (final polish)
+
+- **Did:** Replaced the raw monospace Diagnostics dump with a readable health
+  surface, added a footer status strip so a tall window ends deliberately, and
+  swept the remaining spacing and wording.
+- **Learned:** Growing cards to fill a tall window made it worse, not better.
+  The extra height became hollow card interior, which reads as a bug rather than
+  as generous spacing. Honest empty space above a footer beat a stretched card,
+  so that attempt was reverted rather than kept.
+- **Learned:** PowerShell bound `-H 768` to something else entirely and passed
+  a garbage height, which made the capture harness report a window size the app
+  never had. Two rounds of chasing a phantom layout bug came from trusting the
+  harness output instead of checking the parameters it actually received.
+  Unambiguous parameter names fixed it.
+- **Verified with:** 273 deterministic tests, and captures of the real packaged
+  executable at 1024x768, 1366x768, maximized, and at 125% and 150% scaling.
+- **Blocked on:** Nothing. Provider, scheduler, updater, and version behaviour
+  untouched this pass.

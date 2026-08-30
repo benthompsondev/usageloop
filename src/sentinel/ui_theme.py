@@ -151,7 +151,12 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         background: {tokens.surface_sunken}; border: 1px solid {tokens.border};
         border-radius: {tokens.radius_small}px;
     }}
-    QLabel#diagnosticValue {{ color: {tokens.text_soft}; font-family: "Cascadia Mono", Consolas; }}
+    QLabel#diagnosticValue {{
+        color: {tokens.text_muted}; font-family: "Cascadia Mono", Consolas;
+        font-size: 12px; background: {tokens.surface_sunken};
+        border: 1px solid {tokens.border}; border-radius: {tokens.radius_small}px;
+        padding: 12px;
+    }}
     QLabel#updateState[status="success"] {{ color: {tokens.accent}; }}
     QLabel#updateState[status="error"] {{ color: {tokens.error}; }}
     QLabel#updateState[status="warning"] {{ color: {tokens.warning}; }}
@@ -165,6 +170,28 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QFrame#appHeader QWidget#brandBlock, QFrame#appHeader QWidget#headerControls {{
         background: transparent;
     }}
+    QFrame#healthRow {{
+        background: {tokens.surface_sunken}; border: 1px solid {tokens.border};
+        border-radius: {tokens.radius_small}px;
+    }}
+    QFrame#healthSummary {{
+        background: {tokens.surface_raised}; border: 1px solid {tokens.border_strong};
+        border-radius: {tokens.radius_small}px;
+    }}
+    QLabel#healthLabel {{ font-size: 14px; font-weight: 700; color: {tokens.text}; }}
+    QLabel#healthDetail {{ font-size: 12px; color: {tokens.text_muted}; }}
+    QPushButton#disclosureToggle {{
+        background: transparent; border: 0; color: {tokens.text_muted};
+        padding: 4px 2px; font-weight: 650; text-align: left;
+    }}
+    QPushButton#disclosureToggle:hover {{ color: {tokens.text}; }}
+    QPushButton#disclosureToggle:checked {{ color: {tokens.accent}; }}
+    QFrame#appFooter {{
+        background: {tokens.background_deep};
+        border-top: 1px solid {tokens.border};
+    }}
+    QLabel#footerPromise {{ color: {tokens.text_faint}; font-size: 12px; }}
+    QLabel#footerVersion {{ color: {tokens.text_faint}; font-size: 12px; }}
     QLabel#wordmarkPrimary {{ font-size: 21px; font-weight: 800; color: {tokens.text}; }}
     QLabel#wordmarkAccent {{ font-size: 21px; font-weight: 800; color: {tokens.accent}; }}
     QLabel#trustChip {{

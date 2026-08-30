@@ -110,6 +110,9 @@ def main() -> int:
 
         window.show_page(1)
         save(window, args.output / "settings.png", app)
+        window.resize(1920, 1080)
+        save(window, args.output / "settings-1920x1080.png", app)
+        window.resize(1040, 720)
 
         release = ReleaseInfo(
             "0.7.0",
@@ -128,6 +131,9 @@ def main() -> int:
 
         window.show_page(2)
         save(window, args.output / "about.png", app)
+        window.resize(1920, 1080)
+        save(window, args.output / "about-1920x1080.png", app)
+        window.resize(1040, 720)
 
         window.show_page(0)
         controller.update_provider_state(

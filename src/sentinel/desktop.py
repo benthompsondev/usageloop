@@ -40,8 +40,11 @@ from .branding import make_app_icon, render_mark
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
+from .diagnostics import build_health_rows, overall_summary, technical_summary
 from .ui_components import (
+    Disclosure,
     ElidingLabel,
+    HealthRowWidget,
     ProviderCard,
     StatusPill,
     make_surface_card,
@@ -120,6 +123,7 @@ class MainWindow(QMainWindow):
         )
         self.pages.addWidget(self._build_about())
         shell.addWidget(self.pages, 1)
+        shell.addWidget(self._build_footer())
         self.setCentralWidget(app_root)
 
         self.automation_toggle.toggled.connect(self._automation_toggled)
@@ -246,6 +250,29 @@ class MainWindow(QMainWindow):
         # The tagline is the first thing to go; it is decoration, not navigation.
         self.tagline_label.setVisible(available - used >= 60)
 
+    def _build_footer(self) -> QWidget:
+        """A quiet status strip so a tall window ends deliberately.
+
+        It repeats the promises that matter and carries the version, which is
+        what people quote in a bug report. Nothing decorative.
+        """
+        footer = QFrame()
+        footer.setObjectName("appFooter")
+        layout = QHBoxLayout(footer)
+        layout.setContentsMargins(self.HEADER_SIDE_MARGIN, 9, self.HEADER_SIDE_MARGIN, 9)
+        layout.setSpacing(12)
+        self.footer_promise = ElidingLabel(
+            "Private by design  \u00b7  Local-first  \u00b7  No telemetry  \u00b7  No cloud upload"
+        )
+        self.footer_promise.setObjectName("footerPromise")
+        layout.addWidget(self.footer_promise, 1)
+        version = QLabel(f"{PRODUCT.display_name} v{PRODUCT.version}")
+        version.setObjectName("footerVersion")
+        version.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        layout.addWidget(version, 0)
+        self.footer_widget = footer
+        return footer
+
     def _page(self, title: str, intro: str) -> tuple[QScrollArea, QVBoxLayout]:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -319,6 +346,8 @@ class MainWindow(QMainWindow):
         root.addLayout(provider_row)
 
         root.addWidget(self._build_assurance_strip(), 0)
+        # A little slack above and more below reads as deliberate spacing
+        # rather than content stranded at the top of a tall window.
         root.addStretch(1)
         return page
 
@@ -392,19 +421,39 @@ class MainWindow(QMainWindow):
         startup_layout.addWidget(startup_row)
         root.addWidget(startup_card)
 
-        diagnostic_card, diagnostic_layout = make_surface_card(
-            "Diagnostics",
-            "For when something looks wrong. Provider versions, compatibility, cached state, and the exact "
-            "reason a check stopped. No prompts, responses, credentials, or account identity are ever recorded.",
+        health_card, health_layout = make_surface_card(
+            "How things look right now",
+            "A quick check of what is installed, what is running, and what is saved on this PC.",
         )
+        self.health_summary = HealthRowWidget()
+        self.health_summary.setObjectName("healthSummary")
+        health_layout.addWidget(self.health_summary)
+        self.health_rows: list[HealthRowWidget] = []
+        self.health_container = QVBoxLayout()
+        self.health_container.setSpacing(8)
+        health_layout.addLayout(self.health_container)
+
+        technical = Disclosure("Technical details")
         self.diagnostic_text = QLabel()
         self.diagnostic_text.setObjectName("diagnosticValue")
         self.diagnostic_text.setWordWrap(True)
         self.diagnostic_text.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
-        diagnostic_layout.addWidget(self.diagnostic_text)
-        root.addWidget(diagnostic_card)
+        technical.add_widget(self.diagnostic_text)
+        privacy_note = QLabel(
+            "Safe to paste into a bug report. No prompts, responses, credentials, or "
+            "account identity are ever recorded."
+        )
+        privacy_note.setProperty("muted", True)
+        privacy_note.setWordWrap(True)
+        technical.add_widget(privacy_note)
+        copy_button = QPushButton("Copy this summary")
+        copy_button.clicked.connect(self._copy_diagnostics)
+        technical.add_widget(copy_button)
+        health_layout.addSpacing(2)
+        health_layout.addWidget(technical)
+        root.addWidget(health_card)
 
         self.update_panel = UpdatePanel(
             updater, confirm_install=confirm_install, parent=self
@@ -612,26 +661,35 @@ class MainWindow(QMainWindow):
         self.controller.set_start_with_windows(enabled)
 
     def _update_diagnostics(self, *, now: float) -> None:
-        rows = []
-        compatible = self.controller.settings.compatible_runtime_identities or {}
-        for provider_id, state in self.controller.states.items():
-            version = state.runtime_version or "version unavailable"
-            compatibility = (
-                "passed"
-                if compatible.get(provider_id) == state.runtime_identity
-                else ("not applicable" if not state.automation_supported else "not confirmed")
-            )
-            rows.append(
-                f"{state.display_name}\n"
-                f"  Installed: {'yes' if state.installed else 'no'}\n"
-                f"  Version: {version}\n"
-                f"  Compatibility: {compatibility}\n"
-                f"  Raw state: {state.status}\n"
-                f"  Detail: {state.detail}"
-            )
-        automation = "enabled" if self.controller.settings.automation_enabled else "off"
-        rows.append(f"Automation\n  Global control: {automation}\n  Provider-triggering activity while off: none")
-        self.diagnostic_text.setText("\n\n".join(rows))
+        try:
+            state_file_exists = self.controller.store.path.is_file()
+        except OSError:
+            state_file_exists = False
+        rows = build_health_rows(
+            self.controller.states,
+            self.controller.settings,
+            startup_enabled=self.startup_toggle.isChecked(),
+            state_file_exists=state_file_exists,
+            now=now,
+        )
+        self.health_summary.update_row(overall_summary(rows))
+        while len(self.health_rows) < len(rows):
+            widget = HealthRowWidget()
+            self.health_rows.append(widget)
+            self.health_container.addWidget(widget)
+        for index, widget in enumerate(self.health_rows):
+            visible = index < len(rows)
+            widget.setVisible(visible)
+            if visible:
+                widget.update_row(rows[index])
+        self.diagnostic_text.setText(
+            technical_summary(self.controller.states, self.controller.settings)
+        )
+
+    def _copy_diagnostics(self) -> None:
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(self.diagnostic_text.text())
 
     def _exit_for_update(self) -> None:
         self.force_close = True

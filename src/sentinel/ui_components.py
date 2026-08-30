@@ -133,6 +133,8 @@ class ProviderCard(QFrame):
     def __init__(self, state: ProviderViewState, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("providerCard")
+        # Cards hug their content. Growing them to fill a tall window just
+        # produced hollow cards, which reads worse than honest empty space.
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setMinimumHeight(236)
         layout = QVBoxLayout(self)
@@ -289,3 +291,71 @@ class ElidingLabel(QLabel):
         )
         if elided != super().text():
             super().setText(elided)
+
+
+class HealthRowWidget(QFrame):
+    """One readable line of health: name, badge, and a plain-English reason."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("healthRow")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(14, 11, 14, 11)
+        layout.setSpacing(12)
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        self.label = QLabel()
+        self.label.setObjectName("healthLabel")
+        self.detail = QLabel()
+        self.detail.setObjectName("healthDetail")
+        self.detail.setWordWrap(True)
+        self.detail.setMinimumWidth(160)
+        self.detail.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        text.addWidget(self.label)
+        text.addWidget(self.detail)
+        layout.addLayout(text, 1)
+        self.badge = StatusPill()
+        self.badge.setFixedHeight(24)
+        self.badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        layout.addWidget(self.badge, 0, Qt.AlignmentFlag.AlignTop)
+
+    def update_row(self, row) -> None:
+        self.label.setText(row.label)
+        self.detail.setText(row.detail)
+        self.badge.set_status(row.status.upper(), row.tone)
+
+
+class Disclosure(QWidget):
+    """A 'Technical details' expander that starts closed.
+
+    Troubleshooting text is kept in full, but it no longer dominates a page a
+    normal user reads.
+    """
+
+    def __init__(self, title: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        self.toggle = QPushButton(f"\u25b8  {title}")
+        self.toggle.setObjectName("disclosureToggle")
+        self.toggle.setCheckable(True)
+        self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._title = title
+        self.body = QWidget()
+        self.body.setVisible(False)
+        self.body_layout = QVBoxLayout(self.body)
+        self.body_layout.setContentsMargins(0, 0, 0, 0)
+        self.body_layout.setSpacing(8)
+        layout.addWidget(self.toggle, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(self.body)
+        self.toggle.toggled.connect(self._on_toggled)
+
+    def _on_toggled(self, checked: bool) -> None:
+        self.body.setVisible(checked)
+        self.toggle.setText(f"{'\u25be' if checked else '\u25b8'}  {self._title}")
+
+    def add_widget(self, widget: QWidget) -> None:
+        self.body_layout.addWidget(widget)

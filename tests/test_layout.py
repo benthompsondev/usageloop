@@ -290,5 +290,101 @@ class LargerUiFontTests(unittest.TestCase):
             self.assertTrue(button.isVisible())
 
 
+
+
+class SettingsHealthSurfaceTests(unittest.TestCase):
+    """The raw monospace dump was replaced by badges plus an expander."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.app, self.window = build_window(Path(self._dir.name))
+        self.addCleanup(self.window.close)
+        self.window.show_page(1)
+        self.window.resize(1366, 768)
+        self.window.show()
+        for _ in range(4):
+            self.app.processEvents()
+
+    def test_health_rows_are_rendered_with_badges(self):
+        visible = [row for row in self.window.health_rows if row.isVisible()]
+        self.assertGreaterEqual(len(visible), 4)
+        for row in visible:
+            self.assertTrue(row.label.text())
+            self.assertTrue(row.badge.text())
+            self.assertTrue(row.detail.text())
+
+    def test_overall_summary_row_is_populated(self):
+        self.assertTrue(self.window.health_summary.label.text())
+        self.assertTrue(self.window.health_summary.badge.text())
+
+    def test_technical_details_start_collapsed(self):
+        self.assertFalse(self.window.diagnostic_text.isVisible())
+
+    def test_technical_details_still_contain_the_raw_summary(self):
+        text = self.window.diagnostic_text.text()
+        self.assertIn("Raw state:", text)
+        self.assertIn("Automation", text)
+
+    def test_copying_the_summary_puts_it_on_the_clipboard(self):
+        self.window._copy_diagnostics()
+        clipboard = QApplication.clipboard()
+        self.assertEqual(self.window.diagnostic_text.text(), clipboard.text())
+
+
+class FooterTests(unittest.TestCase):
+    """A quiet status strip so a tall window ends deliberately."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.app, self.window = build_window(Path(self._dir.name))
+        self.addCleanup(self.window.close)
+        self.footer = self.window.footer_widget
+
+    def settle(self, width, height):
+        self.window.resize(width, height)
+        self.window.show()
+        for _ in range(3):
+            self.window.layout().activate()
+            for _ in range(4):
+                self.app.processEvents()
+
+    def test_footer_is_visible_on_every_page(self):
+        for index in range(self.window.pages.count()):
+            self.window.show_page(index)
+            self.settle(1366, 768)
+            self.assertTrue(self.footer.isVisible())
+
+    def test_footer_never_overflows(self):
+        for width, height in (*SUPPORTED_SIZES, (720, 560)):
+            with self.subTest(size=f"{width}x{height}"):
+                self.settle(width, height)
+                footer_width = self.footer.width()
+                for child in self.footer.findChildren(QLabel):
+                    if not child.isVisible():
+                        continue
+                    left = child.mapTo(self.footer, child.rect().topLeft()).x()
+                    self.assertGreaterEqual(left, 0)
+                    self.assertLessEqual(left + child.width(), footer_width)
+
+    def test_footer_carries_the_version(self):
+        self.settle(1366, 768)
+        from sentinel.product import PRODUCT
+
+        texts = [label.text() for label in self.footer.findChildren(QLabel)]
+        self.assertTrue(any(PRODUCT.version in text for text in texts))
+
+    def test_footer_does_not_eat_the_page(self):
+        self.settle(1920, 1080)
+        self.assertLess(self.footer.height(), 60)
+
+
 if __name__ == "__main__":
     unittest.main()
