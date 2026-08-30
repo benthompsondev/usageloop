@@ -26,9 +26,10 @@ Automation off produces no provider-triggering work. A provider binary change
 causes a lightweight capability probe only after automation is enabled; a
 version string alone does not pause the provider.
 
-Claude Code can be detected and displayed, but its card says **Automation
-paused** until a fresh-window experiment proves the exact minimal operation.
-Technical provider reasons stay in Diagnostics.
+Claude Code uses an isolated prompt-free `--init-only` operation. The card shows
+Ready, Waiting, or Starting when the installed runtime and cached quota evidence
+are usable. It shows **Automation paused** only when compatibility is unavailable
+or ambiguous. Technical provider reasons stay in Diagnostics.
 
 ## Updates
 
@@ -50,6 +51,6 @@ both layers, and writes the checksum companion expected by the updater.
 
 ## Still out of scope
 
-Claude automation, scheduling, a final brand/name, telemetry, private provider
-endpoints, credential reads, production releases, and update signing beyond the
-published SHA-256 artifact contract.
+Scheduling, a final brand/name, telemetry, private provider endpoints,
+credential reads, production releases, and update signing beyond the published
+SHA-256 artifact contract.

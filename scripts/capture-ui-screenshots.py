@@ -72,11 +72,18 @@ def main() -> int:
         "claude",
         "Claude Code",
         True,
-        False,
-        "Needs attention",
-        "Automatic anchoring awaits one exact fresh-window proof.",
+        True,
+        "Ready",
+        "The last observed Claude five-hour window is ready.",
         "claude-runtime",
         "2.1.7",
+        int(now + 4 * 3600 + 18 * 60),
+        now - 90,
+        "Status observed",
+        0,
+        now - 90,
+        12,
+        int(now + 4 * 24 * 3600),
     )
     with tempfile.TemporaryDirectory() as directory:
         providers = [PreviewProvider(codex), PreviewProvider(claude)]
@@ -103,9 +110,9 @@ def main() -> int:
         save(window, args.output / "settings.png", app)
 
         release = ReleaseInfo(
-            "0.6.0",
+            "0.7.0",
             ("Sharper provider status", "Safer Windows update flow"),
-            "https://github.com/benthompsondev/codex-window-sentinel/releases/tag/v0.6.0",
+            "https://github.com/example/window-sentinel/releases/tag/v0.7.0",
             ReleaseAsset("WindowSentinel-Setup.exe", "https://github.com/example"),
             ReleaseAsset("WindowSentinel-Setup.exe.sha256", "https://github.com/example"),
         )
@@ -138,6 +145,19 @@ def main() -> int:
         )
         window.refresh_clock(now=now)
         save(window, args.output / "dashboard-stale.png", app)
+
+        controller.update_provider_state(
+            replace(
+                claude,
+                automation_supported=False,
+                status="Needs attention",
+                detail="Claude initialization capability could not be confirmed.",
+                reset_at=None,
+                last_verified_at=None,
+            )
+        )
+        window.refresh_clock(now=now)
+        save(window, args.output / "dashboard-claude-paused.png", app)
         window.close()
     return 0
 

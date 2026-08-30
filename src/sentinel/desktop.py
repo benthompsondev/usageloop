@@ -324,7 +324,7 @@ class MainWindow(QMainWindow):
             "• Update checks run only when you press the button\n"
             "• Countdown changes are local and cause no provider traffic\n"
             "• Ambiguous Codex requests are never retried automatically\n"
-            "• Claude Code automation remains paused while its trigger is being verified"
+            "• Claude Code uses one prompt-free initialization only when cached quota safety checks pass"
         )
         boundaries.setObjectName("secondaryMetric")
         boundaries.setWordWrap(True)
@@ -364,6 +364,7 @@ class MainWindow(QMainWindow):
 
     def evaluate_automation(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
+        self.controller.refresh_local_states(exclude=self.active_operations)
         for provider_id, decision in self.controller.decisions(now=current).items():
             if provider_id in self.active_operations:
                 continue
@@ -371,6 +372,8 @@ class MainWindow(QMainWindow):
                 self._start_operation(provider_id, "probe")
             elif decision.action == "ROLLOVER":
                 self._start_operation(provider_id, "rollover")
+            elif decision.action == "BOOTSTRAP" and provider_id == "claude":
+                self._start_operation(provider_id, "bootstrap")
 
     def start_bootstrap(self, provider_id: str) -> None:
         if provider_id in self.active_operations or not self.confirm_bootstrap():
@@ -386,7 +389,11 @@ class MainWindow(QMainWindow):
             replace(state, status="Starting", detail="Sentinel is checking the provider safely.")
         )
         self.active_operations.add(provider_id)
-        operation = provider.probe if action == "probe" else lambda: provider.run_action(action)
+        operation = (
+            provider.probe
+            if action == "probe"
+            else lambda: provider.run_action(action, current_state=state)
+        )
         worker = OperationWorker(provider_id, operation)
         worker.signals.completed.connect(self._operation_completed)
         worker.signals.failed.connect(self._operation_failed)
@@ -475,7 +482,8 @@ class MainWindow(QMainWindow):
             self,
             "Turn on guarded automation?",
             "Sentinel will use each provider's normal signed-in client only after its safety checks pass. "
-            "A provider action can start a five-hour window, and an ambiguous request is never retried.",
+            "For Claude, it may add a local statusLine helper only when no custom status line exists. "
+            "A provider action can start a five-hour window, and an ambiguous action is never retried.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )

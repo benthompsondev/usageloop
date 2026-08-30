@@ -21,6 +21,13 @@ try {
     & $pyinstaller --noconfirm --clean .\packaging\WindowSentinel.spec
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
+    $helperEntry = Join-Path $repoRoot 'packaging\claude_status_entrypoint.py'
+    $helperDist = Join-Path $repoRoot 'dist\WindowSentinel'
+    $helperWork = Join-Path $repoRoot 'build\WindowSentinelStatus'
+    $helperName = [IO.Path]::GetFileNameWithoutExtension($product.claude_status_helper_name)
+    & $pyinstaller --noconfirm --clean --onefile --console --name $helperName --distpath $helperDist --workpath $helperWork --specpath $helperWork --paths (Join-Path $repoRoot 'src') $helperEntry
+    if ($LASTEXITCODE -ne 0) { throw 'Claude statusLine helper build failed.' }
+
     $isccCandidates = @(
         (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 7\ISCC.exe'),
         (Join-Path ${env:ProgramFiles} 'Inno Setup 7\ISCC.exe'),
@@ -44,5 +51,6 @@ finally {
 }
 
 Write-Output "Runnable: $repoRoot\dist\WindowSentinel\WindowSentinel.exe"
+Write-Output "Claude status helper: $repoRoot\dist\WindowSentinel\WindowSentinelStatus.exe"
 Write-Output "Installer: $repoRoot\dist\WindowSentinel-Setup.exe"
 Write-Output "Checksum: $repoRoot\dist\WindowSentinel-Setup.exe.sha256"

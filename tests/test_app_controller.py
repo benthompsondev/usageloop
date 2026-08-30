@@ -79,7 +79,106 @@ class ApplicationControllerTests(unittest.TestCase):
             ))
             self.assertTrue(controller.settings.automation_enabled)
             self.assertEqual("Needs attention", controller.states["codex"].status)
+            self.assertFalse(controller.states["codex"].automation_supported)
             self.assertEqual("NONE", controller.decisions(now=101)["codex"].action)
+
+            restarted = ApplicationController([provider], store)
+            restarted.start()
+            self.assertFalse(restarted.states["codex"].automation_supported)
+            self.assertEqual("Needs attention", restarted.states["codex"].status)
+
+    def test_definite_local_failure_can_retry_only_after_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            failed = ProviderViewState(
+                "claude",
+                "Claude Code",
+                True,
+                True,
+                "Needs attention",
+                "Launch failed.",
+                runtime_identity="runtime:1",
+                used_percent=0,
+                usage_checked_at=90,
+                weekly_used_percent=10,
+                weekly_reset_at=1000,
+                retry_after_restart=True,
+            )
+            store.save(
+                AppSettings(True, False, True, {"claude": "runtime:1"}),
+                {"claude": failed},
+            )
+            provider = FakeProvider(
+                ProviderViewState.waiting(
+                    "claude", "Claude Code", installed=True, runtime_identity="runtime:1"
+                )
+            )
+            controller = ApplicationController([provider], store)
+            controller.start()
+            restored = controller.states["claude"]
+            self.assertEqual("Waiting", restored.status)
+            self.assertFalse(restored.retry_after_restart)
+            self.assertEqual(10, restored.weekly_used_percent)
+            self.assertEqual("BOOTSTRAP", controller.decisions(now=100)["claude"].action)
+
+    def test_newer_local_claude_status_refreshes_without_provider_operation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            provider = FakeProvider(
+                ProviderViewState(
+                    "claude",
+                    "Claude Code",
+                    True,
+                    True,
+                    "Waiting",
+                    "Fresh local status.",
+                    runtime_identity="runtime:1",
+                    reset_at=1000,
+                    last_verified_at=200,
+                    used_percent=0,
+                    usage_checked_at=200,
+                    weekly_used_percent=10,
+                    weekly_reset_at=9000,
+                )
+            )
+            controller = ApplicationController([provider], store)
+            controller.start()
+            controller.states["claude"] = ProviderViewState(
+                "claude",
+                "Claude Code",
+                True,
+                True,
+                "Waiting",
+                "Old cache.",
+                runtime_identity="runtime:1",
+                usage_checked_at=100,
+            )
+            controller.refresh_local_states()
+            self.assertEqual(1000, controller.states["claude"].reset_at)
+            self.assertEqual(0, provider.operation_calls)
+
+    def test_local_refresh_preserves_compatibility_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = FakeProvider(
+                ProviderViewState.waiting(
+                    "claude", "Claude Code", installed=True, runtime_identity="runtime:1"
+                )
+            )
+            controller = ApplicationController(
+                [provider], AppStateStore(Path(directory) / "state.json")
+            )
+            controller.start()
+            controller.states["claude"] = ProviderViewState(
+                "claude",
+                "Claude Code",
+                True,
+                True,
+                "Needs attention",
+                "Capability missing.",
+                runtime_identity="runtime:1",
+            )
+            controller.refresh_local_states()
+            self.assertEqual("Needs attention", controller.states["claude"].status)
 
 
 if __name__ == "__main__":

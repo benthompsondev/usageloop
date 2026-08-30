@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Iterable, Protocol
+from typing import Iterable, Protocol, Collection
 
 from .app_state import (
     AppSettings,
@@ -31,6 +31,8 @@ class ApplicationController:
     def start(self) -> None:
         self.settings = self.store.load()
         cached = self.store.load_provider_cache()
+        checked = self.settings.checked_runtime_identities or {}
+        compatible = self.settings.compatible_runtime_identities or {}
         detected: dict[str, ProviderViewState] = {}
         for provider_id, provider in self.providers.items():
             try:
@@ -50,10 +52,44 @@ class ApplicationController:
                 and state.installed
                 and previous.runtime_identity == state.runtime_identity
             ):
+                if (
+                    state.usage_checked_at is not None
+                    and (
+                        previous.usage_checked_at is None
+                        or state.usage_checked_at > previous.usage_checked_at
+                    )
+                ):
+                    pass
+                elif previous.retry_after_restart:
+                    state = replace(
+                        state,
+                        reset_at=previous.reset_at,
+                        last_verified_at=previous.last_verified_at,
+                        used_percent=previous.used_percent,
+                        usage_checked_at=previous.usage_checked_at,
+                        weekly_used_percent=previous.weekly_used_percent,
+                        weekly_reset_at=previous.weekly_reset_at,
+                    )
+                else:
+                    state = replace(
+                        previous,
+                        installed=True,
+                        automation_supported=state.automation_supported,
+                    )
+            if (
+                state.runtime_identity is not None
+                and checked.get(provider_id) == state.runtime_identity
+                and compatible.get(provider_id) != state.runtime_identity
+            ):
                 state = replace(
-                    previous,
-                    installed=True,
-                    automation_supported=state.automation_supported,
+                    state,
+                    automation_supported=False,
+                    status="Needs attention",
+                    detail=(
+                        previous.detail
+                        if previous is not None
+                        else "Provider compatibility could not be confirmed, so automation is paused."
+                    ),
                 )
             detected[provider_id] = state
         self.states = detected
@@ -85,6 +121,40 @@ class ApplicationController:
             for provider_id, state in self.states.items()
         }
 
+    def refresh_local_states(self, *, exclude: Collection[str] = ()) -> None:
+        """Refresh executable identity and local caches without provider traffic."""
+        changed = False
+        excluded = set(exclude)
+        for provider_id, provider in self.providers.items():
+            if provider_id in excluded:
+                continue
+            current = self.states.get(provider_id)
+            try:
+                detected = provider.detect()
+            except Exception:
+                continue
+            if current is None or current.runtime_identity != detected.runtime_identity:
+                self.states[provider_id] = detected
+                changed = True
+                continue
+            if current.status == "Needs attention":
+                continue
+            if (
+                detected.usage_checked_at is not None
+                and (
+                    current.usage_checked_at is None
+                    or detected.usage_checked_at > current.usage_checked_at
+                )
+            ):
+                self.states[provider_id] = replace(
+                    detected,
+                    automation_blocked_until=current.automation_blocked_until,
+                    last_action=current.last_action,
+                )
+                changed = True
+        if changed:
+            self._save()
+
     def apply_compatibility(
         self, provider_id: str, result: CompatibilityResult
     ) -> None:
@@ -103,6 +173,7 @@ class ApplicationController:
         )
         self.states[provider_id] = replace(
             state,
+            automation_supported=result.compatible,
             status=result.status,
             detail=result.detail,
             runtime_identity=result.runtime_identity,

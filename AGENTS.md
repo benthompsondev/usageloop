@@ -40,7 +40,7 @@ pwsh -NoProfile -File .\scripts\build-windows.ps1
 - `docs/` - research and design evidence.
 
 Phase 1 remains the observation foundation. The desktop app exposes the approved
-Codex-only rollover/bootstrap loop and detection-only Claude status.
+Codex rollover/bootstrap loop and a separately guarded Claude `--init-only` path.
 
 ## Boundaries
 
@@ -55,6 +55,9 @@ Always:
 - Persist the trigger lifecycle; recover only definite pre-launch failures.
 - Reserve at most one possibly sent trigger for each rollover boundary or
   five-hour bootstrap cooldown.
+- Keep Claude isolated from the Codex transport. Claude automation may run only
+  one installed-runtime `--init-only` operation, with no prompt or model flags,
+  after cached five-hour and weekly safety evidence passes.
 - Trigger with one ephemeral `thread/start` plus one `turn/start`, then require
   Phase 1 to observe `ANCHORED` before reporting verified success. Turn
   lifecycle notifications are diagnostic only and never a success verdict.
@@ -79,8 +82,8 @@ Never:
 - Opt into `experimentalApi`, or send parameters that require it.
 - Log the trigger input, model output, or thread contents.
 - Add telemetry, global PATH changes, admin requirements, or automatic opt-in.
-- Automatically anchor Claude until the exact minimal fresh-window operation is
-  proven.
+- Treat Claude process success as possibly effectful, not proof that the window
+  anchored. A fresh statusLine observation remains authoritative.
 - Retry when a request may already have been submitted.
 - Push without Ben's explicit authorization and the required push workflow.
 

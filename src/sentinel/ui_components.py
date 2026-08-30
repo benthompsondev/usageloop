@@ -58,13 +58,13 @@ def present_provider_state(state: ProviderViewState, *, now: float) -> ProviderP
         else "Usage not checked"
     )
 
-    if state.provider_id == "claude":
+    if state.provider_id == "claude" and not state.automation_supported:
         return ProviderPresentation(
             "AUTOMATION PAUSED",
             "warning",
-            format_countdown(state.reset_at, now) if state.reset_at else "Support being verified",
+            "Compatibility check needed",
             reset,
-            "Sentinel can detect Claude Code, but will not start its windows yet.",
+            "Sentinel paused Claude automation. Open Diagnostics for the technical reason.",
             verified,
             usage,
         )
@@ -86,18 +86,30 @@ def present_provider_state(state: ProviderViewState, *, now: float) -> ProviderP
     status, tone = {
         "Ready": ("READY", "success"),
         "Waiting": ("WAITING", "neutral"),
-        "Starting": ("CHECKING", "info"),
+        "Starting": (("STARTING" if state.provider_id == "claude" else "CHECKING"), "info"),
         "Needs attention": ("CHECK NEEDED", "error"),
     }.get(state.status, ("UNKNOWN", "warning"))
     headline = (
         format_countdown(state.reset_at, now)
         if state.reset_at is not None
-        else ("Checking safely" if state.status == "Starting" else "Waiting for a verified window")
+        else (
+            "Starting next window"
+            if state.status == "Starting" and state.provider_id == "claude"
+            else ("Checking safely" if state.status == "Starting" else "Waiting for reset")
+        )
     )
     detail = {
         "Ready": "This five-hour window is anchored and counting down.",
-        "Waiting": "Sentinel is waiting for enough evidence to act safely.",
-        "Starting": "Sentinel is running a bounded provider check.",
+        "Waiting": (
+            "Sentinel will initialize Claude once when a safe due boundary is known."
+            if state.provider_id == "claude"
+            else "Sentinel is waiting for enough evidence to act safely."
+        ),
+        "Starting": (
+            "Sentinel is running one prompt-free Claude initialization."
+            if state.provider_id == "claude"
+            else "Sentinel is running a bounded provider check."
+        ),
         "Needs attention": "Open Diagnostics for the technical reason. No retry will run automatically.",
     }.get(state.status, "The latest provider state was inconclusive.")
     return ProviderPresentation(status, tone, headline, reset, detail, verified, usage)

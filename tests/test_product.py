@@ -15,6 +15,7 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertEqual(
             "WindowSentinel-Setup.exe.sha256", PRODUCT.checksum_filename
         )
+        self.assertEqual("WindowSentinelStatus.exe", PRODUCT.claude_status_helper_name)
         self.assertEqual(
             "https://github.com/benthompsondev/codex-window-sentinel/releases/latest",
             PRODUCT.releases_url,
@@ -42,6 +43,9 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("#ifndef AppVersion", installer)
         self.assertIn("/DAppVersion=", build)
         self.assertIn("checksum_filename", build)
+        self.assertIn("claude_status_helper_name", build)
+        self.assertIn("WindowSentinelStatus.exe", installer)
+        self.assertIn("--unregister", installer)
         self.assertIn("Get-FileHash", build)
         self.assertIn("PRODUCT.icon_filename", pyinstaller)
         self.assertIn("PRODUCT.version_resource_filename", pyinstaller)

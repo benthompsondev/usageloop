@@ -27,7 +27,7 @@ class FakeProvider:
     def probe(self):
         self.probe_calls += 1
 
-    def run_action(self, mode):
+    def run_action(self, mode, *, current_state=None):
         self.action_calls += 1
 
 
@@ -131,7 +131,7 @@ class DesktopTests(unittest.TestCase):
         window, _provider = self.make_window(state)
         self.assertEqual("NOT DETECTED", window.provider_cards["codex"].status_label.text())
 
-    def test_claude_detection_is_consumer_friendly_automation_paused(self):
+    def test_claude_consumer_states_are_distinct(self):
         state = ProviderViewState(
             "claude",
             "Claude Code",
@@ -142,8 +142,64 @@ class DesktopTests(unittest.TestCase):
         )
         presented = present_provider_state(state, now=100)
         self.assertEqual("AUTOMATION PAUSED", presented.status)
-        self.assertEqual("Support being verified", presented.headline)
+        self.assertEqual("Compatibility check needed", presented.headline)
         self.assertNotIn("Technical", presented.detail)
+
+        waiting = present_provider_state(
+            ProviderViewState("claude", "Claude Code", True, True, "Waiting", "Safe."),
+            now=100,
+        )
+        starting = present_provider_state(
+            ProviderViewState("claude", "Claude Code", True, True, "Starting", "Safe."),
+            now=100,
+        )
+        ready = present_provider_state(
+            ProviderViewState(
+                "claude", "Claude Code", True, True, "Ready", "Safe.", reset_at=1000, last_verified_at=90
+            ),
+            now=100,
+        )
+        self.assertEqual("WAITING", waiting.status)
+        self.assertEqual("Waiting for reset", waiting.headline)
+        self.assertEqual("STARTING", starting.status)
+        self.assertEqual("Starting next window", starting.headline)
+        self.assertEqual("READY", ready.status)
+        self.assertEqual("0h 15m", ready.headline)
+
+        actionable = present_provider_state(
+            ProviderViewState("claude", "Claude Code", True, True, "Needs attention", "Launch failed."),
+            now=100,
+        )
+        self.assertEqual("CHECK NEEDED", actionable.status)
+
+    def test_claude_automation_off_launches_no_provider_process(self):
+        state = ProviderViewState(
+            "claude",
+            "Claude Code",
+            True,
+            True,
+            "Waiting",
+            "Fresh state.",
+            runtime_identity="runtime:1",
+            used_percent=0,
+            usage_checked_at=90,
+            weekly_used_percent=10,
+            weekly_reset_at=1000,
+        )
+        window, provider = self.make_window(state)
+        window.evaluate_automation(now=100)
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+
+    def test_claude_countdown_is_local_only(self):
+        state = ProviderViewState(
+            "claude", "Claude Code", True, True, "Ready", "Ready.", reset_at=1000, last_verified_at=90
+        )
+        window, provider = self.make_window(state)
+        window.refresh_clock(now=100)
+        self.assertEqual("0h 15m", window.provider_cards["claude"].countdown_label.text())
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
 
     def test_stale_verified_data_is_labelled_without_provider_work(self):
         state = ProviderViewState.waiting(
@@ -195,6 +251,17 @@ class DesktopTests(unittest.TestCase):
         self.assertFalse(window.isVisible())
         shell.restore_window()
         self.assertTrue(window.isVisible())
+
+    def test_tray_quit_closes_the_window_instead_of_hiding_it(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        shell = DesktopShell(window)
+        self.addCleanup(shell.tray.hide)
+        window.show()
+        shell.quit()
+        self.assertTrue(window.force_close)
+        self.assertFalse(window.isVisible())
 
 
 if __name__ == "__main__":

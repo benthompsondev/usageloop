@@ -135,7 +135,7 @@ class CodexProvider:
             return self._probe()
         return self._operation_runner().probe(identity)
 
-    def run_action(self, mode: str):
+    def run_action(self, mode: str, *, current_state: ProviderViewState | None = None):
         state = self.detect()
         identity = state.runtime_identity or "unavailable"
         result = self._operation_runner().run(mode, runtime_identity=identity)
@@ -162,10 +162,18 @@ class ClaudeProvider:
         executable_finder: ExecutableFinder | None = None,
         identity_reader: IdentityReader | None = None,
         version_reader: VersionReader | None = None,
+        operation_runner: object | None = None,
+        status_store: object | None = None,
+        status_integration: object | None = None,
+        now: Callable[[], float] = time.time,
     ):
         self._find = executable_finder or find_claude_executable
         self._identity = identity_reader or file_runtime_identity
         self._version = version_reader or windows_file_version
+        self._runner = operation_runner
+        self._status_store = status_store
+        self._status_integration = status_integration
+        self._now = now
 
     def detect(self) -> ProviderViewState:
         executable = self._find()
@@ -178,16 +186,130 @@ class ClaudeProvider:
                 "Needs attention",
                 "Claude Code was not found on this PC.",
             )
-        return ProviderViewState(
+        state = ProviderViewState(
             self.provider_id,
             self.display_name,
             True,
-            False,
-            "Needs attention",
-            "Detected. Automatic anchoring awaits one exact fresh-window proof.",
+            True,
+            "Waiting",
+            "Detected. Compatibility will be checked when automation is enabled.",
             self._identity(executable),
             self._version(executable),
         )
+        status = self._quota_status_store().load()
+        if status is None:
+            return state
+        now = self._now()
+        ready = status.last_five_hour_reset_at is not None and status.last_five_hour_reset_at > now
+        trigger_verified = False
+        if ready and status.last_five_hour_reset_at is not None:
+            try:
+                trigger_verified = self._operation_runner().verify_observed_reset(
+                    status.last_five_hour_reset_at,
+                    observed_at=status.observed_at,
+                )
+            except Exception:
+                return replace(
+                    state,
+                    status="Needs attention",
+                    detail="Claude attempt history could not be verified safely.",
+                    reset_at=status.last_five_hour_reset_at,
+                    used_percent=status.five_hour_used_percent,
+                    usage_checked_at=status.observed_at,
+                    weekly_used_percent=status.weekly_used_percent,
+                    weekly_reset_at=status.weekly_reset_at,
+                )
+        return replace(
+            state,
+            status="Ready" if ready else "Waiting",
+            detail=(
+                "The last observed Claude five-hour window is ready."
+                if ready
+                else "Claude status shows no active five-hour countdown."
+            ),
+            reset_at=status.last_five_hour_reset_at,
+            last_verified_at=status.observed_at if ready else None,
+            used_percent=status.five_hour_used_percent,
+            usage_checked_at=status.observed_at,
+            weekly_used_percent=status.weekly_used_percent,
+            weekly_reset_at=status.weekly_reset_at,
+            last_action="Initialization verified" if trigger_verified else None,
+        )
+
+    def probe(self) -> CompatibilityResult:
+        executable = self._find()
+        if executable is None:
+            return CompatibilityResult(
+                False,
+                "Needs attention",
+                "Claude Code was not found, so automation is paused.",
+                "unavailable",
+            )
+        identity = self._identity(executable)
+        result = self._operation_runner().probe(identity, executable)
+        if not result.compatible:
+            return result
+        registration = self._statusline_integration().ensure_registered()
+        if registration.compatible:
+            return result
+        return CompatibilityResult(
+            False,
+            "Needs attention",
+            registration.detail,
+            identity,
+        )
+
+    def run_action(
+        self, mode: str, *, current_state: ProviderViewState | None = None
+    ):
+        from .provider_runtime import ProviderOperationResult
+
+        executable = self._find()
+        if executable is None:
+            state = current_state or self.detect()
+            return ProviderOperationResult("CLAUDE_NOT_FOUND", state, False)
+        state = current_state or self.detect()
+        current_identity = self._identity(executable)
+        if state.runtime_identity != current_identity:
+            return ProviderOperationResult(
+                "CLAUDE_RUNTIME_CHANGED",
+                replace(
+                    state,
+                    automation_supported=False,
+                    status="Needs attention",
+                    detail="Claude changed after its compatibility check. Sentinel paused before initialization.",
+                    runtime_identity=current_identity,
+                ),
+                False,
+            )
+        result = self._operation_runner().run(
+            mode,
+            executable=executable,
+            runtime_identity=current_identity,
+            state=state,
+        )
+        return ProviderOperationResult(result.outcome, result.state, result.effect_possible)
+
+    def _operation_runner(self):
+        if self._runner is None:
+            from .claude_runtime import ClaudeOperationRunner
+
+            self._runner = ClaudeOperationRunner()
+        return self._runner
+
+    def _quota_status_store(self):
+        if self._status_store is None:
+            from .claude_status import ClaudeStatusStore
+
+            self._status_store = ClaudeStatusStore()
+        return self._status_store
+
+    def _statusline_integration(self):
+        if self._status_integration is None:
+            from .claude_status import ClaudeStatusLineIntegration
+
+            self._status_integration = ClaudeStatusLineIntegration()
+        return self._status_integration
 
 
 def find_claude_executable() -> Path | None:

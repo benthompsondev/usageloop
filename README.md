@@ -18,9 +18,8 @@ only when fresh observations prove that the window anchored.
 
 The PySide6 desktop shell adds a focused dashboard, local countdowns,
 background workers, a system tray, optional per-user startup, and manual update
-checks through GitHub Releases. Claude is detected and can show cached status,
-but automatic Claude anchoring remains deliberately disabled until its exact
-minimal fresh-window operation is proven.
+checks through GitHub Releases. Claude uses a separate, prompt-free
+`--init-only` path after cached statusLine evidence passes its safety gates.
 
 ## Boundaries
 
@@ -39,6 +38,9 @@ Sentinel does:
 - rerun a lightweight capability probe when a provider binary changes, and
   continue only when required behavior remains compatible;
 - advance visible countdowns locally without provider traffic;
+- cache only Claude's allowlisted five-hour and weekly statusLine fields;
+- initialize Claude with exactly one installed-runtime `--init-only` operation,
+  with no prompt or model flags;
 - check GitHub Releases only when the user presses **Check for updates**, then
   verify the downloaded installer against its published SHA-256 checksum.
 
@@ -49,8 +51,8 @@ Sentinel does not:
 - use `codex exec`, an API key, UI scraping, or reset credits;
 - log trigger input or model/process output;
 - retry with another model;
-- automatically anchor Claude, create scheduled tasks, silently replace its
-  running executable, or opt the user into startup or automation.
+- send a Claude prompt, select a Claude model, create scheduled tasks, silently
+  replace its running executable, or opt the user into startup or automation.
 
 ## Architecture and Privacy
 
@@ -58,6 +60,8 @@ Sentinel does not:
 Observation:  Sentinel -> local codex app-server -> OpenAI
 Trigger:      Sentinel -> local codex app-server -> OpenAI
 Verification: Sentinel -> local codex app-server -> OpenAI
+Claude state: Claude statusLine -> allowlisted local cache
+Claude init:  Sentinel -> installed claude --init-only
 Updates:      Sentinel -> public GitHub Releases (user initiated only)
 ```
 
@@ -68,10 +72,14 @@ stores only allowlisted quota evidence and sanitized trigger events in:
 %LOCALAPPDATA%\CodexWindowSentinel\sentinel.jsonl
 ```
 
-Trigger log records may contain a safe attempt identifier, trigger mode,
+Trigger log records may contain a safe attempt identifier, provider, trigger mode,
 rollover timestamp when applicable, selected model, reasoning level, sanitized
 process outcome, lifecycle state, and observed classifier state. They never
 contain the two-character input, Codex output, credentials, or account data.
+
+Claude status caching stores only observation time, five-hour usage/reset, and
+weekly usage/reset. Session IDs, transcript paths, prompts, output, credentials,
+and account details are discarded before anything is written.
 
 The original interactive trigger timing strategy was adapted from the MIT-licensed
 [CCLimitPing](https://github.com/wavever/CCLimitPing). See
@@ -85,7 +93,9 @@ Start Menu shortcut. On first launch:
 
 1. Confirm that Codex and Claude Code are detected as expected.
 2. Turn on **Keep my 5-hour windows ready** only if you want guarded provider
-   automation. Leaving it off means zero provider-triggering activity.
+   automation. Leaving it off means zero provider-triggering activity. If Claude
+   has no custom status line, Sentinel adds its local status helper to Claude's
+   user settings. It will not replace an existing custom status line.
 3. If Codex has no historical anchored reset, choose **Start my first window
    now** and approve the explicit one-request bootstrap explanation.
 4. Optionally enable **Start Window Sentinel with Windows** in **Settings**.
@@ -105,6 +115,8 @@ The main window has three places:
 - Python 3.11 or newer for source development. The packaged app includes its
   runtime; Python 3.12 is preferred but not required.
 - A current installed Codex CLI/app signed into the intended ChatGPT subscription.
+- A current installed Claude Code CLI signed into the intended subscription for
+  Claude status and initialization.
 
 From this repository in PowerShell:
 
@@ -232,6 +244,27 @@ The bounded `turn/completed`, error, or timeout outcome is diagnostic only. A
 completed turn is not success. The quota observer remains the sole authority for
 anchoring.
 
+## Claude Safety Gates
+
+Claude uses its own provider module and attempt ledger. It does not reuse the
+Codex classifier, app-server transport, model selection, or trigger history.
+
+When automation is on, Sentinel checks the installed Claude artifact for the
+exact `--init-only` capability. A version change reruns that check. A missing or
+ambiguous capability pauses only Claude automation.
+
+Before one initialization, Sentinel requires a cached statusLine observation no
+older than six hours, a known weekly reset, weekly usage below 99%, and either a
+known five-hour reset that passed its 15-second buffer or a fresh zero-percent
+state with no historical boundary. Sentinel reserves the attempt before process
+launch. The command contains only the discovered executable and `--init-only`.
+
+A definite local launch or parser failure remains recoverable and cannot loop in
+the running app. A timeout, unexpected nonzero exit, successful exit, or crash
+after launch is treated as possibly effectful and blocks another attempt for one
+full window. Process completion is not proof of anchoring. Only a later
+allowlisted statusLine reset can make the card **Ready**.
+
 ## Controlled Live Rollover Test
 
 First run `sample` while the current window is anchored so its reset boundary is
@@ -309,9 +342,11 @@ position, reset timestamp, model, or trigger path will remain valid.
 ## Remove Completely
 
 Use Windows **Installed apps** to uninstall Window Sentinel. The uninstaller
-removes its per-user startup registration and installed files. Sentinel never
-changes the global PATH or creates a scheduled task. To remove its safe local
-history and preferences as well, delete:
+removes its per-user startup registration, installed files, and the Claude
+status-line entry only when it still exactly matches Sentinel's helper. It does
+not touch a replacement or custom status line. Sentinel never changes the global
+PATH or creates a scheduled task. To remove its safe local history and
+preferences as well, delete:
 
 ```powershell
 Remove-Item -LiteralPath "$env:LOCALAPPDATA\CodexWindowSentinel" -Recurse

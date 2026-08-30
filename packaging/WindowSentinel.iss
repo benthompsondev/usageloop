@@ -2,7 +2,7 @@
   #define AppName "Window Sentinel"
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.5.0"
+  #define AppVersion "0.6.0"
 #endif
 #ifndef AppExeName
   #define AppExeName "WindowSentinel.exe"
@@ -46,6 +46,9 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{app}\WindowSentinelStatus.exe"; Parameters: "--unregister"; RunOnceId: "RemoveSentinelClaudeStatusLine"; Flags: runhidden
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey

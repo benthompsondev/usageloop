@@ -12,6 +12,7 @@ class ProductMetadata:
     github_owner: str
     github_repo: str
     executable_name: str
+    claude_status_helper_name: str
     icon_filename: str
     version_resource_filename: str
     installer_filename: str
@@ -42,10 +43,11 @@ class ProductMetadata:
 
 PRODUCT = ProductMetadata(
     display_name="Window Sentinel",
-    version="0.5.0",
+    version="0.6.0",
     github_owner="benthompsondev",
     github_repo="codex-window-sentinel",
     executable_name="WindowSentinel.exe",
+    claude_status_helper_name="WindowSentinelStatus.exe",
     icon_filename="windowsentinel.ico",
     version_resource_filename="version_info.txt",
     installer_filename="WindowSentinel-Setup.exe",
