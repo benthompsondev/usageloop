@@ -203,8 +203,8 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         background: {tokens.surface_sunken}; border: 1px solid {tokens.border};
         border-radius: {tokens.radius}px;
     }}
-    QLabel#assuranceTitle {{ font-size: 13px; font-weight: 720; color: {tokens.text_soft}; }}
-    QLabel#assuranceBody {{ font-size: 12px; color: {tokens.text_muted}; }}
+    QLabel#assuranceTitle {{ font-size: 13px; font-weight: 720; color: {tokens.text}; }}
+    QLabel#assuranceBody {{ font-size: 13px; color: {tokens.text_soft}; }}
     QLabel#previewTag {{
         color: {tokens.warning}; background: #E3B34114; border: 1px solid #E3B34140;
         border-radius: 9px; padding: 3px 8px; font-size: 10px; font-weight: 800;

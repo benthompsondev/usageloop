@@ -35,7 +35,15 @@ class ProviderPresentation:
     usage: str
 
 
-def present_provider_state(state: ProviderViewState, *, now: float) -> ProviderPresentation:
+def present_provider_state(
+    state: ProviderViewState, *, now: float, automation_enabled: bool = False
+) -> ProviderPresentation:
+    """Map internal provider state onto words a normal person can act on.
+
+    The important rule is that nothing here claims more certainty than the state
+    supports. A provider that has never been checked says so, rather than
+    borrowing the language of a window that is genuinely counting down.
+    """
     if not state.installed:
         return ProviderPresentation(
             "NOT DETECTED",
@@ -51,10 +59,10 @@ def present_provider_state(state: ProviderViewState, *, now: float) -> ProviderP
     verified = (
         f"Last verified {_friendly_time(state.last_verified_at, now=now)}"
         if state.last_verified_at is not None
-        else "No verified check yet"
+        else "Not checked yet"
     )
     usage = (
-        f"Last-known usage {state.used_percent}% · {_friendly_time(state.usage_checked_at, now=now)}"
+        f"Last-known usage {state.used_percent}% \u00b7 {_friendly_time(state.usage_checked_at, now=now)}"
         if state.used_percent is not None and state.usage_checked_at is not None
         else "Usage not checked"
     )
@@ -66,6 +74,32 @@ def present_provider_state(state: ProviderViewState, *, now: float) -> ProviderP
             "Compatibility check needed",
             reset,
             "Claude automation is paused. Settings has the technical reason.",
+            verified,
+            usage,
+        )
+
+    if state.status == "Needs attention":
+        return ProviderPresentation(
+            "CHECK NEEDED",
+            "error",
+            "Needs attention",
+            reset,
+            "Settings has the technical reason. Nothing is retried automatically.",
+            verified,
+            usage,
+        )
+
+    if state.status == "Starting":
+        return ProviderPresentation(
+            "STARTING" if state.provider_id == "claude" else "CHECKING",
+            "info",
+            "Starting next window" if state.provider_id == "claude" else "Checking safely",
+            reset,
+            (
+                "Running one prompt-free Claude initialization."
+                if state.provider_id == "claude"
+                else "Running a bounded provider check."
+            ),
             verified,
             usage,
         )
@@ -84,36 +118,54 @@ def present_provider_state(state: ProviderViewState, *, now: float) -> ProviderP
             usage,
         )
 
-    status, tone = {
-        "Ready": ("READY", "success"),
-        "Waiting": ("WAITING", "neutral"),
-        "Starting": (("STARTING" if state.provider_id == "claude" else "CHECKING"), "info"),
-        "Needs attention": ("CHECK NEEDED", "error"),
-    }.get(state.status, ("UNKNOWN", "warning"))
-    headline = (
-        format_countdown(state.reset_at, now)
-        if state.reset_at is not None
-        else (
-            "Starting next window"
-            if state.status == "Starting" and state.provider_id == "claude"
-            else ("Checking safely" if state.status == "Starting" else "Waiting for reset")
+    if state.reset_at is None:
+        # Nothing has ever been verified for this provider. Saying "waiting for
+        # reset" here would invent a boundary that was never observed.
+        if automation_enabled:
+            return ProviderPresentation(
+                "NOT CHECKED YET",
+                "info",
+                "Not checked yet",
+                reset,
+                "UsageLoop will check this provider and start a window when it is safe.",
+                verified,
+                usage,
+            )
+        return ProviderPresentation(
+            "NOT CHECKED YET",
+            "neutral",
+            "Ready to set up",
+            reset,
+            "Turn on UsageLoop when you want it to begin keeping your coding windows ready.",
+            verified,
+            usage,
         )
+
+    if state.status == "Ready":
+        return ProviderPresentation(
+            "READY",
+            "success",
+            format_countdown(state.reset_at, now),
+            reset,
+            "This five-hour window is counting down.",
+            verified,
+            usage,
+        )
+
+    # A boundary is known but the window is not currently running.
+    return ProviderPresentation(
+        "WAITING",
+        "neutral",
+        format_countdown(state.reset_at, now),
+        reset,
+        (
+            "The last known window has ended. A new one starts when it is safe."
+            if automation_enabled
+            else "The last known window has ended. Turn UsageLoop on to start the next one."
+        ),
+        verified,
+        usage,
     )
-    detail = {
-        "Ready": "This five-hour window is anchored and counting down.",
-        "Waiting": (
-            "Claude will be initialized once, when a safe boundary is known."
-            if state.provider_id == "claude"
-            else "Waiting for enough evidence to act safely."
-        ),
-        "Starting": (
-            "Running one prompt-free Claude initialization."
-            if state.provider_id == "claude"
-            else "Running a bounded provider check."
-        ),
-        "Needs attention": "Settings has the technical reason. Nothing is retried automatically.",
-    }.get(state.status, "The latest provider state was inconclusive.")
-    return ProviderPresentation(status, tone, headline, reset, detail, verified, usage)
 
 
 class StatusPill(QLabel):
@@ -180,10 +232,14 @@ class ProviderCard(QFrame):
         self.action_button.setObjectName("primaryButton")
         self.action_button.setVisible(False)
         layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.update_state(state, now=time.time())
+        self.update_state(state, now=time.time(), automation_enabled=False)
 
-    def update_state(self, state: ProviderViewState, *, now: float) -> None:
-        presented = present_provider_state(state, now=now)
+    def update_state(
+        self, state: ProviderViewState, *, now: float, automation_enabled: bool = False
+    ) -> None:
+        presented = present_provider_state(
+            state, now=now, automation_enabled=automation_enabled
+        )
         self.status_label.set_status(presented.status, presented.tone)
         if self.property("tone") != presented.tone:
             self.setProperty("tone", presented.tone)

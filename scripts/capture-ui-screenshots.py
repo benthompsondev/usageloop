@@ -137,6 +137,20 @@ def main() -> int:
 
         window.show_page(0)
         controller.update_provider_state(
+            replace(codex, status="Waiting", reset_at=None, last_verified_at=None,
+                    used_percent=None, usage_checked_at=None)
+        )
+        controller.update_provider_state(
+            replace(claude, status="Waiting", reset_at=None, last_verified_at=None,
+                    used_percent=None, usage_checked_at=None)
+        )
+        window.refresh_clock(now=now)
+        save(window, args.output / "dashboard-first-run.png", app)
+        window.resize(1920, 1080)
+        save(window, args.output / "dashboard-first-run-1920x1080.png", app)
+        window.resize(1040, 720)
+        controller.update_provider_state(claude)
+        controller.update_provider_state(
             replace(codex, installed=False, status="Needs attention", reset_at=None)
         )
         window.refresh_clock(now=now)

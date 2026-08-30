@@ -195,8 +195,15 @@ def build_health_rows(
     return tuple(rows)
 
 
-def overall_summary(rows: tuple[HealthRow, ...]) -> HealthRow:
-    """One line for the top of the card, so the page answers itself at a glance."""
+def overall_summary(
+    rows: tuple[HealthRow, ...], *, automation_enabled: bool = False
+) -> HealthRow:
+    """One line for the top of the card, so the page answers itself at a glance.
+
+    "All good" is reserved for a state that actually earned it. An app that is
+    merely installed correctly says so instead, because claiming success before
+    anything has been verified is the kind of thing people stop trusting.
+    """
     if any(row.tone == "error" for row in rows):
         return HealthRow(
             "Overall",
@@ -211,8 +218,22 @@ def overall_summary(rows: tuple[HealthRow, ...]) -> HealthRow:
             "warning",
             "Everything is running, but one thing is worth checking.",
         )
+    if not automation_enabled:
+        return HealthRow(
+            "Overall",
+            "Setup OK",
+            "info",
+            f"{PRODUCT.display_name} is installed correctly. Turn automation on when you are ready.",
+        )
+    if not any(row.status == "Ready" for row in rows):
+        return HealthRow(
+            "Overall",
+            "Setup OK",
+            "info",
+            "Automation is on. Nothing has been verified yet, so there is nothing to report.",
+        )
     return HealthRow(
-        "Overall", "All good", "success", "Nothing needs your attention right now."
+        "Overall", "All good", "success", "Windows are being kept ready. Nothing needs you."
     )
 
 
@@ -228,7 +249,19 @@ def technical_summary(
     because this text is meant to be pasted into a bug report.
     """
     compatible = settings.compatible_runtime_identities or {}
-    lines = [f"{PRODUCT.display_name} {app_version}"]
+    lines = [
+        f"{PRODUCT.display_name} {app_version}",
+        "",
+        "Provider support",
+        "  Codex: verified. A measured live test showed that one small request",
+        "    through the local Codex app-server starts a fresh five-hour window,",
+        "    and that is the path this app uses.",
+        "  Claude Code: preview. Claude Code exposes no free way to read window",
+        "    state, so this reads the status line Claude Code already writes and",
+        "    runs one prompt-free --init-only initialization. Whether that starts",
+        "    a five-hour window is not yet proven. It stays guarded either way:",
+        "    one attempt, never repeated.",
+    ]
     for provider_id, state in states.items():
         version = state.runtime_version or "version unavailable"
         if not state.automation_supported:

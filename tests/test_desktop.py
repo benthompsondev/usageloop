@@ -98,7 +98,11 @@ class DesktopTests(unittest.TestCase):
             ProviderViewState.waiting("codex", "Codex", installed=True)
         )
         self.assertEqual("Keep my 5-hour windows ready", window.automation_toggle.text())
-        self.assertEqual("WAITING", window.provider_cards["codex"].status_label.text())
+        # A freshly detected provider has never been checked, so it must not
+        # borrow the language of a window that is actually counting down.
+        self.assertEqual(
+            "NOT CHECKED YET", window.provider_cards["codex"].status_label.text()
+        )
         self.assertLessEqual(window.minimumSizeHint().width(), 1366)
         self.assertLessEqual(window.minimumSizeHint().height(), 768)
         self.assertEqual(3, window.findChild(QStackedWidget).count())
@@ -159,8 +163,8 @@ class DesktopTests(unittest.TestCase):
             ),
             now=100,
         )
-        self.assertEqual("WAITING", waiting.status)
-        self.assertEqual("Waiting for reset", waiting.headline)
+        self.assertEqual("NOT CHECKED YET", waiting.status)
+        self.assertEqual("Ready to set up", waiting.headline)
         self.assertEqual("STARTING", starting.status)
         self.assertEqual("Starting next window", starting.headline)
         self.assertEqual("READY", ready.status)
@@ -262,6 +266,92 @@ class DesktopTests(unittest.TestCase):
         shell.quit()
         self.assertTrue(window.force_close)
         self.assertFalse(window.isVisible())
+
+
+
+
+class FirstRunStateMappingTests(unittest.TestCase):
+    """A provider that has never been checked must not sound like one that has."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def provider(self, **overrides):
+        base = dict(
+            provider_id="codex",
+            display_name="Codex",
+            installed=True,
+            automation_supported=True,
+            status="Waiting",
+            detail="Detected.",
+        )
+        base.update(overrides)
+        return ProviderViewState(**base)
+
+    def test_detected_with_no_evidence_and_automation_off_offers_setup(self):
+        presented = present_provider_state(
+            self.provider(), now=100, automation_enabled=False
+        )
+        self.assertEqual("NOT CHECKED YET", presented.status)
+        self.assertEqual("Ready to set up", presented.headline)
+        self.assertIn("Turn on UsageLoop", presented.detail)
+        self.assertEqual("neutral", presented.tone)
+
+    def test_detected_with_no_evidence_and_automation_on_says_not_checked(self):
+        presented = present_provider_state(
+            self.provider(), now=100, automation_enabled=True
+        )
+        self.assertEqual("NOT CHECKED YET", presented.status)
+        self.assertEqual("Not checked yet", presented.headline)
+        self.assertEqual("info", presented.tone)
+
+    def test_no_first_run_state_claims_a_reset_it_never_saw(self):
+        for enabled in (False, True):
+            presented = present_provider_state(
+                self.provider(), now=100, automation_enabled=enabled
+            )
+            with self.subTest(automation=enabled):
+                self.assertNotIn("Waiting for reset", presented.headline)
+                self.assertEqual("Reset time not verified", presented.reset)
+                self.assertEqual("Not checked yet", presented.verified)
+
+    def test_a_known_boundary_still_reports_the_countdown(self):
+        presented = present_provider_state(
+            self.provider(status="Ready", reset_at=1000, last_verified_at=90),
+            now=100,
+            automation_enabled=True,
+        )
+        self.assertEqual("READY", presented.status)
+        self.assertEqual("0h 15m", presented.headline)
+
+    def test_an_ended_window_is_waiting_not_not_checked(self):
+        presented = present_provider_state(
+            self.provider(status="Waiting", reset_at=50, last_verified_at=40),
+            now=100,
+            automation_enabled=False,
+        )
+        self.assertEqual("WAITING", presented.status)
+        self.assertEqual("Reset reached", presented.headline)
+        self.assertIn("Turn UsageLoop on", presented.detail)
+
+    def test_needs_attention_still_wins_over_first_run_wording(self):
+        presented = present_provider_state(
+            self.provider(status="Needs attention"), now=100, automation_enabled=False
+        )
+        self.assertEqual("CHECK NEEDED", presented.status)
+
+    def test_starting_still_wins_over_first_run_wording(self):
+        presented = present_provider_state(
+            self.provider(status="Starting"), now=100, automation_enabled=False
+        )
+        self.assertEqual("CHECKING", presented.status)
+
+    def test_missing_provider_is_unchanged(self):
+        presented = present_provider_state(
+            self.provider(installed=False), now=100, automation_enabled=False
+        )
+        self.assertEqual("NOT DETECTED", presented.status)
 
 
 if __name__ == "__main__":

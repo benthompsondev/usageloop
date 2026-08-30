@@ -1,14 +1,14 @@
 """The UsageLoop mark, drawn once and reused by the app, tray, and installer.
 
-The mark is a broken emerald ring closed by an arrowhead, wrapped around a "5h"
+The mark is a broken emerald ring closed by an arrowhead, wrapped around a "5hr"
 glyph: a five-hour window that keeps coming back around.
 
-Detail is size-adaptive. At 32 pixels and above the full loop-plus-5h mark is
-drawn. Below that the lettering is genuinely unreadable and only muddies the
-shape, so a thicker ring-only silhouette is used instead, which is what a tray
-icon actually needs.
+Detail is size-adaptive. At 32 pixels and above the full loop-plus-5hr mark is
+drawn. Below that the three characters are genuinely unreadable and only muddy
+the shape, so a thicker ring-only silhouette is used instead, which is what a
+tray icon actually needs.
 
-The "5h" is drawn from explicit path geometry rather than typeset. Rendering
+The "5hr" is drawn from explicit path geometry rather than typeset. Rendering
 text would make the packaged icon depend on a font being installed on whichever
 machine ran the build, which is not something an icon should depend on.
 """
@@ -40,32 +40,42 @@ TILE_EDGE = "#1F2937"
 RING = "#22D3A1"
 GLYPH = "#F2FFFA"
 
-#: Below this the "5h" lettering and the arrowhead are a few pixels across and
+#: Below this the "5hr" lettering and the arrowhead are a few pixels across and
 #: read as noise, so the ring-only silhouette is used.
 DETAIL_MIN_SIZE = 32
 #: The ring is open at the top so the gap reads as motion, not damage.
 ARC_START_DEGREES = 130
 ARC_SPAN_DEGREES = 288
 ARC_END_DEGREES = ARC_START_DEGREES + ARC_SPAN_DEGREES
-#: Fraction of the canvas the glyph occupies on its longest side.
-GLYPH_SCALE = 0.435
+#: Fraction of the canvas the glyph occupies on its longest side. Three
+#: characters are wider than two, so this is measured across the width.
+GLYPH_SCALE = 0.445
 
 
 def five_hour_glyph() -> QPainterPath:
-    """The "5h" lettering on a 100 unit grid, built from geometry not a font."""
+    """The "5hr" lettering on a shared grid, built from geometry not a font.
+
+    Baseline sits at y=60 with the x-height around y=32, so the three characters
+    align the way type would without needing a typeface to be installed.
+    """
     path = QPainterPath()
-    # 5: top bar, left stem down to the waist, then the bowl.
-    path.moveTo(46, 6)
-    path.lineTo(17, 6)
-    path.lineTo(17, 40)
-    path.lineTo(31, 40)
-    path.arcTo(QRectF(17, 40, 33, 33), 90, -250)
+    # 5: top bar, left stem to the waist, then the bowl.
+    path.moveTo(32, 6)
+    path.lineTo(10, 6)
+    path.lineTo(10, 32)
+    path.lineTo(21, 32)
+    path.arcTo(QRectF(10, 32, 24, 28), 90, -250)
     # h: full-height stem, shoulder, right leg.
-    path.moveTo(64, 0)
-    path.lineTo(64, 73)
-    path.moveTo(64, 42)
-    path.quadTo(77, 27, 89, 45)
-    path.lineTo(89, 73)
+    path.moveTo(46, 2)
+    path.lineTo(46, 60)
+    path.moveTo(46, 34)
+    path.quadTo(55, 22, 65, 34)
+    path.lineTo(65, 60)
+    # r: short stem and a single arm.
+    path.moveTo(77, 26)
+    path.lineTo(77, 60)
+    path.moveTo(77, 36)
+    path.quadTo(81, 25, 92, 27)
     return path
 
 
@@ -92,8 +102,8 @@ def render_mark(size: int, *, tile: bool = True) -> QPixmap:
         )
 
     # A heavier stroke on the small ring-only sizes keeps it from thinning out.
-    stroke = size * (0.15 if not detailed else 0.093)
-    margin = size * (0.115 if tile else 0.06) + stroke / 2
+    stroke = size * (0.15 if not detailed else 0.085)
+    margin = size * (0.085 if tile else 0.05) + stroke / 2
     if not detailed and tile:
         margin = size * 0.235 + stroke / 2
     box = QRectF(margin, margin, size - margin * 2, size - margin * 2)
@@ -153,7 +163,7 @@ def _draw_glyph(painter: QPainter, size: int) -> None:
     transform.scale(scale, scale)
     transform.translate(-bounds.center().x(), -bounds.center().y())
     pen = QPen(QColor(GLYPH))
-    pen.setWidthF(max(1.0, size * 0.052))
+    pen.setWidthF(max(1.0, size * 0.043))
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
     painter.setPen(pen)

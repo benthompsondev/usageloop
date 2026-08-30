@@ -85,3 +85,22 @@
   executable at 1024x768, 1366x768, maximized, and at 125% and 150% scaling.
 - **Blocked on:** Nothing. Provider, scheduler, updater, and version behaviour
   untouched this pass.
+
+## 2026-08-30 (consumer clarity)
+
+- **Did:** Changed the mark to `5hr` and shrank it in the header, stopped the
+  dashboard claiming "Waiting for reset" for a provider that was never checked,
+  replaced a premature "ALL GOOD" with "Setup OK", and rewrote the About page in
+  plain language with the evidence moved into Technical details.
+- **Learned:** The worst copy bugs were the ones that sounded fine. "Waiting for
+  reset" reads perfectly until you notice the app has never seen a reset, and
+  "All good" reads perfectly until you notice nothing has been verified. Both
+  came from mapping an internal enum straight to a user-facing word without
+  asking whether the state actually earned it.
+- **Learned:** Raising the assurance strip from 12px to 13px for legibility cost
+  enough vertical space to push it off a 768-tall window. Shorter copy paid for
+  the larger type, which is a better trade than shrinking the text back.
+- **Verified with:** 284 tests, and captures of the real packaged executable at
+  1024x768, 1366x768, maximized, and at 125% and 150% scaling.
+- **Blocked on:** Nothing. Provider, scheduler, updater, safety, and version
+  behaviour untouched.

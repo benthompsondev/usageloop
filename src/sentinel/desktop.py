@@ -160,8 +160,9 @@ class MainWindow(QMainWindow):
         brand_layout.setContentsMargins(0, 0, 0, 0)
         brand_layout.setSpacing(12)
         mark = QLabel()
-        mark.setPixmap(render_mark(40))
-        mark.setFixedSize(40, 40)
+        # The mark supports the wordmark rather than competing with it.
+        mark.setPixmap(render_mark(32))
+        mark.setFixedSize(32, 32)
         brand_layout.addWidget(mark)
 
         identity = QVBoxLayout()
@@ -356,17 +357,17 @@ class MainWindow(QMainWindow):
         strip = QFrame()
         strip.setObjectName("assuranceStrip")
         layout = QHBoxLayout(strip)
-        layout.setContentsMargins(20, 15, 20, 15)
-        layout.setSpacing(22)
+        layout.setContentsMargins(22, 15, 22, 15)
+        layout.setSpacing(26)
         points = (
-            ("Everything stays local", "Checks and countdowns run on this PC. Nothing is uploaded."),
-            ("No passwords or tokens", "Codex and Claude Code keep their own sign-in. We never read it."),
-            ("Counting down is free", "The timers cost you nothing. Only starting a window uses your plan."),
-            ("One small action, once", "When a window needs starting we send the smallest request, and never retry it."),
+            ("Everything stays local", "Checks and countdowns run here. Nothing is uploaded."),
+            ("No passwords or tokens", "Codex and Claude Code keep their own sign-in."),
+            ("Counting down is free", "Timers are free. Only starting a window uses your plan."),
+            ("One small action, once", "We send the smallest request, once, and never retry it."),
         )
         for title, body in points:
             column = QVBoxLayout()
-            column.setSpacing(3)
+            column.setSpacing(4)
             heading = QLabel(title)
             heading.setObjectName("assuranceTitle")
             heading.setWordWrap(True)
@@ -470,10 +471,11 @@ class MainWindow(QMainWindow):
         version.setObjectName("secondaryMetric")
         about_layout.addWidget(version)
         description = QLabel(
-            "Your Codex and Claude Code plans work in five-hour windows. A window only starts when you "
-            "actually use the tool, so a window you never opened is a window you never got. "
-            f"{PRODUCT.display_name} watches for that and, once you allow it, starts the next one using "
-            "the smallest request the provider accepts."
+            "Your Codex and Claude Code plans work in five-hour windows, and a window only starts "
+            "once you actually use the tool. Leave it alone for an evening and the hours you were "
+            f"entitled to simply never happen.\n\n{PRODUCT.display_name} watches for that and, when "
+            "you switch it on, quietly starts the next window for you. It runs on this PC, it never "
+            "sees your provider sign-in, and it uses the smallest request the provider accepts."
         )
         description.setProperty("muted", True)
         description.setWordWrap(True)
@@ -495,34 +497,52 @@ class MainWindow(QMainWindow):
         root.addWidget(about)
 
         support, support_layout = make_surface_card(
-            "What each provider does today",
+            "Provider support",
             "The two providers are at different stages, and the app does not pretend otherwise.",
         )
-        codex_row = QLabel(
-            "<b>Codex</b> is verified. A measured live test proved that one small request through the "
-            "local Codex app-server starts a fresh five-hour window, and that is the path used here."
+        for name, badge, tone, sentence in (
+            (
+                "Codex",
+                "VERIFIED",
+                "success",
+                "Tested on a real account. Starting a window works.",
+            ),
+            (
+                "Claude Code",
+                "PREVIEW",
+                "warning",
+                "Shown for information. Starting a window is not proven yet.",
+            ),
+        ):
+            row = QFrame()
+            row.setObjectName("healthRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(14, 11, 14, 11)
+            row_layout.setSpacing(12)
+            text = QVBoxLayout()
+            text.setSpacing(2)
+            title = QLabel(name)
+            title.setObjectName("healthLabel")
+            body = QLabel(sentence)
+            body.setObjectName("healthDetail")
+            body.setWordWrap(True)
+            body.setMinimumWidth(160)
+            body.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            text.addWidget(title)
+            text.addWidget(body)
+            row_layout.addLayout(text, 1)
+            pill = StatusPill()
+            pill.setFixedHeight(24)
+            pill.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            pill.set_status(badge, tone)
+            row_layout.addWidget(pill, 0, Qt.AlignmentFlag.AlignTop)
+            support_layout.addWidget(row)
+        support_note = QLabel(
+            "Settings has the full technical detail for both providers under Technical details."
         )
-        codex_row.setObjectName("secondaryMetric")
-        codex_row.setWordWrap(True)
-        support_layout.addWidget(codex_row)
-        claude_header = QHBoxLayout()
-        claude_label = QLabel("<b>Claude Code</b>")
-        claude_label.setObjectName("secondaryMetric")
-        preview = QLabel("PREVIEW")
-        preview.setObjectName("previewTag")
-        claude_header.addWidget(claude_label)
-        claude_header.addWidget(preview)
-        claude_header.addStretch()
-        support_layout.addLayout(claude_header)
-        claude_row = QLabel(
-            "Claude Code offers no free way to read your window state, so this provider reads the status "
-            "line Claude Code already writes and runs one prompt-free initialization. Whether that "
-            "initialization starts a five-hour window is not yet proven, so treat the Claude card as "
-            "information rather than a guarantee. It stays guarded either way: one attempt, never repeated."
-        )
-        claude_row.setObjectName("secondaryMetric")
-        claude_row.setWordWrap(True)
-        support_layout.addWidget(claude_row)
+        support_note.setProperty("muted", True)
+        support_note.setWordWrap(True)
+        support_layout.addWidget(support_note)
         root.addWidget(support)
 
         privacy, privacy_layout = make_surface_card(
@@ -562,7 +582,9 @@ class MainWindow(QMainWindow):
         for provider_id, state in self.controller.states.items():
             card = self.provider_cards.get(provider_id)
             if card is not None:
-                card.update_state(state, now=current)
+                card.update_state(
+                    state, now=current, automation_enabled=enabled
+                )
                 card.action_button.setVisible(
                     provider_id == "codex"
                     and enabled
@@ -672,7 +694,11 @@ class MainWindow(QMainWindow):
             state_file_exists=state_file_exists,
             now=now,
         )
-        self.health_summary.update_row(overall_summary(rows))
+        self.health_summary.update_row(
+            overall_summary(
+                rows, automation_enabled=self.controller.settings.automation_enabled
+            )
+        )
         while len(self.health_rows) < len(rows):
             widget = HealthRowWidget()
             self.health_rows.append(widget)

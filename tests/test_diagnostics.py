@@ -172,11 +172,27 @@ class SummaryTests(unittest.TestCase):
         )
         self.assertEqual("warning", overall_summary(rows).tone)
 
-    def test_overall_is_all_good_when_nothing_needs_attention(self):
-        rows = self.rows(states={"codex": state(reset_at=int(NOW + 9000), last_verified_at=NOW)})
-        summary = overall_summary(rows)
+    def test_all_good_requires_automation_on_and_a_ready_provider(self):
+        rows = self.rows(
+            automation=True,
+            states={"codex": state(reset_at=int(NOW + 9000), last_verified_at=NOW)},
+        )
+        summary = overall_summary(rows, automation_enabled=True)
         self.assertEqual("All good", summary.status)
         self.assertEqual("success", summary.tone)
+
+    def test_installed_but_switched_off_reports_setup_ok_not_all_good(self):
+        """Claiming success before anything is verified is how trust is lost."""
+        rows = self.rows(states={"codex": state(reset_at=int(NOW + 9000), last_verified_at=NOW)})
+        summary = overall_summary(rows, automation_enabled=False)
+        self.assertEqual("Setup OK", summary.status)
+        self.assertEqual("info", summary.tone)
+        self.assertIn("installed correctly", summary.detail)
+
+    def test_automation_on_with_nothing_verified_is_still_only_setup_ok(self):
+        rows = self.rows(automation=True, states={"codex": state()})
+        summary = overall_summary(rows, automation_enabled=True)
+        self.assertEqual("Setup OK", summary.status)
 
     def test_automation_row_states_the_off_guarantee(self):
         rows = self.rows(automation=False)
@@ -208,9 +224,22 @@ class TechnicalSummaryTests(unittest.TestCase):
         self.assertIn("Compatibility: passed", text)
 
     def test_summary_carries_nothing_private(self):
+        """The summary is meant to be pasted into a bug report.
+
+        "prompt-free" is allowed because it describes the mechanism; what must
+        never appear is an actual secret, path to one, or account identity.
+        """
+        text = self.summary().lower()
+        for banned in ("auth.json", "@", "bearer", "sk-ant", "password", "credential"):
+            self.assertNotIn(banned, text)
+        self.assertNotIn("prompt:", text)
+
+    def test_summary_explains_both_providers_for_troubleshooting(self):
         text = self.summary()
-        for banned in ("token", "credential", "prompt", "auth.json", "@"):
-            self.assertNotIn(banned, text.lower())
+        self.assertIn("Provider support", text)
+        self.assertIn("Codex: verified", text)
+        self.assertIn("Claude Code: preview", text)
+        self.assertIn("never repeated", text)
 
 
 if __name__ == "__main__":
