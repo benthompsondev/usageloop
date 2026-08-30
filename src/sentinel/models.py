@@ -34,7 +34,10 @@ def select_trigger_model(catalog: Sequence[Any]) -> ModelChoice | None:
     usable = [entry for entry in catalog if _is_usable(entry)]
     if not usable:
         return None
-    chosen = next((entry for entry in usable if entry.get("isDefault") is True), usable[0])
+    defaults = [entry for entry in usable if entry.get("isDefault") is True]
+    if len(defaults) != 1:
+        return None
+    chosen = defaults[0]
     return ModelChoice(
         model=chosen["id"],
         reasoning_effort=_select_effort(chosen),
@@ -67,4 +70,4 @@ def _select_effort(entry: dict[str, Any]) -> str | None:
     default = entry.get("defaultReasoningEffort")
     if isinstance(default, str) and default in advertised:
         return default
-    return advertised[0] if advertised else None
+    return advertised[0] if len(advertised) == 1 else None

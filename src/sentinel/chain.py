@@ -254,9 +254,9 @@ class ChainCoordinator:
                 reasoning_effort=description.reasoning_effort,
                 now=current.observed_at,
             )
-        self.history.transition_trigger(
-            attempt.attempt_id, "launch_attempted", now=current.observed_at
-        )
+            self.history.transition_trigger(
+                attempt.attempt_id, "launch_attempted", now=current.observed_at
+            )
         try:
             trigger_result = self.trigger.run()
         except Exception:
@@ -282,13 +282,19 @@ class ChainCoordinator:
                 terminal_outcome=trigger_result.terminal_outcome,
             )
 
-        self.history.transition_trigger(
-            attempt.attempt_id,
-            "request_possibly_sent",
-            outcome=trigger_result.terminal_outcome,
-            observed_state=preflight.state,
-            now=current.observed_at,
-        )
+        try:
+            self._transition_after_request(
+                attempt.attempt_id,
+                "request_possibly_sent",
+                outcome=trigger_result.terminal_outcome,
+                observed_state=preflight.state,
+                now=current.observed_at,
+            )
+        except OSError:
+            # `launch_attempted` is already durable and guards against a retry.
+            # A transient diagnostic write failure must not suppress the
+            # authoritative read-only verification that follows a possible turn.
+            pass
         try:
             verification = list(collect_verification())
             verified = classify(verification)
@@ -298,7 +304,7 @@ class ChainCoordinator:
                 else current.observed_at
             )
         except Exception:
-            self.history.transition_trigger(
+            self._transition_after_request(
                 attempt.attempt_id,
                 "failed_guarded",
                 outcome="verification_unavailable",
@@ -318,7 +324,7 @@ class ChainCoordinator:
             )
 
         if verified.state == "ANCHORED" and _strong_evidence(verified):
-            self.history.transition_trigger(
+            self._transition_after_request(
                 attempt.attempt_id,
                 "verified",
                 outcome="anchor_verified",
@@ -337,7 +343,7 @@ class ChainCoordinator:
                 terminal_outcome=trigger_result.terminal_outcome,
             )
 
-        self.history.transition_trigger(
+        self._transition_after_request(
             attempt.attempt_id,
             "failed_guarded",
             outcome="anchor_not_verified",
@@ -356,13 +362,22 @@ class ChainCoordinator:
             terminal_outcome=trigger_result.terminal_outcome,
         )
 
+    def _transition_after_request(self, attempt_id: str, state: str, **kwargs: object) -> None:
+        try:
+            self.history.transition_trigger(attempt_id, state, **kwargs)
+        except OSError:
+            self.history.transition_trigger(attempt_id, state, **kwargs)
+
     def _blocking_rollover_attempt(
         self, idempotency_key: str, boundary: int, now: float
     ) -> TriggerAttempt | None:
         attempts = [
             item
             for item in self.history.trigger_attempts()
-            if item.mode == "rollover" and item.idempotency_key == idempotency_key
+            if (
+                item.mode == "rollover" and item.idempotency_key == idempotency_key
+            )
+            or item.created_at >= boundary
         ]
         blocking = self._recover_bare_reservations(attempts, now)
         if blocking:
@@ -384,7 +399,7 @@ class ChainCoordinator:
         attempts = [
             item
             for item in self.history.trigger_attempts()
-            if item.mode == "bootstrap" and item.created_at >= cutoff
+            if item.created_at >= cutoff
         ]
         blocking = self._recover_bare_reservations(attempts, now)
         return blocking[-1] if blocking else None
@@ -460,7 +475,5 @@ def _select_weekly(snapshot: QuotaSnapshot) -> QuotaWindow | None:
         for window in snapshot.windows
         if window.duration_minutes is not None and 9000 <= window.duration_minutes <= 11100
     ]
-    if len(candidates) == 1:
-        return candidates[0]
     official = [window for window in candidates if window.limit_id == "codex"]
     return official[0] if len(official) == 1 else None

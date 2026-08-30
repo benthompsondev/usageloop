@@ -124,3 +124,7 @@ False `UNKNOWN` is preferable to a false anchored or unanchored result.
 | 2026-08-30 | Turn lifecycle notifications are diagnostic only | An observer cannot infer quota accounting from a completion event; `ANCHORED` remains the only success criterion. |
 | 2026-08-30 | Prefer advertised `low` reasoning and otherwise use the runtime default | The trigger should stay minimal without inventing an effort the selected model does not support. |
 | 2026-08-30 | Serialize duplicate-check and reservation across Sentinel processes | Persisted idempotency is not sufficient if two processes can both check before either writes its reservation. The OS lock covers only that short transaction and releases on process exit. |
+| 2026-08-30 | Treat malformed or unreadable attempt history as unsafe to trigger | An incomplete possibly-sent record must never look like a clean first run. |
+| 2026-08-30 | Require one unique current default from `model/list` | Catalog ordering is not a safe model-selection signal when default metadata is missing or contradictory. |
+| 2026-08-30 | Require the dedicated trigger workspace to be empty and non-redirected | A stale file, local instruction, link, or junction would violate the controlled-workspace boundary. |
+| 2026-08-30 | Block cross-mode attempts within the same five-hour opportunity | Concurrent `chain` and `bootstrap` commands must not each reserve a turn merely because their mode names differ. |

@@ -112,12 +112,13 @@ OpenAI API key.
 
 Sentinel does not persist a model name. Immediately before every trigger it
 reads `model/list` from the installed runtime and selects the visible default
-model whose `upgrade` pointer is null. It uses `low` reasoning when the model
-advertises it, then falls back to the model's advertised default. A model carrying
-an `upgrade` pointer has been superseded and is the exact condition that produces
-a deprecation interstitial, so it is never selected. If no model qualifies,
-Sentinel refuses to trigger rather than guess. The input is the two-character
-message `ok`.
+model whose `upgrade` pointer is null. If the catalog has no unique current
+default, Sentinel refuses to guess based on list ordering. It uses `low`
+reasoning when the model advertises it, then falls back to the model's advertised
+default. A model carrying an `upgrade` pointer has been superseded and is the
+exact condition that produces a deprecation interstitial, so it is never selected.
+If no model qualifies, Sentinel refuses to trigger rather than guess. The input
+is the two-character message `ok`.
 
 ## Trigger Safety Gates
 
@@ -139,12 +140,17 @@ The trigger thread is created with `ephemeral: true`, `sandbox: read-only`,
 `approvalPolicy: never`, `config: {"mcp_servers": {}}`, and a `cwd` of Sentinel's
 dedicated `%LOCALAPPDATA%\CodexWindowSentinel\trigger-workspace` directory, so the
 request cannot load MCP servers, write files, request approvals, or persist a
-thread. Sentinel opts out of `experimentalApi` and sends no parameter that
+thread. The workspace must be an empty real directory; Sentinel will not use a
+link, junction, or directory containing local instructions or other files.
+Sentinel opts out of `experimentalApi` and sends no parameter that
 requires it. There is no directory-trust prompt on this path because the
 app-server has no such concept.
 
 Sentinel serializes the duplicate check and reservation across local processes,
-then writes `launch_attempted` before submitting the turn. A rejection that Codex
+and writes both the reservation and `launch_attempted` before releasing that
+lock. Bootstrap and rollover attempts block each other within the same window.
+Malformed or unreadable attempt history fails closed instead of appearing empty.
+A rejection that Codex
 emits before dispatching the request, which the JSON-RPC codes -32600, -32601,
 and -32602 identify, becomes `failed_recoverable` and does not burn the
 opportunity. Once `turn/start` has been transmitted by any other path, Sentinel

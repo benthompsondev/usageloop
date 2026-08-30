@@ -1,11 +1,14 @@
 import copy
 import json
+import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from sentinel.protocol import (
     AppServerClient,
+    AppServerProtocolError,
     AppServerRequestRejected,
     AuthenticationUnavailableError,
     merge_sparse_rate_limits,
@@ -77,6 +80,25 @@ class AppServerProtocolTests(unittest.TestCase):
         self.assertEqual("account/rateLimits/read", transport.sent[-1]["method"])
         self.assertIsNone(transport.sent[-1]["params"])
         self.assertEqual(1, len(client.drain_rate_limit_notifications()))
+
+    def test_rate_read_accepts_multi_bucket_result_without_legacy_bucket(self):
+        fixture = messages()
+        response = {
+            "id": 2,
+            "result": {
+                "rateLimitsByLimitId": {
+                    "codex": fixture["rate_response"]["result"]["rateLimits"]
+                }
+            },
+        }
+        transport = MemoryTransport([fixture["initialize_result"], response])
+        client = AppServerClient(transport, client_version="0.1.0")
+        client.initialize()
+        try:
+            result = client.read_rate_limits()
+        except AppServerProtocolError as exc:
+            self.fail(f"valid multi-bucket response was rejected: {exc.category}")
+        self.assertEqual(12, result["rateLimitsByLimitId"]["codex"]["primary"]["usedPercent"])
 
     def test_authentication_error_is_sanitized_and_categorized(self):
         fixture = messages()
@@ -179,6 +201,14 @@ class TurnProtocolTests(unittest.TestCase):
         self.assertEqual("turn_completed", client.await_turn_end(timeout=5))
         self.assertEqual(1, len(client.drain_rate_limit_notifications()))
 
+    def test_completion_arriving_before_turn_start_response_is_not_lost(self):
+        client, _ = self.client([
+            {"method": "turn/completed", "params": {"threadId": "t-1"}},
+            {"id": 2, "result": {"turn": {"id": "turn-1"}}},
+        ])
+        client.start_turn({"threadId": "t-1", "input": []})
+        self.assertEqual("turn_completed", client.await_turn_end(timeout=5))
+
     def test_await_turn_end_reports_error_notification(self):
         client, _ = self.client([{"method": "error", "params": {"message": "boom"}}])
         self.assertEqual("turn_error", client.await_turn_end(timeout=5))
@@ -216,6 +246,32 @@ class NativePreferenceTests(unittest.TestCase):
             (root / name).touch()
             found = find_codex_executable(path_value=str(root), known_candidates=())
         self.assertEqual(name, found.name)
+
+    def test_disappearing_native_candidate_does_not_hide_remaining_install(self):
+        with tempfile.TemporaryDirectory() as directory:
+            local_app_data = Path(directory)
+            bin_root = local_app_data / "OpenAI" / "Codex" / "bin"
+            stale = bin_root / "stale" / "codex.exe"
+            current = bin_root / "current" / "codex.exe"
+            stale.parent.mkdir(parents=True)
+            current.parent.mkdir(parents=True)
+            stale.touch()
+            current.touch()
+            original_stat = Path.stat
+
+            def replacement_race(path, *args, **kwargs):
+                if path == stale:
+                    raise FileNotFoundError("simulated installer replacement")
+                return original_stat(path, *args, **kwargs)
+
+            with mock.patch.dict(os.environ, {"LOCALAPPDATA": str(local_app_data)}):
+                with mock.patch.object(Path, "stat", replacement_race):
+                    try:
+                        found = find_codex_executable(path_value="")
+                    except OSError as exc:
+                        self.fail(f"one stale candidate aborted discovery: {type(exc).__name__}")
+
+        self.assertEqual(current.resolve(), found)
 
 
 if __name__ == "__main__":

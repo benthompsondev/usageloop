@@ -78,6 +78,7 @@ class AppServerClient:
         self.timeout = timeout
         self._next_id = 1
         self._rate_notifications: list[dict[str, Any]] = []
+        self._turn_outcomes: list[str] = []
         self._initialized = False
 
     def initialize(self) -> ServerInfo:
@@ -128,7 +129,10 @@ class AppServerClient:
                 raise AuthenticationUnavailableError()
             raise AppServerProtocolError("rate_limits_unavailable", "Codex could not return subscription rate limits.")
         result = response.get("result")
-        if not isinstance(result, dict) or not isinstance(result.get("rateLimits"), dict):
+        if not isinstance(result, dict) or not (
+            isinstance(result.get("rateLimits"), dict)
+            or isinstance(result.get("rateLimitsByLimitId"), dict)
+        ):
             raise AppServerProtocolError("protocol_unsupported", "Codex returned an unsupported rate-limit response.")
         return result
 
@@ -154,6 +158,8 @@ class AppServerClient:
 
     def await_turn_end(self, *, timeout: float) -> str:
         """Wait for a bounded turn lifecycle signal. Diagnostic only, never the verdict."""
+        if self._turn_outcomes:
+            return self._turn_outcomes.pop(0)
         deadline = time.monotonic() + timeout
         while True:
             remaining = deadline - time.monotonic()
@@ -228,6 +234,12 @@ class AppServerClient:
                 params = message.get("params")
                 if isinstance(params, dict) and isinstance(params.get("rateLimits"), dict):
                     self._rate_notifications.append(params)
+                continue
+            if message.get("method") == "turn/completed":
+                self._turn_outcomes.append("turn_completed")
+                continue
+            if message.get("method") == "error":
+                self._turn_outcomes.append("turn_error")
                 continue
             if message.get("id") == request_id:
                 return message

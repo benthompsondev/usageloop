@@ -4,6 +4,7 @@ from pathlib import Path
 
 from sentinel.models import ModelChoice, select_trigger_model
 from sentinel.protocol import AppServerProtocolError, AppServerRequestRejected
+from sentinel.transport import TransportTimeoutError
 from sentinel.trigger import AppServerTrigger, TriggerConfig
 
 
@@ -78,21 +79,29 @@ class ModelSelectionTests(unittest.TestCase):
     def test_excludes_superseded_models_carrying_an_upgrade_pointer(self):
         catalog = [
             catalog_entry("gpt-5.4-mini", default=True, upgrade="gpt-5.6-luna"),
-            catalog_entry("gpt-5.6-luna"),
+            catalog_entry("gpt-5.6-luna", default=True),
         ]
         choice = select_trigger_model(catalog)
         self.assertIsNotNone(choice)
         self.assertEqual("gpt-5.6-luna", choice.model)
 
     def test_excludes_hidden_models(self):
-        catalog = [catalog_entry("hidden-default", default=True, hidden=True), catalog_entry("visible")]
+        catalog = [
+            catalog_entry("hidden-default", default=True, hidden=True),
+            catalog_entry("visible", default=True),
+        ]
         self.assertEqual("visible", select_trigger_model(catalog).model)
 
-    def test_falls_back_to_first_usable_model_when_none_is_marked_default(self):
+    def test_refuses_to_guess_when_no_model_is_marked_default(self):
         catalog = [catalog_entry("first"), catalog_entry("second")]
-        choice = select_trigger_model(catalog)
-        self.assertEqual("first", choice.model)
-        self.assertFalse(choice.is_default)
+        self.assertIsNone(select_trigger_model(catalog))
+
+    def test_refuses_ambiguous_multiple_default_models(self):
+        catalog = [
+            catalog_entry("first", default=True),
+            catalog_entry("second", default=True),
+        ]
+        self.assertIsNone(select_trigger_model(catalog))
 
     def test_returns_none_when_every_model_is_superseded_or_hidden(self):
         catalog = [
@@ -113,8 +122,24 @@ class ModelSelectionTests(unittest.TestCase):
         catalog = [catalog_entry("m", default=True, efforts=(), default_effort=None)]
         self.assertIsNone(select_trigger_model(catalog).reasoning_effort)
 
+    def test_omits_effort_instead_of_guessing_from_changed_order(self):
+        catalog = [
+            catalog_entry(
+                "m",
+                default=True,
+                efforts=("high", "medium"),
+                default_effort=None,
+            )
+        ]
+        self.assertIsNone(select_trigger_model(catalog).reasoning_effort)
+
     def test_ignores_malformed_catalog_entries(self):
-        catalog = ["nonsense", {"id": 5}, {"id": "bad name!"}, catalog_entry("good")]
+        catalog = [
+            "nonsense",
+            {"id": 5},
+            {"id": "bad name!"},
+            catalog_entry("good", default=True),
+        ]
         self.assertEqual("good", select_trigger_model(catalog).model)
 
 
@@ -214,6 +239,23 @@ class TriggerOutcomeTests(unittest.TestCase):
         client = FakeClient(thread_error=AppServerRequestRejected("thread/start", {"code": -32600}))
         result = self.trigger(client).run()
         self.assertEqual(("thread_start_rejected", False), (result.terminal_outcome, result.request_possibly_sent))
+        self.assertEqual(0, client.turn_calls)
+
+    def test_thread_start_transport_timeout_is_definitely_not_sent(self):
+        client = FakeClient(thread_error=TransportTimeoutError())
+        result = self.trigger(client).run()
+        self.assertEqual("thread_start_failed", result.terminal_outcome)
+        self.assertFalse(result.request_possibly_sent)
+        self.assertEqual(0, client.turn_calls)
+
+    def test_nonempty_workspace_refuses_to_start_thread(self):
+        (self.workspace).mkdir(parents=True)
+        (self.workspace / "AGENTS.md").write_text("untrusted", encoding="utf-8")
+        client = FakeClient()
+        result = self.trigger(client).run()
+        self.assertEqual("workspace_unavailable", result.terminal_outcome)
+        self.assertFalse(result.request_possibly_sent)
+        self.assertIsNone(client.thread_params)
         self.assertEqual(0, client.turn_calls)
 
     def test_pre_dispatch_turn_rejection_is_not_possibly_sent(self):

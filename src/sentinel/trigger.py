@@ -19,6 +19,7 @@ from typing import Protocol
 
 from .models import ModelChoice, select_trigger_model
 from .protocol import AppServerProtocolError, AppServerRequestRejected
+from .transport import SentinelRuntimeError
 
 
 UNRESOLVED_MODEL = "unresolved"
@@ -82,7 +83,7 @@ class AppServerTrigger:
             self._resolved = True
             try:
                 self._choice = select_trigger_model(self.client.list_models())
-            except (AppServerProtocolError, OSError):
+            except (AppServerProtocolError, SentinelRuntimeError, OSError):
                 self._choice = None
         return self._choice
 
@@ -123,16 +124,14 @@ class AppServerTrigger:
         if choice is None:
             return TriggerRunResult("model_unavailable", False)
 
-        try:
-            self.workspace.mkdir(parents=True, exist_ok=True)
-        except OSError:
+        if not self._prepare_workspace():
             return TriggerRunResult("workspace_unavailable", False)
 
         try:
             thread_id = self.client.start_thread(self.thread_parameters(choice))
         except AppServerRequestRejected:
             return TriggerRunResult("thread_start_rejected", False)
-        except (AppServerProtocolError, OSError):
+        except (AppServerProtocolError, SentinelRuntimeError, OSError):
             return TriggerRunResult("thread_start_failed", False)
 
         try:
@@ -144,7 +143,7 @@ class AppServerTrigger:
             if exc.rejected_before_dispatch:
                 return TriggerRunResult("turn_start_rejected", False)
             return TriggerRunResult("turn_start_error", True)
-        except (AppServerProtocolError, OSError):
+        except (AppServerProtocolError, SentinelRuntimeError, OSError):
             return TriggerRunResult("turn_start_unconfirmed", True)
 
         try:
@@ -154,3 +153,13 @@ class AppServerTrigger:
         # Every path below has transmitted one turn. The quota observer, not
         # this lifecycle signal, decides whether the window actually anchored.
         return TriggerRunResult(outcome, True)
+
+    def _prepare_workspace(self) -> bool:
+        try:
+            self.workspace.mkdir(parents=True, exist_ok=True)
+            is_junction = getattr(self.workspace, "is_junction", None)
+            if self.workspace.is_symlink() or (callable(is_junction) and is_junction()):
+                return False
+            return self.workspace.is_dir() and next(self.workspace.iterdir(), None) is None
+        except OSError:
+            return False

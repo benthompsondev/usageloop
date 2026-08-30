@@ -1,7 +1,9 @@
 import json
+import multiprocessing
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from sentinel.classifier import Classification
@@ -9,7 +11,34 @@ from sentinel.history import SafeHistory
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 
 
+def _acquire_history_guard(path, acquired):
+    with SafeHistory(Path(path)).trigger_reservation_guard():
+        acquired.set()
+
+
 class SafeHistoryTests(unittest.TestCase):
+    def test_truncated_trigger_state_is_not_treated_as_empty_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel.jsonl"
+            path.write_text('{"event":"trigger_state","state":"request_possibly_sent"', encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                SafeHistory(path).trigger_attempts()
+
+    def test_unreadable_trigger_history_is_not_treated_as_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            history = SafeHistory(Path(directory) / "sentinel.jsonl")
+            history.path.write_text("{}\n", encoding="utf-8")
+            original_read_text = Path.read_text
+
+            def deny_read(path, *args, **kwargs):
+                if path == history.path:
+                    raise PermissionError("simulated sharing violation")
+                return original_read_text(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "read_text", deny_read):
+                with self.assertRaises(RuntimeError):
+                    history.trigger_attempts()
+
     def test_trigger_reservation_guard_serializes_independent_history_instances(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sentinel.jsonl"
@@ -44,6 +73,24 @@ class SafeHistoryTests(unittest.TestCase):
         self.assertFalse(first_thread.is_alive())
         self.assertFalse(second_thread.is_alive())
         self.assertTrue(second_acquired.is_set())
+
+    def test_trigger_reservation_guard_serializes_separate_processes(self):
+        context = multiprocessing.get_context("spawn")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel.jsonl"
+            acquired = context.Event()
+            process = context.Process(
+                target=_acquire_history_guard,
+                args=(str(path), acquired),
+            )
+            with SafeHistory(path).trigger_reservation_guard():
+                process.start()
+                self.assertFalse(acquired.wait(0.3))
+            self.assertTrue(acquired.wait(5))
+            process.join(5)
+
+        self.assertFalse(process.is_alive())
+        self.assertEqual(0, process.exitcode)
 
     def test_observation_log_contains_only_allowlisted_quota_fields(self):
         snapshot = QuotaSnapshot(
@@ -156,6 +203,28 @@ class SafeHistoryTests(unittest.TestCase):
         self.assertEqual(1, len(loaded))
         self.assertEqual("request_possibly_sent", loaded[0].state)
         self.assertEqual("rollover:2000010000", loaded[0].idempotency_key)
+
+    def test_terminal_trigger_state_cannot_roll_back_to_recoverable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            history = SafeHistory(Path(directory) / "sentinel.jsonl")
+            attempt = history.reserve_trigger(
+                mode="rollover",
+                idempotency_key="rollover:2000010000",
+                boundary_reset_at=2000010000,
+                model="gpt-5.6-sol",
+                reasoning_effort="low",
+                now=2000010015,
+            )
+            history.transition_trigger(attempt.attempt_id, "launch_attempted", now=2000010016)
+            history.transition_trigger(
+                attempt.attempt_id, "request_possibly_sent", now=2000010017
+            )
+            history.transition_trigger(attempt.attempt_id, "verified", now=2000010050)
+            with self.assertRaises(RuntimeError):
+                history.transition_trigger(
+                    attempt.attempt_id, "failed_recoverable", now=2000010051
+                )
+            self.assertEqual("verified", history.trigger_attempts()[-1].state)
 
 
 if __name__ == "__main__":

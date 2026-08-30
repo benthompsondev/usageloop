@@ -205,6 +205,11 @@ def _default_known_candidates() -> tuple[Path, ...]:
     bin_root = Path(local_app_data) / "OpenAI" / "Codex" / "bin"
     if not bin_root.is_dir():
         return ()
-    candidates = list(bin_root.glob("*/codex.exe"))
-    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    return tuple(candidates)
+    measured: list[tuple[float, Path]] = []
+    for candidate in bin_root.glob("*/codex.exe"):
+        try:
+            measured.append((candidate.stat().st_mtime, candidate))
+        except OSError:
+            continue
+    measured.sort(key=lambda item: item[0], reverse=True)
+    return tuple(candidate for _mtime, candidate in measured)

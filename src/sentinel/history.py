@@ -32,6 +32,19 @@ _ATTEMPT_STATES = {
     "failed_guarded",
 }
 _ATTEMPT_MODES = {"rollover", "bootstrap"}
+_ALLOWED_ATTEMPT_TRANSITIONS = {
+    "reserved": {"launch_attempted", "failed_recoverable"},
+    "launch_attempted": {
+        "request_possibly_sent",
+        "verified",
+        "failed_recoverable",
+        "failed_guarded",
+    },
+    "request_possibly_sent": {"verified", "failed_guarded"},
+    "verified": set(),
+    "failed_recoverable": set(),
+    "failed_guarded": set(),
+}
 _OBSERVED_STATES = {"ANCHORED", "UNANCHORED", "ABSENT", "EXHAUSTED", "UNKNOWN"}
 _EVIDENCE_KEYS = {
     "sample_count",
@@ -46,6 +59,22 @@ _EVIDENCE_KEYS = {
     "blocked_reason",
     "notification_count",
 }
+
+
+class HistoryStateError(RuntimeError):
+    def __init__(self, category: str, message: str):
+        super().__init__(message)
+        self.category = category
+
+
+class HistoryIntegrityError(HistoryStateError):
+    def __init__(self):
+        super().__init__("history_corrupt", "Sentinel history contains a malformed record.")
+
+
+class HistoryUnavailableError(HistoryStateError):
+    def __init__(self):
+        super().__init__("history_unavailable", "Sentinel history could not be read safely.")
 
 
 @dataclass(frozen=True)
@@ -178,6 +207,10 @@ class SafeHistory:
             raise ValueError("Unsafe attempt identifier.")
         if state not in _ATTEMPT_STATES or state == "reserved":
             raise ValueError("Unsupported trigger state transition.")
+        attempts = {item.attempt_id: item for item in self.trigger_attempts()}
+        current = attempts.get(attempt_id)
+        if current is None or state not in _ALLOWED_ATTEMPT_TRANSITIONS[current.state]:
+            raise HistoryIntegrityError()
         row: dict[str, Any] = {
             "event": "trigger_state",
             "timestamp": _iso_timestamp(now),
@@ -196,7 +229,7 @@ class SafeHistory:
 
     def trigger_attempts(self) -> list[TriggerAttempt]:
         attempts: dict[str, TriggerAttempt] = {}
-        for row in self._read_rows():
+        for row in self._read_rows(strict=True):
             if row.get("event") != "trigger_state":
                 continue
             attempt_id = row.get("attempt_id")
@@ -209,7 +242,7 @@ class SafeHistory:
                 or not isinstance(occurred_at, (int, float))
                 or isinstance(occurred_at, bool)
             ):
-                continue
+                raise HistoryIntegrityError()
             if state == "reserved":
                 mode = row.get("mode")
                 key = row.get("idempotency_key")
@@ -218,9 +251,12 @@ class SafeHistory:
                     mode not in _ATTEMPT_MODES
                     or not isinstance(key, str)
                     or not _SAFE_IDEMPOTENCY_KEY.fullmatch(key)
-                    or (boundary is not None and not isinstance(boundary, int))
+                    or (
+                        boundary is not None
+                        and (not isinstance(boundary, int) or isinstance(boundary, bool))
+                    )
                 ):
-                    continue
+                    raise HistoryIntegrityError()
                 attempts[attempt_id] = TriggerAttempt(
                     attempt_id,
                     mode,
@@ -230,7 +266,11 @@ class SafeHistory:
                     float(occurred_at),
                     float(occurred_at),
                 )
-            elif attempt_id in attempts:
+            elif attempt_id not in attempts:
+                raise HistoryIntegrityError()
+            else:
+                if state not in _ALLOWED_ATTEMPT_TRANSITIONS[attempts[attempt_id].state]:
+                    raise HistoryIntegrityError()
                 attempts[attempt_id] = replace(
                     attempts[attempt_id], state=state, updated_at=float(occurred_at)
                 )
@@ -346,21 +386,27 @@ class SafeHistory:
         with self.path.open("a", encoding="utf-8", newline="\n") as stream:
             stream.write(json.dumps(row, separators=(",", ":"), ensure_ascii=True) + "\n")
 
-    def _read_rows(self) -> list[dict[str, Any]]:
+    def _read_rows(self, *, strict: bool = False) -> list[dict[str, Any]]:
         if not self.path.is_file():
             return []
         try:
             lines = self.path.read_text(encoding="utf-8").splitlines()
-        except OSError:
+        except OSError as exc:
+            if strict:
+                raise HistoryUnavailableError() from exc
             return []
         rows: list[dict[str, Any]] = []
         for line in lines:
             try:
                 row = json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
+                if strict:
+                    raise HistoryIntegrityError() from exc
                 continue
             if isinstance(row, dict):
                 rows.append(row)
+            elif strict:
+                raise HistoryIntegrityError()
         return rows
 
 
