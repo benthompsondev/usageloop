@@ -1,29 +1,34 @@
-"""A minimal normal interactive Codex request used to anchor a new window."""
+"""One minimal subscription-backed Codex turn used to anchor a new window.
+
+Sentinel drives the local `codex app-server` protocol directly. Codex owns
+authentication and the model request exactly as it does for observation, so the
+trigger and the observer share one process, one handshake, and one auth owner.
+
+An earlier design drove the interactive TUI through a Windows pseudo console and
+parsed rendered screens. Measured evidence retired it: the terminal separates
+words with cursor-forward escapes rather than spaces, and update, directory
+trust, and model-deprecation screens sit between launch and the composer. See
+`docs/TUI_TRIGGER_POSTMORTEM.md`.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
-import re
-from typing import Mapping, Protocol
+from typing import Protocol
 
-from ._conpty import ConPtyError, conpty_available, run_conpty
-from .transport import build_codex_command
+from .models import ModelChoice, select_trigger_model
+from .protocol import AppServerProtocolError, AppServerRequestRejected
+
+
+UNRESOLVED_MODEL = "unresolved"
 
 
 @dataclass(frozen=True)
 class TriggerConfig:
-    # The TUI/quiet defaults adapt CCLimitPing's MIT-licensed Codex trigger.
-    # See THIRD_PARTY_NOTICES.md for attribution.
-    model: str = "gpt-5.4-mini"
-    reasoning_effort: str = "low"
     prompt: str = "ok"
-    min_runtime_seconds: float = 4.0
-    quiet_seconds: float = 2.5
-    max_runtime_seconds: float = 45.0
-    exit_grace_seconds: float = 5.0
-    allow_workspace_trust: bool = True
+    turn_timeout_seconds: float = 90.0
+    turn_trigger: str = "codex-window-sentinel"
 
 
 @dataclass(frozen=True)
@@ -45,220 +50,107 @@ class Trigger(Protocol):
     def run(self) -> TriggerRunResult: ...
 
 
-_TERM_WARNING = 'TERM is set to "dumb"'
-_TRUST_QUESTION = "Do you trust the contents of this directory?"
-_TRUST_EXPLANATION = (
-    "Working with untrusted contents comes with higher risk of prompt injection. "
-    "Trusting the directory allows project-local config, hooks, and exec policies to load."
-)
-_ANSI_OSC = re.compile(r"\x1b\][^\x07]*(?:\x07|\x1b\\)")
-_ANSI_CSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-
-
-class CodexTuiController:
-    """Recognize only the bounded Codex startup states needed by Sentinel."""
-
-    def __init__(self, workspace: Path, *, allow_workspace_trust: bool):
-        self.workspace = workspace
-        self.allow_workspace_trust = allow_workspace_trust
-        self.events: list[str] = ["terminal_startup"]
-        self.failure_outcome: str | None = None
-        self.success_outcome: str | None = None
-        self.request_possibly_sent = False
-        self._visible = ""
-        self._trust_response_sent = False
-
-    @property
-    def stop_outcome(self) -> str | None:
-        return self.failure_outcome or self.success_outcome
-
-    @property
-    def response_delay_seconds(self) -> float:
-        # Codex renders the protected trust screen, then drains input that may
-        # belong to the preceding screen. The one confirmation must arrive after
-        # that bounded transition, never in the same output callback.
-        return 0.5
-
-    def receive(self, chunk: bytes) -> bytes:
-        if self.stop_outcome is not None:
-            return b""
-        self._visible = (self._visible + _visible_terminal_text(chunk))[-32_768:]
-        normalized = " ".join(self._visible.split())
-
-        if _TERM_WARNING in normalized:
-            self.failure_outcome = "unexpected_term_warning"
-            self.events.append("term_warning")
-            return b""
-
-        if (
-            not self._trust_response_sent
-            and _TRUST_QUESTION in normalized
-            and "Press enter to continue" in normalized
-        ):
-            if not self._is_exact_trust_prompt(normalized):
-                self.failure_outcome = "unexpected_trust_path"
-                self.events.append("trust_prompt")
-                return b""
-            self.events.append("trust_prompt")
-            if not self.allow_workspace_trust:
-                self.failure_outcome = "workspace_trust_required"
-                return b""
-            self._trust_response_sent = True
-            self.request_possibly_sent = True
-            self.events.append("trust_confirmed")
-            return b"\r"
-
-        if self._trust_response_sent and "Failed to set trust for" in normalized:
-            self.failure_outcome = "workspace_trust_failed"
-            self.request_possibly_sent = False
-            return b""
-
-        if not self._trust_response_sent and _looks_like_unexpected_prompt(normalized):
-            self.failure_outcome = "unexpected_tui_prompt"
-            return b""
-
-        if "Ask Codex to do anything" in normalized:
-            if "main_composer_ready" not in self.events:
-                self.events.append("main_composer_ready")
-
-        if re.search(r"Working \(\d+s .*to interrupt\)", normalized):
-            if "main_composer_ready" not in self.events:
-                self.events.append("main_composer_ready")
-            self.events.extend(["positional_prompt_submitted", "turn_activity"])
-            self.request_possibly_sent = True
-            self.success_outcome = "turn_activity_observed"
-        return b""
-
-    def _is_exact_trust_prompt(self, normalized: str) -> bool:
-        match = re.search(r"> You are in (.+?) Do you trust the contents", normalized)
-        if match is None:
-            return False
-        displayed_path = match.group(1).strip()
-        try:
-            displayed = os.path.normcase(os.path.abspath(displayed_path))
-            expected = os.path.normcase(os.path.abspath(self.workspace))
-        except (OSError, ValueError):
-            return False
-        return (
-            displayed == expected
-            and _TRUST_EXPLANATION in normalized
-            and "1. Yes, continue" in normalized
-            and "2. No, quit" in normalized
-            and "Press enter to continue" in normalized
-        )
-
-
-def build_terminal_environment(
-    parent: Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    environment = dict(os.environ if parent is None else parent)
-    for key in [key for key in environment if key.upper() == "TERM"]:
-        del environment[key]
-    environment["TERM"] = "xterm-256color"
-    return environment
+class TurnClient(Protocol):
+    def list_models(self) -> list[dict]: ...
+    def start_thread(self, params: dict) -> str: ...
+    def start_turn(self, params: dict) -> None: ...
+    def await_turn_end(self, *, timeout: float) -> str: ...
 
 
 def dedicated_trigger_workspace(history_path: Path) -> Path:
     return history_path.parent / "trigger-workspace"
 
 
-class InteractiveCodexTrigger:
-    """Run the base Codex TUI inside a Windows pseudo console, never `exec`."""
+class AppServerTrigger:
+    """Start one ephemeral thread and submit exactly one minimal turn."""
 
     def __init__(
         self,
-        executable: Path,
+        client: TurnClient,
         workspace: Path,
         config: TriggerConfig | None = None,
     ):
-        self.executable = executable
+        self.client = client
         self.workspace = workspace
         self.config = config or TriggerConfig()
+        self._choice: ModelChoice | None = None
+        self._resolved = False
+
+    def resolve_model(self) -> ModelChoice | None:
+        """Resolve once per trigger instance. `model/list` spends no quota."""
+        if not self._resolved:
+            self._resolved = True
+            try:
+                self._choice = select_trigger_model(self.client.list_models())
+            except (AppServerProtocolError, OSError):
+                self._choice = None
+        return self._choice
 
     def describe(self) -> TriggerDescription:
+        choice = self.resolve_model()
         return TriggerDescription(
-            mechanism="interactive_codex_tui_conpty",
-            model=self.config.model,
-            reasoning_effort=self.config.reasoning_effort,
+            mechanism="app_server_turn",
+            model=choice.model if choice else UNRESOLVED_MODEL,
+            reasoning_effort=(choice.reasoning_effort if choice and choice.reasoning_effort else "default"),
             prompt_characters=len(self.config.prompt),
         )
 
-    def command(self) -> list[str]:
-        arguments = [
-            "-c",
-            f"model_reasoning_effort={self.config.reasoning_effort}",
-            "-m",
-            self.config.model,
-            "--no-alt-screen",
-            "-s",
-            "read-only",
-            "-a",
-            "never",
-            "-C",
-            str(self.workspace),
-            self.config.prompt,
-        ]
-        return build_codex_command(self.executable, *arguments)
+    def thread_parameters(self, choice: ModelChoice) -> dict:
+        # `allowProviderModelFallback` is deliberately absent: it requires the
+        # `experimentalApi` capability that Sentinel opts out of, and the
+        # resolved model is already a current non-superseded default.
+        return {
+            "ephemeral": True,
+            "sandbox": "read-only",
+            "approvalPolicy": "never",
+            "cwd": str(self.workspace),
+            "config": {"mcp_servers": {}},
+            "model": choice.model,
+        }
+
+    def turn_parameters(self, thread_id: str, choice: ModelChoice) -> dict:
+        params: dict = {
+            "threadId": thread_id,
+            "input": [{"type": "text", "text": self.config.prompt}],
+            "turnTrigger": self.config.turn_trigger,
+        }
+        if choice.reasoning_effort is not None:
+            params["effort"] = choice.reasoning_effort
+        return params
 
     def run(self) -> TriggerRunResult:
-        if not conpty_available():
-            return TriggerRunResult("interactive_tty_unavailable", False)
+        choice = self.resolve_model()
+        if choice is None:
+            return TriggerRunResult("model_unavailable", False)
+
         try:
-            self._prepare_workspace()
-            controller = CodexTuiController(
-                self.workspace,
-                allow_workspace_trust=self.config.allow_workspace_trust,
-            )
-            result = run_conpty(
-                self.command(),
-                cwd=self.workspace,
-                min_runtime_seconds=self.config.min_runtime_seconds,
-                quiet_seconds=self.config.quiet_seconds,
-                max_runtime_seconds=self.config.max_runtime_seconds,
-                exit_grace_seconds=self.config.exit_grace_seconds,
-                environment=build_terminal_environment(),
-                controller=controller,
-            )
-        except ConPtyError as exc:
-            return TriggerRunResult(
-                "runtime_error" if exc.process_started else "launch_failed",
-                exc.process_started,
-            )
+            self.workspace.mkdir(parents=True, exist_ok=True)
         except OSError:
-            return TriggerRunResult("workspace_unsafe", False)
-        outcome = controller.stop_outcome or result.terminal_outcome
-        if outcome in {"process_exited", "process_exited_early"} and result.exit_code != 0:
-            outcome += "_nonzero"
-        request_possibly_sent = (
-            controller.request_possibly_sent or controller.failure_outcome is None
-        )
-        return TriggerRunResult(outcome, request_possibly_sent)
+            return TriggerRunResult("workspace_unavailable", False)
 
-    def _prepare_workspace(self) -> None:
-        self.workspace.parent.mkdir(parents=True, exist_ok=True)
-        if not self.workspace.exists():
-            self.workspace.mkdir()
-        if (
-            not self.workspace.is_dir()
-            or self.workspace.is_symlink()
-            or getattr(self.workspace, "is_junction", lambda: False)()
-            or any(self.workspace.iterdir())
-        ):
-            raise OSError("The dedicated trigger workspace is not an empty local directory.")
+        try:
+            thread_id = self.client.start_thread(self.thread_parameters(choice))
+        except AppServerRequestRejected:
+            return TriggerRunResult("thread_start_rejected", False)
+        except (AppServerProtocolError, OSError):
+            return TriggerRunResult("thread_start_failed", False)
 
+        try:
+            self.client.start_turn(self.turn_parameters(thread_id, choice))
+        except AppServerRequestRejected as exc:
+            # Codex refused the request itself, so no model work began and the
+            # opportunity stays recoverable. Any other rejection may have
+            # reached the model, so it is treated as possibly sent.
+            if exc.rejected_before_dispatch:
+                return TriggerRunResult("turn_start_rejected", False)
+            return TriggerRunResult("turn_start_error", True)
+        except (AppServerProtocolError, OSError):
+            return TriggerRunResult("turn_start_unconfirmed", True)
 
-def _visible_terminal_text(chunk: bytes) -> str:
-    text = chunk.decode("utf-8", errors="replace")
-    text = _ANSI_OSC.sub("", text)
-    text = _ANSI_CSI.sub("", text)
-    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
-
-
-def _looks_like_unexpected_prompt(normalized: str) -> bool:
-    return (
-        "Continue anyway? [y/N]:" in normalized
-        or (
-            "Press enter to continue" in normalized
-            and _TRUST_QUESTION not in normalized
-        )
-    )
+        try:
+            outcome = self.client.await_turn_end(timeout=self.config.turn_timeout_seconds)
+        except (AppServerProtocolError, OSError):
+            outcome = "turn_stream_unavailable"
+        # Every path below has transmitted one turn. The quota observer, not
+        # this lifecycle signal, decides whether the window actually anchored.
+        return TriggerRunResult(outcome, True)

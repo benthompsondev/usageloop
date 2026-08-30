@@ -1,7 +1,11 @@
 # Third-Party Notices
 
-Codex Window Sentinel's interactive trigger strategy and bounded quiet-period
-shutdown behavior were adapted from CCLimitPing by wavever:
+Codex Window Sentinel's earlier interactive trigger strategy and bounded
+quiet-period shutdown behavior were adapted from CCLimitPing by wavever. That
+code was removed on 2026-08-30 when the trigger moved to the Codex app-server
+protocol (see `docs/TUI_TRIGGER_POSTMORTEM.md`). The weekly-protection threshold
+and the general idea of triggering a window with one minimal request through the
+vendor's own CLI remain influenced by that project, so the notice stands:
 
 https://github.com/wavever/CCLimitPing
 

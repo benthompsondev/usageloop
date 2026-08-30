@@ -10,7 +10,7 @@ Codex app-server and classifies the approximately five-hour window as
 Phase 2 adds the smallest product proof. `sentinel chain` handles a proven
 rollover, while the explicit `sentinel bootstrap --confirm` path can start a
 first window when no historical anchored reset exists. Both paths allow one
-minimal request through the normal interactive Codex CLI and report success
+minimal request through the local Codex app-server and report success
 only when fresh observations prove that the window anchored.
 
 ## Boundaries
@@ -20,7 +20,8 @@ Sentinel does:
 - use `account/rateLimits/read` through a local `codex app-server`;
 - identify windows by reported duration instead of assuming `primary` means five hours;
 - use several observations and conservative timestamp tolerances;
-- run the stable interactive `codex [PROMPT]` TUI under Windows ConPTY for the
+- submit the one approved trigger as an ephemeral `thread/start` plus a single
+  `turn/start` on that same app-server connection for the
   one approved trigger;
 - launch native Codex executables directly and Windows `.cmd` shims through
   `cmd.exe`, never by passing a shim to `CreateProcessW`;
@@ -41,7 +42,7 @@ Sentinel does not:
 
 ```text
 Observation:  Sentinel -> local codex app-server -> OpenAI
-Trigger:      Sentinel -> Windows ConPTY -> interactive Codex CLI -> OpenAI
+Trigger:      Sentinel -> local codex app-server -> OpenAI
 Verification: Sentinel -> local codex app-server -> OpenAI
 ```
 
@@ -57,13 +58,13 @@ rollover timestamp when applicable, selected model, reasoning level, sanitized
 process outcome, lifecycle state, and observed classifier state. They never
 contain the two-character input, Codex output, credentials, or account data.
 
-The interactive trigger timing strategy was adapted from the MIT-licensed
+The original interactive trigger timing strategy was adapted from the MIT-licensed
 [CCLimitPing](https://github.com/wavever/CCLimitPing). See
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Requirements and Setup
 
-- Windows 10 version 1809 or newer, or Windows 11, with ConPTY.
+- Windows 10 or Windows 11.
 - Python 3.11 or newer. Python 3.12 is preferred but not required.
 - A current installed Codex CLI/app signed into the intended ChatGPT subscription.
 
@@ -93,7 +94,7 @@ OpenAI API key.
 ```
 
 - `doctor` verifies native Codex discovery, version, app-server handshake,
-  subscription rate-limit availability, and Windows ConPTY availability. It
+  subscription rate-limit availability, and the model a trigger would resolve. It
   never sends a model request.
 - `status` adds one read-only observation and classifies recent safe history.
 - `sample` takes four reads at 10-second intervals by default.
@@ -109,10 +110,13 @@ OpenAI API key.
   It additionally requires every five-hour observation to report zero percent
   used and applies a full 18,000-second cooldown after any possibly sent request.
 
-The Phase 2 defaults are internal and injectable: `gpt-5.4-mini`, `low`
-reasoning, and the two-character input `ok`. The installed native model catalog
-described that model as small and cost-efficient and confirmed `low` support at
-implementation time. Sentinel has no fallback or automatic escalation.
+Sentinel does not persist a model name. Immediately before every trigger it
+reads `model/list` from the installed runtime and selects the visible default
+model whose `upgrade` pointer is null, using that model's own advertised default
+reasoning effort. A model carrying an `upgrade` pointer has been superseded and
+is the exact condition that produces a deprecation interstitial, so it is never
+selected. If no model qualifies, Sentinel refuses to trigger rather than guess.
+The input is the two-character message `ok`.
 
 ## Trigger Safety Gates
 
@@ -130,27 +134,25 @@ window below 99% used and not blocked.
 usage across the evidence set, and no possibly sent bootstrap request during the
 previous full five-hour window. It does not invent a historical rollover.
 
-The interactive child receives a copy of the current environment with only
-`TERM=xterm-256color` enforced, so an automation parent's `TERM=dumb` cannot add
-an unseen confirmation gate. Sentinel launches only inside its empty dedicated
-`%LOCALAPPDATA%\CodexWindowSentinel\trigger-workspace` directory. If Codex shows
-its one-time trust screen, Sentinel confirms only the complete expected prompt
-for that exact path after the user-authorized trigger has passed every quota
-gate. Codex then persists trust for that one workspace in its normal user config.
-Any content in the workspace, different path, TERM warning, trust-write error, or
-other startup prompt fails closed. Sentinel never trusts the user's current repo.
+The trigger thread is created with `ephemeral: true`, `sandbox: read-only`,
+`approvalPolicy: never`, `config: {"mcp_servers": {}}`, and a `cwd` of Sentinel's
+dedicated `%LOCALAPPDATA%\CodexWindowSentinel\trigger-workspace` directory, so the
+request cannot load MCP servers, write files, request approvals, or persist a
+thread. Sentinel opts out of `experimentalApi` and sends no parameter that
+requires it. There is no directory-trust prompt on this path because the
+app-server has no such concept.
 
-Sentinel writes the reservation and `launch_attempted` state before starting
-Codex. A definite failure before process creation becomes `failed_recoverable`
-and does not burn the opportunity. Once process creation may have occurred,
-Sentinel always performs read-only verification and blocks another request even
-when the terminal outcome is ambiguous. A fresh bare reservation is treated as
-active for two minutes, then becomes recoverable after a restart.
+Sentinel writes the reservation and `launch_attempted` state before submitting
+the turn. A rejection that Codex emits before dispatching the request, which the
+JSON-RPC codes -32600, -32601, and -32602 identify, becomes `failed_recoverable`
+and does not burn the opportunity. Once `turn/start` has been transmitted by any
+other path, Sentinel always performs read-only verification and blocks another
+request even when the lifecycle outcome is ambiguous. A fresh bare reservation is
+treated as active for two minutes, then becomes recoverable after a restart.
 
-The ConPTY controller distinguishes terminal startup, the exact trust screen,
-the main composer, positional-prompt submission, and observable turn activity.
-It still does not claim semantic model completion. The quota observer remains
-the authority for anchoring.
+`turn/started`, `turn/completed`, and protocol errors are recorded as diagnostics
+only. A completed turn is not success. The quota observer remains the sole
+authority for anchoring.
 
 ## Controlled Live Rollover Test
 
@@ -209,7 +211,9 @@ Live read-only checks are explicit:
 
 - `codex_not_found`: install/update Codex or ensure its native executable is available.
 - `authentication_unavailable`: sign into Codex with the intended ChatGPT subscription.
-- `interactive_tty_unavailable`: use supported Windows with ConPTY.
+- `model_unavailable`: `model/list` failed or every visible model is superseded.
+- `thread_start_rejected` or `turn_start_rejected`: Codex refused the request
+  before dispatching it, so the opportunity stays recoverable.
 - `WEEKLY_UNAVAILABLE` or `WEEKLY_EXHAUSTED`: Sentinel refuses to consume quota.
 - `ROLLOVER_BOUNDARY_UNKNOWN`: run `sample` during an anchored window, then retry
   only after that recorded reset.

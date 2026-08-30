@@ -14,10 +14,10 @@ import time
 from typing import Any, Sequence
 
 from . import __version__
-from ._conpty import conpty_available
 from .chain import ChainCoordinator, ChainPolicy, ChainResult
 from .classifier import Classification, classify
 from .history import SafeHistory, default_history_path
+from .models import select_trigger_model
 from .protocol import AppServerClient
 from .quota import QuotaSnapshot, QuotaWindow, normalize_rate_limits, select_five_hour
 from .transport import (
@@ -27,7 +27,7 @@ from .transport import (
     read_codex_version,
 )
 from .trigger import (
-    InteractiveCodexTrigger,
+    AppServerTrigger,
     TriggerConfig,
     dedicated_trigger_workspace,
 )
@@ -137,12 +137,25 @@ def run_doctor() -> int:
         print(f"Codex version: {session.codex_version}")
         print(f"App-server handshake: OK ({session.platform_os})")
         print(f"Subscription rate limits: available ({len(snapshot.windows)} window(s))")
-        print(f"Interactive trigger transport: {'available' if conpty_available() else 'unavailable'} (Windows ConPTY)")
+        print("Trigger transport: local app-server turn (thread/start + turn/start)")
+        print(f"Trigger model: {_describe_trigger_model(session)}")
         print(f"Safe log: {default_history_path()}")
         print("Doctor boundary: read-only checks only; no model request was sent.")
         return 0
     finally:
         session.close()
+
+
+def _describe_trigger_model(session: RuntimeSession) -> str:
+    """Read-only preview of the model a trigger would resolve. Sends no request."""
+    try:
+        choice = select_trigger_model(session.client.list_models())
+    except Exception:
+        return "unavailable (model/list failed)"
+    if choice is None:
+        return "none usable (every visible model is superseded)"
+    effort = choice.reasoning_effort or "provider default"
+    return f"{choice.model} / {effort}"
 
 
 def run_status(*, json_output: bool) -> int:
@@ -267,10 +280,10 @@ def _run_trigger_command(
     history = SafeHistory()
     session = connect()
     output = sys.stderr if json_output else sys.stdout
-    trigger = InteractiveCodexTrigger(
-        session.executable,
+    trigger = AppServerTrigger(
+        session.client,
         dedicated_trigger_workspace(history.path),
-        TriggerConfig(allow_workspace_trust=confirmed),
+        TriggerConfig(),
     )
 
     def collect(label: str) -> list[QuotaSnapshot]:
@@ -403,12 +416,12 @@ def _format_chain(result: ChainResult) -> str:
         f"Anchored: {'yes' if result.anchored else 'no'}",
         f"Request possibly sent: {'yes' if result.request_possibly_sent else 'no'}",
         f"Classifier: {result.classification.state} ({result.classification.confidence})",
-        f"Trigger: normal interactive Codex TUI via Windows ConPTY",
-        f"Model/reasoning: {description.model} / {description.reasoning_effort}",
+        "Trigger: one app-server turn (thread/start + turn/start)",
+        f"Model/reasoning: {description.model} / {description.reasoning_effort} (resolved from model/list)",
         f"Minimal input: {description.prompt_characters} characters (contents are not logged)",
     ]
     if result.terminal_outcome is not None:
-        lines.append(f"Terminal/process outcome: {result.terminal_outcome}")
+        lines.append(f"Turn lifecycle outcome: {result.terminal_outcome} (diagnostic only)")
     if result.attempt_state is not None:
         lines.append(f"Persisted attempt state: {result.attempt_state}")
     if result.mode == "bootstrap":

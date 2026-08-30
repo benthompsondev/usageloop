@@ -40,12 +40,12 @@ def unanchored(start=BOUNDARY + 20, *, used=0, weekly_used=10):
 class FakeTrigger:
     def __init__(self, result=None):
         self.calls = 0
-        self.result = result or TriggerRunResult("process_exited", True)
+        self.result = result or TriggerRunResult("turn_completed", True)
 
     def describe(self):
         return TriggerDescription(
-            mechanism="interactive_codex_tui_conpty",
-            model="gpt-5.4-mini",
+            mechanism="app_server_turn",
+            model="gpt-5.6-sol",
             reasoning_effort="low",
             prompt_characters=2,
         )
@@ -105,7 +105,7 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual([], self.history.trigger_attempts())
 
     def test_failed_launch_before_request_does_not_burn_rollover(self):
-        failed = FakeTrigger(TriggerRunResult("launch_failed", False))
+        failed = FakeTrigger(TriggerRunResult("turn_start_rejected", False))
         first = self.coordinator(failed).run(unanchored(), lambda: anchored())
         self.assertEqual("TRIGGER_NOT_SENT", first.status)
         self.assertFalse(first.request_possibly_sent)
@@ -116,13 +116,13 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual(1, working.calls)
 
     def test_ambiguous_terminal_outcome_still_verifies_observed_anchor(self):
-        trigger = FakeTrigger(TriggerRunResult("process_exited_early", True))
+        trigger = FakeTrigger(TriggerRunResult("turn_stream_unavailable", True))
         result = self.coordinator(trigger).run(unanchored(), lambda: anchored())
         self.assertEqual("ANCHOR_VERIFIED", result.status)
-        self.assertEqual("process_exited_early", result.terminal_outcome)
+        self.assertEqual("turn_stream_unavailable", result.terminal_outcome)
 
     def test_possible_request_without_anchor_is_not_retried(self):
-        trigger = FakeTrigger(TriggerRunResult("output_quiet", True))
+        trigger = FakeTrigger(TriggerRunResult("turn_timeout", True))
         first = self.coordinator(trigger).run(unanchored(), lambda: unanchored(BOUNDARY + 60))
         second = self.coordinator(trigger).run(unanchored(BOUNDARY + 100), lambda: anchored())
         self.assertEqual("ANCHOR_NOT_VERIFIED", first.status)
@@ -140,6 +140,32 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("VERIFICATION_UNAVAILABLE", first.status)
         self.assertEqual("ATTEMPT_ALREADY_RECORDED", second.status)
         self.assertEqual(1, trigger.calls)
+
+    def test_turn_error_lifecycle_still_defers_to_quota_verification(self):
+        trigger = FakeTrigger(TriggerRunResult("turn_error", True))
+        result = self.coordinator(trigger).run(unanchored(), lambda: anchored())
+        self.assertEqual("ANCHOR_VERIFIED", result.status)
+        self.assertEqual("turn_error", result.terminal_outcome)
+
+    def test_turn_timeout_still_defers_to_quota_verification(self):
+        trigger = FakeTrigger(TriggerRunResult("turn_timeout", True))
+        result = self.coordinator(trigger).run(unanchored(), lambda: anchored())
+        self.assertEqual("ANCHOR_VERIFIED", result.status)
+        self.assertEqual("turn_timeout", result.terminal_outcome)
+
+    def test_turn_completed_without_anchor_is_not_a_success(self):
+        trigger = FakeTrigger(TriggerRunResult("turn_completed", True))
+        result = self.coordinator(trigger).run(unanchored(), lambda: unanchored(BOUNDARY + 60))
+        self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
+        self.assertFalse(result.anchored)
+
+    def test_unresolved_model_never_starts_a_turn_or_burns_the_boundary(self):
+        trigger = FakeTrigger(TriggerRunResult("model_unavailable", False))
+        first = self.coordinator(trigger).run(unanchored(), lambda: anchored())
+        self.assertEqual("TRIGGER_NOT_SENT", first.status)
+        working = FakeTrigger()
+        second = self.coordinator(working).run(unanchored(BOUNDARY + 60), lambda: anchored())
+        self.assertEqual("ANCHOR_VERIFIED", second.status)
 
     def test_restart_during_fresh_reservation_blocks_then_recovers_after_lease(self):
         description = FakeTrigger().describe()
@@ -171,7 +197,7 @@ class ChainCoordinatorTests(unittest.TestCase):
             mode="rollover",
             idempotency_key=f"rollover:{BOUNDARY}",
             boundary_reset_at=BOUNDARY,
-            model="gpt-5.4-mini",
+            model="gpt-5.6-sol",
             reasoning_effort="low",
             now=BOUNDARY + 30,
         )
@@ -265,7 +291,7 @@ class BootstrapCoordinatorTests(unittest.TestCase):
         self.assertEqual(1, trigger.calls)
 
     def test_bootstrap_failed_launch_is_recoverable(self):
-        failed = FakeTrigger(TriggerRunResult("launch_failed", False))
+        failed = FakeTrigger(TriggerRunResult("turn_start_rejected", False))
         first = self.coordinator(failed).run_bootstrap(
             unanchored(), lambda: anchored(), confirmed=True
         )

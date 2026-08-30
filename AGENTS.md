@@ -6,9 +6,9 @@ this file only adds what is specific to this repository.
 ## What This Repo Is
 
 A Windows-first CLI that reads ChatGPT/Codex subscription rate-limit snapshots
-through a local `codex app-server`. Phase 2 adds bounded normal interactive
-Codex requests after a proven rollover or explicit first-window bootstrap,
-followed by Phase 1 verification. See
+through a local `codex app-server`. Phase 2 adds one bounded subscription-backed
+turn through that same app-server after a proven rollover or explicit
+first-window bootstrap, followed by Phase 1 verification. See
 `PROJECT_SPEC.md` for the contract.
 
 ## Commands
@@ -44,7 +44,7 @@ Codex-only rollover/bootstrap trigger and verification loop.
 Always:
 
 - Keep the app-server account/quota path observation-only; the only model request
-  is the approved interactive trigger after every safety gate passes.
+  is the approved `turn/start` trigger after every safety gate passes.
 - Use only the local Codex app-server for account communication.
 - Log allowlisted quota fields and sanitized error categories only.
 - Identify a five-hour window by duration, never by `primary` position alone.
@@ -52,22 +52,30 @@ Always:
 - Persist the trigger lifecycle; recover only definite pre-launch failures.
 - Reserve at most one possibly sent trigger for each rollover boundary or
   five-hour bootstrap cooldown.
-- Use the normal interactive Codex TUI through Windows ConPTY, then require
-  Phase 1 to observe `ANCHORED` before reporting verified success.
+- Trigger with one ephemeral `thread/start` plus one `turn/start`, then require
+  Phase 1 to observe `ANCHORED` before reporting verified success. Turn
+  lifecycle notifications are diagnostic only and never a success verdict.
+- Resolve the trigger model from `model/list` at request time. Never persist a
+  model name, and never select a model carrying an `upgrade` pointer.
+- Prefer the installed native Codex executable over an older PATH shim.
 
 Never:
 
 - Read or parse `auth.json`, tokens, account IDs, email, prompts, or threads.
 - Call private ChatGPT endpoints directly, including WHAM.
-- Send app-server `thread/*`, `turn/*`, keepalive, or reset-credit requests.
+- Send app-server methods beyond the allowlist: `initialize`, `initialized`,
+  `account/rateLimits/read`, `model/list`, `thread/start`, `turn/start`.
+- Send keepalive, reset-credit, or any other account-mutating request.
+- Parse rendered terminal output or automate the Codex TUI. See
+  `docs/TUI_TRIGGER_POSTMORTEM.md`.
 - Use `codex exec`, private endpoints, or direct credentials to trigger a window.
-- Log the trigger input, model output, or process output.
+- Opt into `experimentalApi`, or send parameters that require it.
+- Log the trigger input, model output, or thread contents.
 - Add telemetry, global PATH changes, admin requirements, or auto-start behavior.
 - Retry when a request may already have been submitted.
 - Push without Ben's explicit authorization and the required push workflow.
 
 Ask Ben first:
 
-- Any new runtime dependency, protocol method, security-boundary change beyond
-  the approved Phase 2 interactive request, GUI,
-  scheduled task, deployment, or publishing action.
+- Any new runtime dependency, protocol method beyond the allowlist above,
+  security-boundary change, GUI, scheduled task, deployment, or publishing action.

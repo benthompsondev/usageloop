@@ -1,286 +1,254 @@
-import unittest
-import os
-from pathlib import Path
-import sys
 import tempfile
-import time
-from unittest.mock import patch
+import unittest
+from pathlib import Path
 
-from sentinel._conpty import ConPtyError, ConPtyResult, run_conpty
-from sentinel.transport import build_codex_command
-from sentinel.trigger import (
-    CodexTuiController,
-    InteractiveCodexTrigger,
-    TriggerConfig,
-    build_terminal_environment,
-    dedicated_trigger_workspace,
-)
+from sentinel.models import ModelChoice, select_trigger_model
+from sentinel.protocol import AppServerProtocolError, AppServerRequestRejected
+from sentinel.trigger import AppServerTrigger, TriggerConfig
 
 
-class InteractiveCodexTriggerTests(unittest.TestCase):
-    def test_inherited_dumb_term_becomes_supported_and_other_environment_is_preserved(self):
-        environment = build_terminal_environment(
-            {"Term": "dumb", "SENTINEL_PRESERVE": "unchanged"}
-        )
-        self.assertEqual("xterm-256color", environment["TERM"])
-        self.assertNotIn("Term", environment)
-        self.assertEqual("unchanged", environment["SENTINEL_PRESERVE"])
+def catalog_entry(identifier, *, default=False, hidden=False, upgrade=None, efforts=("low", "medium"), default_effort="low"):
+    return {
+        "id": identifier,
+        "isDefault": default,
+        "hidden": hidden,
+        "upgrade": upgrade,
+        "defaultReasoningEffort": default_effort,
+        "supportedReasoningEfforts": [{"reasoningEffort": value} for value in efforts],
+    }
 
-    def test_dedicated_workspace_is_selected_beside_the_safe_history(self):
+
+#: Shape captured from the installed runtime during the live experiment.
+LIVE_CATALOG = [
+    catalog_entry("gpt-5.6-sol", default=True, efforts=("low", "medium", "high"), default_effort="low"),
+    catalog_entry("gpt-5.6-terra", default_effort="medium"),
+    catalog_entry("gpt-5.6-luna", default_effort="medium"),
+    catalog_entry("gpt-5.4", upgrade="gpt-5.6-terra"),
+    catalog_entry("gpt-5.4-mini", upgrade="gpt-5.6-luna"),
+]
+
+
+class FakeClient:
+    def __init__(self, catalog=None, *, thread_id="thread-1", thread_error=None,
+                 turn_error=None, turn_outcome="turn_completed", models_error=None):
+        self.catalog = LIVE_CATALOG if catalog is None else catalog
+        self.thread_id = thread_id
+        self.thread_error = thread_error
+        self.turn_error = turn_error
+        self.turn_outcome = turn_outcome
+        self.models_error = models_error
+        self.thread_params = None
+        self.turn_params = None
+        self.turn_calls = 0
+        self.model_list_calls = 0
+
+    def list_models(self):
+        self.model_list_calls += 1
+        if self.models_error is not None:
+            raise self.models_error
+        return self.catalog
+
+    def start_thread(self, params):
+        self.thread_params = params
+        if self.thread_error is not None:
+            raise self.thread_error
+        return self.thread_id
+
+    def start_turn(self, params):
+        self.turn_calls += 1
+        self.turn_params = params
+        if self.turn_error is not None:
+            raise self.turn_error
+
+    def await_turn_end(self, *, timeout):
+        if isinstance(self.turn_outcome, Exception):
+            raise self.turn_outcome
+        return self.turn_outcome
+
+
+def rejected(code):
+    return AppServerRequestRejected("turn/start", {"code": code, "message": "rejected"})
+
+
+class ModelSelectionTests(unittest.TestCase):
+    def test_selects_visible_default_model_and_its_advertised_effort(self):
+        choice = select_trigger_model(LIVE_CATALOG)
+        self.assertEqual(ModelChoice("gpt-5.6-sol", "low", True), choice)
+
+    def test_excludes_superseded_models_carrying_an_upgrade_pointer(self):
+        catalog = [
+            catalog_entry("gpt-5.4-mini", default=True, upgrade="gpt-5.6-luna"),
+            catalog_entry("gpt-5.6-luna"),
+        ]
+        choice = select_trigger_model(catalog)
+        self.assertIsNotNone(choice)
+        self.assertEqual("gpt-5.6-luna", choice.model)
+
+    def test_excludes_hidden_models(self):
+        catalog = [catalog_entry("hidden-default", default=True, hidden=True), catalog_entry("visible")]
+        self.assertEqual("visible", select_trigger_model(catalog).model)
+
+    def test_falls_back_to_first_usable_model_when_none_is_marked_default(self):
+        catalog = [catalog_entry("first"), catalog_entry("second")]
+        choice = select_trigger_model(catalog)
+        self.assertEqual("first", choice.model)
+        self.assertFalse(choice.is_default)
+
+    def test_returns_none_when_every_model_is_superseded_or_hidden(self):
+        catalog = [
+            catalog_entry("old", default=True, upgrade="new"),
+            catalog_entry("secret", hidden=True),
+        ]
+        self.assertIsNone(select_trigger_model(catalog))
+
+    def test_effort_falls_back_when_default_effort_is_not_advertised(self):
+        catalog = [catalog_entry("m", default=True, efforts=("medium",), default_effort="low")]
+        self.assertEqual("medium", select_trigger_model(catalog).reasoning_effort)
+
+    def test_effort_is_none_when_runtime_advertises_none(self):
+        catalog = [catalog_entry("m", default=True, efforts=(), default_effort=None)]
+        self.assertIsNone(select_trigger_model(catalog).reasoning_effort)
+
+    def test_ignores_malformed_catalog_entries(self):
+        catalog = ["nonsense", {"id": 5}, {"id": "bad name!"}, catalog_entry("good")]
+        self.assertEqual("good", select_trigger_model(catalog).model)
+
+
+class TriggerParameterTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.workspace = Path(self.directory.name) / "trigger-workspace"
+
+    def trigger(self, client, config=None):
+        return AppServerTrigger(client, self.workspace, config or TriggerConfig())
+
+    def test_thread_parameters_are_bounded_and_ephemeral(self):
+        client = FakeClient()
+        trigger = self.trigger(client)
+        trigger.run()
         self.assertEqual(
-            Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace"),
-            dedicated_trigger_workspace(
-                Path("C:/LocalApp/CodexWindowSentinel/sentinel.jsonl")
-            ),
+            {
+                "ephemeral": True,
+                "sandbox": "read-only",
+                "approvalPolicy": "never",
+                "cwd": str(self.workspace),
+                "config": {"mcp_servers": {}},
+                "model": "gpt-5.6-sol",
+            },
+            client.thread_params,
         )
 
-    def test_exact_trust_prompt_for_dedicated_workspace_is_confirmed(self):
-        workspace = Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace")
-        controller = CodexTuiController(workspace, allow_workspace_trust=True)
-        response = controller.receive(_trust_screen(workspace))
-        self.assertEqual(b"\r", response)
-        self.assertIn("trust_prompt", controller.events)
-        self.assertIn("trust_confirmed", controller.events)
-        self.assertEqual(0.5, controller.response_delay_seconds)
-        self.assertIsNone(controller.failure_outcome)
+    def test_thread_parameters_omit_capability_gated_fields(self):
+        client = FakeClient()
+        self.trigger(client).run()
+        self.assertNotIn("allowProviderModelFallback", client.thread_params)
 
-    def test_fragmented_exact_trust_prompt_waits_for_complete_screen(self):
-        workspace = Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace")
-        controller = CodexTuiController(workspace, allow_workspace_trust=True)
-        screen = _trust_screen(workspace)
-        split_at = screen.index(b"1. Yes")
-        self.assertEqual(b"", controller.receive(screen[:split_at]))
-        self.assertIsNone(controller.failure_outcome)
-        self.assertEqual(b"\r", controller.receive(screen[split_at:]))
+    def test_turn_sends_one_minimal_text_input_with_attribution(self):
+        client = FakeClient()
+        self.trigger(client).run()
+        self.assertEqual("thread-1", client.turn_params["threadId"])
+        self.assertEqual([{"type": "text", "text": "ok"}], client.turn_params["input"])
+        self.assertEqual("low", client.turn_params["effort"])
+        self.assertEqual("codex-window-sentinel", client.turn_params["turnTrigger"])
 
-    def test_exact_trust_prompt_without_explicit_permission_is_not_confirmed(self):
-        workspace = Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace")
-        controller = CodexTuiController(workspace, allow_workspace_trust=False)
-        response = controller.receive(_trust_screen(workspace))
-        self.assertEqual(b"", response)
-        self.assertEqual("workspace_trust_required", controller.failure_outcome)
+    def test_turn_omits_effort_when_runtime_advertises_none(self):
+        client = FakeClient(catalog=[catalog_entry("m", default=True, efforts=(), default_effort=None)])
+        self.trigger(client).run()
+        self.assertNotIn("effort", client.turn_params)
 
-    def test_trust_prompt_for_wrong_path_is_not_confirmed(self):
-        workspace = Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace")
-        controller = CodexTuiController(workspace, allow_workspace_trust=True)
-        response = controller.receive(_trust_screen(Path("C:/Users/Ben/project")))
-        self.assertEqual(b"", response)
-        self.assertEqual("unexpected_trust_path", controller.failure_outcome)
-        self.assertNotIn("trust_confirmed", controller.events)
+    def test_description_reports_resolved_model_not_a_persisted_name(self):
+        client = FakeClient()
+        description = self.trigger(client).describe()
+        self.assertEqual("app_server_turn", description.mechanism)
+        self.assertEqual("gpt-5.6-sol", description.model)
+        self.assertEqual("low", description.reasoning_effort)
 
-    def test_unexpected_tui_prompt_fails_closed(self):
-        controller = CodexTuiController(
-            Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace"),
-            allow_workspace_trust=True,
-        )
-        response = controller.receive(
-            b"Choose an unrelated setup option\r\n1. Continue\r\n2. Quit\r\nPress enter to continue"
-        )
-        self.assertEqual(b"", response)
-        self.assertEqual("unexpected_tui_prompt", controller.failure_outcome)
-
-    def test_main_composer_is_detected(self):
-        controller = CodexTuiController(
-            Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace"),
-            allow_workspace_trust=True,
-        )
-        controller.receive(b"> Ask Codex to do anything\r\n")
-        self.assertIn("main_composer_ready", controller.events)
-
-    def test_positional_request_submission_reaches_turn_activity(self):
-        controller = CodexTuiController(
-            Path("C:/LocalApp/CodexWindowSentinel/trigger-workspace"),
-            allow_workspace_trust=True,
-        )
-        controller.receive(b"> Ask Codex to do anything\r\n")
-        controller.receive(b"Working (0s - esc to interrupt)\r\n")
-        self.assertIn("positional_prompt_submitted", controller.events)
-        self.assertIn("turn_activity", controller.events)
-        self.assertTrue(controller.request_possibly_sent)
-        self.assertEqual("turn_activity_observed", controller.success_outcome)
-
-    def test_native_executable_uses_interactive_tui_not_exec(self):
-        trigger = InteractiveCodexTrigger(
-            Path("C:/Codex/codex.exe"),
-            Path("C:/Sentinel/trigger-workspace"),
-            TriggerConfig(model="gpt-5.4-mini", reasoning_effort="low", prompt="ok"),
-        )
-        command = trigger.command()
-        self.assertEqual(
-            [
-                "C:\\Codex\\codex.exe",
-                "-c",
-                "model_reasoning_effort=low",
-                "-m",
-                "gpt-5.4-mini",
-                "--no-alt-screen",
-                "-s",
-                "read-only",
-                "-a",
-                "never",
-                "-C",
-                "C:\\Sentinel\\trigger-workspace",
-                "ok",
-            ],
-            command,
-        )
-        self.assertNotIn("exec", command)
-
-    @patch.dict("os.environ", {"COMSPEC": "C:\\Windows\\System32\\cmd.exe"})
-    def test_cmd_shim_is_wrapped_in_command_interpreter(self):
-        trigger = InteractiveCodexTrigger(
-            Path("C:/Users/Ben/AppData/Roaming/npm/codex.cmd"),
-            Path("C:/Sentinel/trigger-workspace"),
-        )
-        command = trigger.command()
-        self.assertEqual("C:\\Windows\\System32\\cmd.exe", command[0])
-        self.assertEqual(
-            ["/d", "/c", "C:\\Users\\Ben\\AppData\\Roaming\\npm\\codex.cmd"],
-            command[1:4],
-        )
-        self.assertNotIn("exec", command)
-
-    @unittest.skipUnless(os.name == "nt", "Windows ConPTY fixture")
-    def test_cmd_shim_launches_through_conpty_without_bad_exe_format(self):
-        with tempfile.TemporaryDirectory(prefix="sentinel shim ") as directory:
-            root = Path(directory)
-            shim = root / "codex.cmd"
-            shim.write_text("@exit /b 0\n", encoding="utf-8")
-            result = run_conpty(
-                build_codex_command(shim, "--version"),
-                cwd=root,
-                min_runtime_seconds=0,
-                quiet_seconds=0.1,
-                max_runtime_seconds=2,
-                exit_grace_seconds=0.1,
-            )
-        self.assertEqual("process_exited", result.terminal_outcome)
-
-    @unittest.skipUnless(os.name == "nt", "Windows ConPTY fixture")
-    def test_native_executable_launches_directly_through_conpty(self):
-        executable = Path(os.environ.get("COMSPEC", "C:/Windows/System32/cmd.exe"))
-        with tempfile.TemporaryDirectory() as directory:
-            result = run_conpty(
-                [str(executable), "/d", "/c", "exit", "0"],
-                cwd=Path(directory),
-                min_runtime_seconds=0,
-                quiet_seconds=0.1,
-                max_runtime_seconds=2,
-                exit_grace_seconds=0.1,
-            )
-        self.assertEqual("process_exited", result.terminal_outcome)
-
-    @unittest.skipUnless(os.name == "nt", "Windows ConPTY fixture")
-    def test_conpty_child_receives_terminal_standard_handles(self):
-        captured = bytearray()
-
-        def capture_output(output_fd, activity, _input_fd, _controller):
-            try:
-                while chunk := os.read(output_fd, 4096):
-                    captured.extend(chunk)
-                    activity[0] = time.monotonic()
-            finally:
-                os.close(output_fd)
-
-        with tempfile.TemporaryDirectory() as directory:
-            with patch("sentinel._conpty._drain_output", side_effect=capture_output):
-                result = run_conpty(
-                    [
-                        sys.executable,
-                        "-c",
-                        "import sys; print(f'terminal={sys.stdin.isatty() and sys.stdout.isatty()}')",
-                    ],
-                    cwd=Path(directory),
-                    min_runtime_seconds=0,
-                    quiet_seconds=0.1,
-                    max_runtime_seconds=2,
-                    exit_grace_seconds=0.1,
-                )
-        self.assertEqual(0, result.exit_code)
-        self.assertIn(b"terminal=True", captured)
-
-    @unittest.skipUnless(os.name == "nt", "Windows ConPTY fixture")
-    def test_controller_waits_for_explicit_state_instead_of_generic_quiet(self):
-        class WaitingController:
-            stop_outcome = None
-            response_delay_seconds = 0.0
-
-            def receive(self, _chunk):
-                return b""
-
-        with tempfile.TemporaryDirectory() as directory:
-            result = run_conpty(
-                [sys.executable, "-c", "import time; time.sleep(2)"],
-                cwd=Path(directory),
-                min_runtime_seconds=0,
-                quiet_seconds=0.05,
-                max_runtime_seconds=0.4,
-                exit_grace_seconds=0.1,
-                controller=WaitingController(),
-            )
-        self.assertEqual("runtime_cap_reached", result.terminal_outcome)
-        self.assertGreaterEqual(result.runtime_seconds, 0.35)
-
-    @patch("sentinel.trigger.conpty_available", return_value=True)
-    @patch("sentinel.trigger.run_conpty")
-    def test_process_started_outcome_is_only_possibly_sent(self, run_conpty, _available):
-        run_conpty.return_value = ConPtyResult(5.0, 0, "process_exited")
-        with tempfile.TemporaryDirectory() as directory:
-            trigger = InteractiveCodexTrigger(
-                Path("C:/Codex/codex.exe"), Path(directory) / "trigger-workspace"
-            )
-            result = trigger.run()
-        self.assertTrue(result.request_possibly_sent)
-        self.assertEqual("process_exited", result.terminal_outcome)
-        environment = run_conpty.call_args.kwargs["environment"]
-        self.assertEqual("xterm-256color", environment["TERM"])
-
-    @patch("sentinel.trigger.conpty_available", return_value=True)
-    @patch("sentinel.trigger.run_conpty")
-    def test_nonempty_dedicated_workspace_fails_before_launch(self, run_conpty, _available):
-        with tempfile.TemporaryDirectory() as directory:
-            workspace = Path(directory) / "trigger-workspace"
-            workspace.mkdir()
-            (workspace / "AGENTS.md").write_text("untrusted instructions", encoding="utf-8")
-            trigger = InteractiveCodexTrigger(Path("C:/Codex/codex.exe"), workspace)
-            result = trigger.run()
-        self.assertEqual("workspace_unsafe", result.terminal_outcome)
-        self.assertFalse(result.request_possibly_sent)
-        run_conpty.assert_not_called()
-
-    @patch("sentinel.trigger.conpty_available", return_value=True)
-    @patch("sentinel.trigger.run_conpty")
-    def test_create_process_failure_is_definitely_not_sent(self, run_conpty, _available):
-        run_conpty.side_effect = ConPtyError("could not launch", process_started=False)
-        with tempfile.TemporaryDirectory() as directory:
-            trigger = InteractiveCodexTrigger(
-                Path("C:/Codex/codex.exe"), Path(directory) / "trigger-workspace"
-            )
-            result = trigger.run()
-        self.assertFalse(result.request_possibly_sent)
-        self.assertEqual("launch_failed", result.terminal_outcome)
-
-    def test_description_reports_prompt_length_not_contents(self):
-        trigger = InteractiveCodexTrigger(
-            Path("C:/Codex/codex.exe"),
-            Path("C:/Sentinel/trigger-workspace"),
-            TriggerConfig(prompt="private trigger text"),
-        )
-        description = trigger.describe()
+    def test_description_never_leaks_prompt_contents(self):
+        client = FakeClient()
+        description = self.trigger(client, TriggerConfig(prompt="private trigger text")).describe()
         self.assertEqual(len("private trigger text"), description.prompt_characters)
         self.assertNotIn("private", repr(description))
 
+    def test_model_is_resolved_once_per_trigger(self):
+        client = FakeClient()
+        trigger = self.trigger(client)
+        trigger.describe()
+        trigger.run()
+        self.assertEqual(1, client.model_list_calls)
 
-def _trust_screen(workspace: Path) -> bytes:
-    return (
-        f"> You are in {workspace}\r\n\r\n"
-        "Do you trust the contents of this directory? Working with untrusted contents comes "
-        "with higher risk of prompt injection. Trusting the directory allows project-local "
-        "config, hooks, and exec policies to load.\r\n\r\n"
-        "1. Yes, continue\r\n"
-        "2. No, quit\r\n\r\n"
-        "Press enter to continue\r\n"
-    ).encode()
+
+class TriggerOutcomeTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.workspace = Path(self.directory.name) / "trigger-workspace"
+
+    def trigger(self, client):
+        return AppServerTrigger(client, self.workspace, TriggerConfig())
+
+    def test_exactly_one_turn_is_submitted_on_success(self):
+        client = FakeClient()
+        result = self.trigger(client).run()
+        self.assertEqual(1, client.turn_calls)
+        self.assertEqual("turn_completed", result.terminal_outcome)
+        self.assertTrue(result.request_possibly_sent)
+
+    def test_unusable_catalog_refuses_to_trigger(self):
+        client = FakeClient(catalog=[catalog_entry("old", default=True, upgrade="new")])
+        result = self.trigger(client).run()
+        self.assertEqual(("model_unavailable", False), (result.terminal_outcome, result.request_possibly_sent))
+        self.assertEqual(0, client.turn_calls)
+
+    def test_model_list_failure_refuses_to_trigger(self):
+        client = FakeClient(models_error=AppServerProtocolError("boom", "no models"))
+        result = self.trigger(client).run()
+        self.assertEqual(("model_unavailable", False), (result.terminal_outcome, result.request_possibly_sent))
+        self.assertEqual(0, client.turn_calls)
+
+    def test_thread_rejection_leaves_the_opportunity_recoverable(self):
+        client = FakeClient(thread_error=AppServerRequestRejected("thread/start", {"code": -32600}))
+        result = self.trigger(client).run()
+        self.assertEqual(("thread_start_rejected", False), (result.terminal_outcome, result.request_possibly_sent))
+        self.assertEqual(0, client.turn_calls)
+
+    def test_pre_dispatch_turn_rejection_is_not_possibly_sent(self):
+        for code in (-32600, -32601, -32602):
+            with self.subTest(code=code):
+                client = FakeClient(turn_error=rejected(code))
+                result = self.trigger(client).run()
+                self.assertEqual("turn_start_rejected", result.terminal_outcome)
+                self.assertFalse(result.request_possibly_sent)
+
+    def test_other_turn_errors_are_treated_as_possibly_sent(self):
+        client = FakeClient(turn_error=rejected(-32000))
+        result = self.trigger(client).run()
+        self.assertEqual("turn_start_error", result.terminal_outcome)
+        self.assertTrue(result.request_possibly_sent)
+
+    def test_transport_failure_after_submission_is_possibly_sent(self):
+        client = FakeClient(turn_error=OSError("pipe closed"))
+        result = self.trigger(client).run()
+        self.assertEqual("turn_start_unconfirmed", result.terminal_outcome)
+        self.assertTrue(result.request_possibly_sent)
+
+    def test_turn_timeout_is_reported_but_still_possibly_sent(self):
+        client = FakeClient(turn_outcome="turn_timeout")
+        result = self.trigger(client).run()
+        self.assertEqual("turn_timeout", result.terminal_outcome)
+        self.assertTrue(result.request_possibly_sent)
+
+    def test_turn_error_notification_is_reported_but_still_possibly_sent(self):
+        client = FakeClient(turn_outcome="turn_error")
+        result = self.trigger(client).run()
+        self.assertEqual("turn_error", result.terminal_outcome)
+        self.assertTrue(result.request_possibly_sent)
+
+    def test_lifecycle_stream_failure_is_still_possibly_sent(self):
+        client = FakeClient(turn_outcome=OSError("stream gone"))
+        result = self.trigger(client).run()
+        self.assertEqual("turn_stream_unavailable", result.terminal_outcome)
+        self.assertTrue(result.request_possibly_sent)
 
 
 if __name__ == "__main__":

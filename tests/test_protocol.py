@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sentinel.protocol import (
     AppServerClient,
+    AppServerRequestRejected,
     AuthenticationUnavailableError,
     merge_sparse_rate_limits,
 )
@@ -135,6 +136,86 @@ class ExecutableResolutionTests(unittest.TestCase):
                 transport.read_line(timeout=5)
             transport.close()
         self.assertEqual("app_server_unavailable", caught.exception.category)
+
+
+
+
+class TurnProtocolTests(unittest.TestCase):
+    def client(self, incoming):
+        fixture = messages()
+        transport = MemoryTransport([fixture["initialize_result"], *incoming])
+        client = AppServerClient(transport, client_version="0.1.0")
+        client.initialize()
+        return client, transport
+
+    def test_thread_start_accepts_current_and_nested_identifier_shapes(self):
+        for result in ({"threadId": "t-1"}, {"thread": {"id": "t-1"}}, {"id": "t-1"}):
+            with self.subTest(result=result):
+                client, _ = self.client([{"id": 2, "result": result}])
+                self.assertEqual("t-1", client.start_thread({"ephemeral": True}))
+
+    def test_pre_dispatch_rejection_is_distinguished_from_other_errors(self):
+        client, _ = self.client([{"id": 2, "error": {"code": -32600, "message": "requires experimentalApi capability"}}])
+        with self.assertRaises(AppServerRequestRejected) as caught:
+            client.start_thread({"allowProviderModelFallback": True})
+        self.assertTrue(caught.exception.rejected_before_dispatch)
+
+    def test_server_side_failure_is_not_treated_as_pre_dispatch(self):
+        client, _ = self.client([{"id": 2, "error": {"code": -32000, "message": "upstream failure"}}])
+        with self.assertRaises(AppServerRequestRejected) as caught:
+            client.start_turn({"threadId": "t-1", "input": []})
+        self.assertFalse(caught.exception.rejected_before_dispatch)
+
+    def test_model_list_returns_only_object_entries(self):
+        client, _ = self.client([{"id": 2, "result": {"data": [{"id": "m"}, "junk", 5]}}])
+        self.assertEqual([{"id": "m"}], client.list_models())
+
+    def test_await_turn_end_reports_completion_and_keeps_rate_notifications(self):
+        fixture = messages()
+        client, _ = self.client([
+            fixture["rate_notification"],
+            {"method": "turn/completed", "params": {"threadId": "t-1"}},
+        ])
+        self.assertEqual("turn_completed", client.await_turn_end(timeout=5))
+        self.assertEqual(1, len(client.drain_rate_limit_notifications()))
+
+    def test_await_turn_end_reports_error_notification(self):
+        client, _ = self.client([{"method": "error", "params": {"message": "boom"}}])
+        self.assertEqual("turn_error", client.await_turn_end(timeout=5))
+
+    def test_await_turn_end_reports_timeout_without_raising(self):
+        client, _ = self.client([])
+        self.assertEqual("turn_timeout", client.await_turn_end(timeout=0))
+
+    def test_turn_methods_are_gated_behind_the_handshake(self):
+        transport = MemoryTransport([])
+        client = AppServerClient(transport, client_version="0.1.0")
+        with self.assertRaises(Exception):
+            client.start_turn({"threadId": "t-1", "input": []})
+        self.assertEqual([], transport.sent)
+
+
+class NativePreferenceTests(unittest.TestCase):
+    def test_installed_native_binary_wins_over_a_stale_path_shim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path_dir = root / "npm"
+            path_dir.mkdir()
+            shim = path_dir / ("codex.cmd" if __import__("os").name == "nt" else "codex")
+            shim.touch()
+            native = root / "native" / ("codex.exe" if __import__("os").name == "nt" else "codex")
+            native.parent.mkdir()
+            native.touch()
+            found = find_codex_executable(path_value=str(path_dir), known_candidates=(native,))
+        self.assertEqual(native.resolve(), found)
+
+    def test_path_is_still_used_when_no_native_candidate_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            name = "codex.exe" if __import__("os").name == "nt" else "codex"
+            (root / name).touch()
+            found = find_codex_executable(path_value=str(root), known_candidates=())
+        self.assertEqual(name, found.name)
 
 
 if __name__ == "__main__":

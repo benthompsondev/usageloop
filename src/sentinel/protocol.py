@@ -30,6 +30,40 @@ class AuthenticationUnavailableError(AppServerProtocolError):
         )
 
 
+#: JSON-RPC codes the app-server emits when it rejects a request before dispatching
+#: it. Observed directly: sending an experimental-only thread parameter without the
+#: `experimentalApi` capability returns -32600 and starts nothing.
+PRE_DISPATCH_ERROR_CODES = frozenset({-32600, -32601, -32602})
+
+
+class AppServerRequestRejected(AppServerProtocolError):
+    """A method returned a JSON-RPC error object."""
+
+    def __init__(self, method: str, error: dict[str, Any]):
+        code = error.get("code")
+        self.code = code if isinstance(code, int) else None
+        self.method = method
+        super().__init__("app_server_rejected", f"Codex rejected {method}.")
+
+    @property
+    def rejected_before_dispatch(self) -> bool:
+        """True when Codex refused the request itself, so no model work began."""
+        return self.code in PRE_DISPATCH_ERROR_CODES
+
+
+def _extract_thread_id(result: dict[str, Any]) -> str | None:
+    for candidate in (result.get("threadId"), result.get("id")):
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    thread = result.get("thread")
+    if isinstance(thread, dict):
+        for key in ("threadId", "id"):
+            value = thread.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
 @dataclass(frozen=True)
 class ServerInfo:
     user_agent: str
@@ -98,6 +132,54 @@ class AppServerClient:
             raise AppServerProtocolError("protocol_unsupported", "Codex returned an unsupported rate-limit response.")
         return result
 
+    def list_models(self) -> list[dict[str, Any]]:
+        """Read the installed runtime's model catalog. Sends no model request."""
+        result = self._call("model/list", {})
+        data = result.get("data")
+        if not isinstance(data, list):
+            raise AppServerProtocolError("protocol_unsupported", "Codex returned an unsupported model list.")
+        return [entry for entry in data if isinstance(entry, dict)]
+
+    def start_thread(self, params: dict[str, Any]) -> str:
+        """Create a thread. Creating a thread does not start a turn or spend quota."""
+        result = self._call("thread/start", params)
+        thread_id = _extract_thread_id(result)
+        if thread_id is None:
+            raise AppServerProtocolError("protocol_unsupported", "Codex returned no usable thread identifier.")
+        return thread_id
+
+    def start_turn(self, params: dict[str, Any]) -> None:
+        """Submit exactly one turn. This is the only method that can spend quota."""
+        self._call("turn/start", params)
+
+    def await_turn_end(self, *, timeout: float) -> str:
+        """Wait for a bounded turn lifecycle signal. Diagnostic only, never the verdict."""
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return "turn_timeout"
+            try:
+                line = self.transport.read_line(timeout=remaining)
+            except Exception:
+                return "turn_stream_unavailable"
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(message, dict):
+                continue
+            method = message.get("method")
+            if method == "account/rateLimits/updated":
+                params = message.get("params")
+                if isinstance(params, dict) and isinstance(params.get("rateLimits"), dict):
+                    self._rate_notifications.append(params)
+                continue
+            if method == "turn/completed":
+                return "turn_completed"
+            if method == "error":
+                return "turn_error"
+
     def drain_rate_limit_notifications(self) -> list[dict[str, Any]]:
         notifications = self._rate_notifications
         self._rate_notifications = []
@@ -106,6 +188,20 @@ class AppServerClient:
     def close(self) -> None:
         self.transport.close()
         self._initialized = False
+
+    def _call(self, method: str, params: Any) -> dict[str, Any]:
+        if not self._initialized:
+            raise AppServerProtocolError("not_initialized", "The Codex app-server handshake is incomplete.")
+        request_id = self._request_id()
+        self._send({"method": method, "id": request_id, "params": params})
+        response = self._wait_for_response(request_id)
+        error = response.get("error")
+        if isinstance(error, dict):
+            raise AppServerRequestRejected(method, error)
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise AppServerProtocolError("protocol_unsupported", f"Codex returned an unsupported {method} response.")
+        return result
 
     def _request_id(self) -> int:
         value = self._next_id
