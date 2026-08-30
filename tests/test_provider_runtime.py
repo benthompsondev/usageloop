@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
@@ -79,20 +80,29 @@ class FakeSession:
 class CodexOperationRunnerTests(unittest.TestCase):
     def test_compatibility_probe_is_read_only_and_accepts_required_capabilities(self):
         with tempfile.TemporaryDirectory() as directory:
-            client = FakeClient([payload(18_000)])
+            client = FakeClient([payload(18_000)] * 4)
             session = FakeSession(client)
+            times = iter((100.0, 110.0, 120.0, 130.0))
             runner = CodexOperationRunner(
                 SafeHistory(Path(directory) / "history.jsonl"),
                 session_factory=lambda: session,
-                clock=lambda: 100.0,
+                clock=lambda: next(times),
                 sleep=lambda seconds: None,
             )
             result = runner.probe("runtime:new")
             self.assertTrue(result.compatible)
-            self.assertEqual(1, client.read_calls)
+            self.assertEqual(4, client.read_calls)
             self.assertEqual(0, client.thread_calls)
             self.assertEqual(0, client.turn_calls)
             self.assertTrue(session.closed)
+
+            observations = runner.history.load_recent(now=140.0, limit=4)
+            self.assertEqual(4, len(observations))
+            records = [
+                json.loads(line)
+                for line in runner.history.path.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertTrue(all(item["classification"] == "ANCHORED" for item in records))
 
     def test_missing_suitable_model_fails_compatibility_closed(self):
         with tempfile.TemporaryDirectory() as directory:

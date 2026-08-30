@@ -83,6 +83,13 @@ def provider_health(
             "neutral",
             "Installed and detected. Turn the main switch on to have windows kept ready.",
         )
+    if state.usage_checked_at is None:
+        return HealthRow(
+            state.display_name,
+            "Not checked",
+            "info",
+            "No five-hour window reading has been captured yet.",
+        )
     if compatible_identity is not None and compatible_identity == state.runtime_identity:
         return HealthRow(
             state.display_name,
@@ -224,6 +231,15 @@ def overall_summary(
             "Setup OK",
             "info",
             f"{PRODUCT.display_name} is installed correctly. Turn automation on when you are ready.",
+        )
+    if any(row.status == "Not checked" for row in rows) and any(
+        row.status == "Ready" for row in rows
+    ):
+        return HealthRow(
+            "Overall",
+            "Partly ready",
+            "info",
+            "At least one provider is ready, but another has not supplied a window reading yet.",
         )
     if not any(row.status == "Ready" for row in rows):
         return HealthRow(

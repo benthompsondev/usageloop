@@ -102,9 +102,16 @@ class ClaudeStatusLineIntegration:
         self,
         settings_path: Path | None = None,
         command: str | None = None,
+        *,
+        legacy_commands: tuple[str, ...] | None = None,
     ):
         self.settings_path = settings_path or Path.home() / ".claude" / "settings.json"
         self.command = command or default_statusline_command()
+        self.legacy_commands = (
+            default_legacy_statusline_commands()
+            if legacy_commands is None
+            else legacy_commands
+        )
 
     def ensure_registered(self) -> StatusLineRegistration:
         settings = self._load_settings()
@@ -114,15 +121,44 @@ class ClaudeStatusLineIntegration:
                 "Claude settings could not be read safely, so nothing was changed.",
             )
         current = settings.get("statusLine")
-        expected = {"type": "command", "command": self.command}
+        expected = self._expected_entry()
         if current == expected:
             return StatusLineRegistration(True, "Claude status caching is ready.")
-        if current is not None:
+        if current is not None and current not in self._owned_entries():
             return StatusLineRegistration(
                 False,
                 "Claude already has a custom status line. It will not be replaced.",
             )
         settings["statusLine"] = expected
+        if not self._write_settings(settings):
+            return StatusLineRegistration(
+                False,
+                "Claude settings could not be updated safely, so nothing was changed.",
+            )
+        return StatusLineRegistration(True, "Claude status caching is ready.")
+
+    def upgrade_owned_registration(self) -> bool:
+        """Upgrade only UsageLoop's exact legacy entry; never create or replace one."""
+        settings = self._load_settings()
+        if settings is None:
+            return False
+        current = settings.get("statusLine")
+        if current == self._expected_entry() or current not in self._owned_entries():
+            return False
+        settings["statusLine"] = self._expected_entry()
+        return self._write_settings(settings)
+
+    def remove_if_owned(self) -> bool:
+        settings = self._load_settings()
+        if settings is None:
+            return False
+        current = settings.get("statusLine")
+        if current not in self._owned_entries():
+            return False
+        settings.pop("statusLine")
+        return self._write_settings(settings)
+
+    def _write_settings(self, settings: dict[str, Any]) -> bool:
         temporary = self.settings_path.with_suffix(f"{self.settings_path.suffix}.sentinel.tmp")
         try:
             self.settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,31 +169,33 @@ class ClaudeStatusLineIntegration:
             os.replace(temporary, self.settings_path)
         except OSError:
             temporary.unlink(missing_ok=True)
-            return StatusLineRegistration(
-                False,
-                "Claude settings could not be updated safely, so nothing was changed.",
-            )
-        return StatusLineRegistration(True, "Claude status caching is ready.")
-
-    def remove_if_owned(self) -> bool:
-        settings = self._load_settings()
-        if settings is None:
-            return False
-        expected = {"type": "command", "command": self.command}
-        if settings.get("statusLine") != expected:
-            return False
-        settings.pop("statusLine")
-        temporary = self.settings_path.with_suffix(f"{self.settings_path.suffix}.sentinel.tmp")
-        try:
-            temporary.write_text(
-                json.dumps(settings, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            os.replace(temporary, self.settings_path)
-        except OSError:
-            temporary.unlink(missing_ok=True)
             return False
         return True
+
+    def _expected_entry(self) -> dict[str, Any]:
+        return {
+            "type": "command",
+            "command": self.command,
+            "refreshInterval": 30,
+        }
+
+    def _legacy_owned_entry(self) -> dict[str, str]:
+        return {"type": "command", "command": self.command}
+
+    def _owned_entries(self) -> list[dict[str, Any]]:
+        entries = [self._expected_entry(), self._legacy_owned_entry()]
+        for command in self.legacy_commands:
+            entries.extend(
+                (
+                    {"type": "command", "command": command},
+                    {
+                        "type": "command",
+                        "command": command,
+                        "refreshInterval": 30,
+                    },
+                )
+            )
+        return entries
 
     def _load_settings(self) -> dict[str, Any] | None:
         if not self.settings_path.exists():
@@ -175,6 +213,21 @@ def default_statusline_command() -> str:
         return f'"{helper}"'
     sentinel = Path(sys.executable).with_name("sentinel.exe")
     return f'"{sentinel}" claude-statusline-record'
+
+
+def default_legacy_statusline_commands() -> tuple[str, ...]:
+    if not getattr(sys, "frozen", False):
+        return ()
+    local_app_data = Path(
+        os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")
+    )
+    helper = (
+        local_app_data
+        / "Programs"
+        / "Window Sentinel"
+        / PRODUCT.claude_status_helper_name
+    )
+    return (f'"{helper}"',)
 
 
 def render_statusline(payload: object, *, now: float | None = None) -> str:

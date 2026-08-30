@@ -172,13 +172,54 @@ class ApplicationControllerTests(unittest.TestCase):
                 "claude",
                 "Claude Code",
                 True,
-                True,
+                False,
                 "Needs attention",
                 "Capability missing.",
                 runtime_identity="runtime:1",
             )
             controller.refresh_local_states()
             self.assertEqual("Needs attention", controller.states["claude"].status)
+
+    def test_newer_verified_evidence_recovers_a_temporary_needs_attention_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = FakeProvider(
+                ProviderViewState(
+                    "codex",
+                    "Codex",
+                    True,
+                    True,
+                    "Ready",
+                    "Four fixed-reset observations.",
+                    runtime_identity="runtime:1",
+                    reset_at=1000,
+                    last_verified_at=200,
+                    used_percent=15,
+                    usage_checked_at=200,
+                )
+            )
+            controller = ApplicationController(
+                [provider], AppStateStore(Path(directory) / "state.json")
+            )
+            controller.start()
+            controller.states["codex"] = ProviderViewState(
+                "codex",
+                "Codex",
+                True,
+                True,
+                "Needs attention",
+                "One observation was inconclusive.",
+                runtime_identity="runtime:1",
+                reset_at=1000,
+                used_percent=0,
+                usage_checked_at=100,
+            )
+
+            controller.refresh_local_states()
+
+            recovered = controller.states["codex"]
+            self.assertEqual("Ready", recovered.status)
+            self.assertEqual(200, recovered.last_verified_at)
+            self.assertEqual(15, recovered.used_percent)
 
 
 if __name__ == "__main__":

@@ -52,19 +52,25 @@ class CodexOperationRunner:
         session = None
         try:
             session = self._session_factory()
-            observed_at = self._clock()
-            raw = session.client.read_rate_limits()
-            snapshot = normalize_rate_limits(raw, observed_at)
+            observations: list[QuotaSnapshot] = []
+            for index in range(4):
+                observed_at = self._clock()
+                raw = session.client.read_rate_limits()
+                session.client.drain_rate_limit_notifications()
+                observations.append(normalize_rate_limits(raw, observed_at))
+                if index < 3:
+                    self._sleep(10.0)
             models = session.client.list_models()
             choice = select_trigger_model(models)
-            classification = classify([snapshot])
-            self.history.record_observation(
-                snapshot, classification, session.codex_version
-            )
+            classification = classify(observations)
+            for snapshot in observations:
+                self.history.record_observation(
+                    snapshot, classification, session.codex_version
+                )
             return CompatibilityResult.from_capabilities(
                 runtime_identity=runtime_identity,
                 initialized=True,
-                rate_limits_available=bool(snapshot.windows),
+                rate_limits_available=any(snapshot.windows for snapshot in observations),
                 model_catalog_available=bool(models),
                 suitable_model_available=choice is not None,
             )

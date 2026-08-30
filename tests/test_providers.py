@@ -110,15 +110,18 @@ class ProviderAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "claude.exe"
             executable.write_bytes(b"native")
+            integration = mock.Mock()
             provider = ClaudeProvider(
                 executable_finder=lambda: executable,
                 identity_reader=lambda path: "claude-file:1",
+                status_integration=integration,
             )
             state = provider.detect()
             self.assertTrue(state.installed)
             self.assertTrue(state.automation_supported)
             self.assertEqual("Waiting", state.status)
             self.assertIn("Compatibility", state.detail)
+            integration.upgrade_owned_registration.assert_called_once_with()
 
     def test_claude_version_change_reprobes_capability_not_version_string(self):
         with tempfile.TemporaryDirectory() as directory:

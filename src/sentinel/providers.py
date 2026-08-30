@@ -196,6 +196,7 @@ class ClaudeProvider:
             self._identity(executable),
             self._version(executable),
         )
+        self._statusline_integration().upgrade_owned_registration()
         status = self._quota_status_store().load()
         if status is None:
             return state

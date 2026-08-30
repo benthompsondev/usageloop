@@ -83,6 +83,7 @@ class ClaudeStatusStoreTests(unittest.TestCase):
                 executable_finder=lambda: executable,
                 identity_reader=lambda path: "runtime:1",
                 status_store=store,
+                status_integration=mock.Mock(),
                 operation_runner=runner,
                 now=lambda: 200,
             )
@@ -115,10 +116,74 @@ class ClaudeStatusStoreTests(unittest.TestCase):
             self.assertTrue(result.compatible)
             self.assertEqual("dark", saved["theme"])
             self.assertEqual(
-                {"type": "command", "command": '"C:/safe/helper.exe"'},
+                {
+                    "type": "command",
+                    "command": '"C:/safe/helper.exe"',
+                    "refreshInterval": 30,
+                },
                 saved["statusLine"],
             )
             self.assertTrue(integration.ensure_registered().compatible)
+
+    def test_registration_upgrades_its_own_pre_refresh_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "theme": "dark",
+                        "statusLine": {
+                            "type": "command",
+                            "command": '"C:/safe/helper.exe"',
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            integration = ClaudeStatusLineIntegration(path, '"C:/safe/helper.exe"')
+            changed = integration.upgrade_owned_registration()
+
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertTrue(changed)
+            self.assertEqual("dark", saved["theme"])
+            self.assertEqual(30, saved["statusLine"]["refreshInterval"])
+
+    def test_local_upgrade_replaces_only_the_exact_pre_rebrand_helper_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            legacy = '"C:/Programs/Window Sentinel/UsageLoopStatus.exe"'
+            current = '"C:/Programs/UsageLoop/UsageLoopStatus.exe"'
+            path.write_text(
+                json.dumps(
+                    {"statusLine": {"type": "command", "command": legacy}}
+                ),
+                encoding="utf-8",
+            )
+            integration = ClaudeStatusLineIntegration(
+                path,
+                current,
+                legacy_commands=(legacy,),
+            )
+
+            self.assertTrue(integration.upgrade_owned_registration())
+
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(current, saved["statusLine"]["command"])
+            self.assertEqual(30, saved["statusLine"]["refreshInterval"])
+
+    def test_local_upgrade_never_creates_or_replaces_a_statusline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+            integration = ClaudeStatusLineIntegration(path, '"C:/safe/helper.exe"')
+            self.assertFalse(integration.upgrade_owned_registration())
+            self.assertEqual({"theme": "dark"}, json.loads(path.read_text(encoding="utf-8")))
+
+            custom = {"statusLine": {"type": "command", "command": "custom"}}
+            path.write_text(json.dumps(custom), encoding="utf-8")
+            self.assertFalse(integration.upgrade_owned_registration())
+            self.assertEqual(custom, json.loads(path.read_text(encoding="utf-8")))
 
     def test_registration_never_replaces_existing_custom_statusline(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -82,9 +82,17 @@ class ProviderHealthTests(unittest.TestCase):
         self.assertEqual("info", row.tone)
 
     def test_compatible_runtime_waiting_is_informational(self):
-        row = self.health(state(runtime_identity="id-1"), compatible="id-1")
+        row = self.health(
+            state(runtime_identity="id-1", usage_checked_at=NOW), compatible="id-1"
+        )
         self.assertEqual("Waiting", row.status)
         self.assertEqual("info", row.tone)
+
+    def test_compatible_provider_without_a_quota_read_is_not_claimed_as_waiting(self):
+        row = self.health(state(runtime_identity="id-1"), compatible="id-1")
+        self.assertEqual("Not checked", row.status)
+        self.assertEqual("info", row.tone)
+        self.assertIn("No five-hour window reading", row.detail)
 
     def test_no_row_leaks_raw_internal_wording(self):
         for provider_state in (
@@ -193,6 +201,26 @@ class SummaryTests(unittest.TestCase):
         rows = self.rows(automation=True, states={"codex": state()})
         summary = overall_summary(rows, automation_enabled=True)
         self.assertEqual("Setup OK", summary.status)
+
+    def test_one_ready_provider_does_not_hide_an_unchecked_provider(self):
+        rows = self.rows(
+            automation=True,
+            states={
+                "codex": state(
+                    reset_at=int(NOW + 9000),
+                    last_verified_at=NOW,
+                    usage_checked_at=NOW,
+                ),
+                "claude": state(
+                    provider_id="claude",
+                    display_name="Claude Code",
+                    runtime_identity="claude:1",
+                ),
+            },
+        )
+        summary = overall_summary(rows, automation_enabled=True)
+        self.assertEqual("Partly ready", summary.status)
+        self.assertEqual("info", summary.tone)
 
     def test_automation_row_states_the_off_guarantee(self):
         rows = self.rows(automation=False)

@@ -137,7 +137,7 @@ class ApplicationController:
                 self.states[provider_id] = detected
                 changed = True
                 continue
-            if current.status == "Needs attention":
+            if current.status == "Needs attention" and not current.automation_supported:
                 continue
             if (
                 detected.usage_checked_at is not None
