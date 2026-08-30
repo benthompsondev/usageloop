@@ -1,5 +1,6 @@
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -9,6 +10,41 @@ from sentinel.quota import QuotaSnapshot, QuotaWindow
 
 
 class SafeHistoryTests(unittest.TestCase):
+    def test_trigger_reservation_guard_serializes_independent_history_instances(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel.jsonl"
+            first = SafeHistory(path)
+            second = SafeHistory(path)
+            first_acquired = threading.Event()
+            release_first = threading.Event()
+            second_started = threading.Event()
+            second_acquired = threading.Event()
+
+            def hold_first():
+                with first.trigger_reservation_guard():
+                    first_acquired.set()
+                    release_first.wait(2)
+
+            def wait_second():
+                second_started.set()
+                with second.trigger_reservation_guard():
+                    second_acquired.set()
+
+            first_thread = threading.Thread(target=hold_first)
+            second_thread = threading.Thread(target=wait_second)
+            first_thread.start()
+            self.assertTrue(first_acquired.wait(2))
+            second_thread.start()
+            self.assertTrue(second_started.wait(2))
+            self.assertFalse(second_acquired.wait(0.2))
+            release_first.set()
+            first_thread.join(2)
+            second_thread.join(2)
+
+        self.assertFalse(first_thread.is_alive())
+        self.assertFalse(second_thread.is_alive())
+        self.assertTrue(second_acquired.is_set())
+
     def test_observation_log_contains_only_allowlisted_quota_fields(self):
         snapshot = QuotaSnapshot(
             2000000000,

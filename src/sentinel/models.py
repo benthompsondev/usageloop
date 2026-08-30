@@ -62,6 +62,8 @@ def _select_effort(entry: dict[str, Any]) -> str | None:
         if isinstance(item, dict)
     ]
     advertised = [value for value in advertised if isinstance(value, str) and _SAFE_EFFORT.fullmatch(value)]
+    if "low" in advertised:
+        return "low"
     default = entry.get("defaultReasoningEffort")
     if isinstance(default, str) and default in advertised:
         return default

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, BinaryIO, Iterator
 import uuid
 
 from . import __version__
@@ -105,6 +106,22 @@ class SafeHistory:
                 "current": current,
             }
         )
+
+    @contextmanager
+    def trigger_reservation_guard(self) -> Iterator[None]:
+        """Serialize the short duplicate-check and reservation transaction.
+
+        The operating-system lock is released automatically if Sentinel exits,
+        so restart recovery continues to rely on the persisted attempt state.
+        """
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.path.with_name(f"{self.path.name}.lock")
+        with lock_path.open("a+b") as stream:
+            _lock_file(stream)
+            try:
+                yield
+            finally:
+                _unlock_file(stream)
 
     def reserve_trigger(
         self,
@@ -407,6 +424,36 @@ def _safe_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
 
 def _safe_version(value: str) -> str:
     return value if _SAFE_VERSION.fullmatch(value) else "unknown"
+
+
+def _lock_file(stream: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(stream: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def _iso_timestamp(value: float) -> str:

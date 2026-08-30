@@ -105,6 +105,10 @@ class ModelSelectionTests(unittest.TestCase):
         catalog = [catalog_entry("m", default=True, efforts=("medium",), default_effort="low")]
         self.assertEqual("medium", select_trigger_model(catalog).reasoning_effort)
 
+    def test_prefers_low_effort_when_runtime_default_is_higher(self):
+        catalog = [catalog_entry("m", default=True, efforts=("low", "medium"), default_effort="medium")]
+        self.assertEqual("low", select_trigger_model(catalog).reasoning_effort)
+
     def test_effort_is_none_when_runtime_advertises_none(self):
         catalog = [catalog_entry("m", default=True, efforts=(), default_effort=None)]
         self.assertIsNone(select_trigger_model(catalog).reasoning_effort)

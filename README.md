@@ -112,11 +112,12 @@ OpenAI API key.
 
 Sentinel does not persist a model name. Immediately before every trigger it
 reads `model/list` from the installed runtime and selects the visible default
-model whose `upgrade` pointer is null, using that model's own advertised default
-reasoning effort. A model carrying an `upgrade` pointer has been superseded and
-is the exact condition that produces a deprecation interstitial, so it is never
-selected. If no model qualifies, Sentinel refuses to trigger rather than guess.
-The input is the two-character message `ok`.
+model whose `upgrade` pointer is null. It uses `low` reasoning when the model
+advertises it, then falls back to the model's advertised default. A model carrying
+an `upgrade` pointer has been superseded and is the exact condition that produces
+a deprecation interstitial, so it is never selected. If no model qualifies,
+Sentinel refuses to trigger rather than guess. The input is the two-character
+message `ok`.
 
 ## Trigger Safety Gates
 
@@ -142,17 +143,18 @@ thread. Sentinel opts out of `experimentalApi` and sends no parameter that
 requires it. There is no directory-trust prompt on this path because the
 app-server has no such concept.
 
-Sentinel writes the reservation and `launch_attempted` state before submitting
-the turn. A rejection that Codex emits before dispatching the request, which the
-JSON-RPC codes -32600, -32601, and -32602 identify, becomes `failed_recoverable`
-and does not burn the opportunity. Once `turn/start` has been transmitted by any
-other path, Sentinel always performs read-only verification and blocks another
-request even when the lifecycle outcome is ambiguous. A fresh bare reservation is
-treated as active for two minutes, then becomes recoverable after a restart.
+Sentinel serializes the duplicate check and reservation across local processes,
+then writes `launch_attempted` before submitting the turn. A rejection that Codex
+emits before dispatching the request, which the JSON-RPC codes -32600, -32601,
+and -32602 identify, becomes `failed_recoverable` and does not burn the
+opportunity. Once `turn/start` has been transmitted by any other path, Sentinel
+always performs read-only verification and blocks another request even when the
+lifecycle outcome is ambiguous. A fresh bare reservation is treated as active
+for two minutes, then becomes recoverable after a restart.
 
-`turn/started`, `turn/completed`, and protocol errors are recorded as diagnostics
-only. A completed turn is not success. The quota observer remains the sole
-authority for anchoring.
+The bounded `turn/completed`, error, or timeout outcome is diagnostic only. A
+completed turn is not success. The quota observer remains the sole authority for
+anchoring.
 
 ## Controlled Live Rollover Test
 

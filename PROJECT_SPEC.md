@@ -122,3 +122,5 @@ False `UNKNOWN` is preferable to a false anchored or unanchored result.
 | 2026-08-30 | Prefer the installed native executable over a PATH shim | The local npm shim measured five minor versions behind the native binary it shadowed, on the exact evolving surface Sentinel depends on. |
 | 2026-08-30 | Treat JSON-RPC -32600/-32601/-32602 as definitely-not-sent | Observed directly: sending `allowProviderModelFallback` without the `experimentalApi` capability returned -32600 and started nothing. |
 | 2026-08-30 | Turn lifecycle notifications are diagnostic only | An observer cannot infer quota accounting from a completion event; `ANCHORED` remains the only success criterion. |
+| 2026-08-30 | Prefer advertised `low` reasoning and otherwise use the runtime default | The trigger should stay minimal without inventing an effort the selected model does not support. |
+| 2026-08-30 | Serialize duplicate-check and reservation across Sentinel processes | Persisted idempotency is not sufficient if two processes can both check before either writes its reservation. The OS lock covers only that short transaction and releases on process exit. |

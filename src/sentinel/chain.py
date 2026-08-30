@@ -207,11 +207,26 @@ class ChainCoordinator:
                     description,
                 )
             idempotency_key = f"rollover:{boundary}"
-            blocking = self._blocking_rollover_attempt(idempotency_key, boundary, current.observed_at)
+        else:
+            boundary = None
+            idempotency_key = f"bootstrap:{uuid.uuid4().hex}"
+
+        with self.history.trigger_reservation_guard():
+            blocking = (
+                self._blocking_rollover_attempt(idempotency_key, boundary, current.observed_at)
+                if mode == "rollover" and boundary is not None
+                else self._blocking_bootstrap_attempt(current.observed_at)
+            )
             if blocking is not None:
+                status = "ATTEMPT_ALREADY_RECORDED" if mode == "rollover" else "BOOTSTRAP_COOLDOWN"
+                reason = (
+                    "A request may already have been sent for this rollover; Sentinel will not send another."
+                    if mode == "rollover"
+                    else "A bootstrap request may have been sent within one full five-hour window."
+                )
                 return self._result(
-                    "ATTEMPT_ALREADY_RECORDED",
-                    "A request may already have been sent for this rollover; Sentinel will not send another.",
+                    status,
+                    reason,
                     preflight,
                     mode,
                     False,
@@ -219,41 +234,26 @@ class ChainCoordinator:
                     description,
                     attempt_state=blocking.state,
                 )
-        else:
-            boundary = None
-            blocking = self._blocking_bootstrap_attempt(current.observed_at)
-            if blocking is not None:
+
+            if dry_run:
                 return self._result(
-                    "BOOTSTRAP_COOLDOWN",
-                    "A bootstrap request may have been sent within one full five-hour window.",
+                    "DRY_RUN",
+                    f"Eligible {mode} detected; dry-run created no reservation and sent no request.",
                     preflight,
                     mode,
                     False,
-                    None,
+                    boundary,
                     description,
-                    attempt_state=blocking.state,
                 )
-            idempotency_key = f"bootstrap:{uuid.uuid4().hex}"
 
-        if dry_run:
-            return self._result(
-                "DRY_RUN",
-                f"Eligible {mode} detected; dry-run created no reservation and sent no request.",
-                preflight,
-                mode,
-                False,
-                boundary,
-                description,
+            attempt = self.history.reserve_trigger(
+                mode=mode,
+                idempotency_key=idempotency_key,
+                boundary_reset_at=boundary,
+                model=description.model,
+                reasoning_effort=description.reasoning_effort,
+                now=current.observed_at,
             )
-
-        attempt = self.history.reserve_trigger(
-            mode=mode,
-            idempotency_key=idempotency_key,
-            boundary_reset_at=boundary,
-            model=description.model,
-            reasoning_effort=description.reasoning_effort,
-            now=current.observed_at,
-        )
         self.history.transition_trigger(
             attempt.attempt_id, "launch_attempted", now=current.observed_at
         )

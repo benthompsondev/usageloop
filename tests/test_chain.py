@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 from sentinel.chain import ChainCoordinator, ChainPolicy
@@ -84,6 +85,31 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ANCHOR_VERIFIED", result.status)
         self.assertEqual(1, trigger.calls)
         self.assertTrue(result.request_possibly_sent)
+
+    def test_reservation_is_written_inside_exclusive_guard(self):
+        class GuardTrackingHistory(SafeHistory):
+            guard_active = False
+
+            @contextmanager
+            def trigger_reservation_guard(self):
+                self.guard_active = True
+                try:
+                    yield
+                finally:
+                    self.guard_active = False
+
+            def reserve_trigger(self, **kwargs):
+                if not self.guard_active:
+                    raise AssertionError("reservation was not guarded")
+                return super().reserve_trigger(**kwargs)
+
+        trigger = FakeTrigger()
+        guarded_history = GuardTrackingHistory(self.history.path)
+        result = ChainCoordinator(trigger, guarded_history, ChainPolicy()).run(
+            unanchored(), lambda: anchored()
+        )
+        self.assertEqual("ANCHOR_VERIFIED", result.status)
+        self.assertEqual(1, trigger.calls)
 
     def test_weak_unanchored_evidence_does_not_trigger(self):
         trigger = FakeTrigger()
