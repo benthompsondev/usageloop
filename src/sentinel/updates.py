@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 from typing import BinaryIO, Callable
 from urllib.parse import urlparse
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from .product import PRODUCT, ProductMetadata
@@ -158,6 +159,15 @@ class GitHubReleaseUpdater:
         try:
             with self._open(request, CHECK_TIMEOUT_SECONDS) as response:
                 raw = response.read(MAX_RELEASE_BYTES + 1)
+        except HTTPError as exc:
+            # A repository with no published release answers 404. GitHub was
+            # reached and the answer is simply "nothing to install yet", so
+            # blaming the user's connection would be wrong.
+            if exc.code == 404:
+                return None
+            raise UpdateError(
+                f"GitHub replied with an error ({exc.code}). Try again later."
+            ) from exc
         except (OSError, TimeoutError) as exc:
             raise UpdateError("GitHub could not be reached. Check your connection and try again.") from exc
         if len(raw) > MAX_RELEASE_BYTES:
@@ -165,7 +175,7 @@ class GitHubReleaseUpdater:
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise UpdateError("GitHub returned a release record Sentinel could not read.") from exc
+            raise UpdateError("GitHub returned a release record that could not be read.") from exc
         return parse_release(
             payload, installed_version=self.product.version, product=self.product
         )

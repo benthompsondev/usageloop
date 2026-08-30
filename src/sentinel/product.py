@@ -8,6 +8,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ProductMetadata:
     display_name: str
+    tagline: str
     version: str
     github_owner: str
     github_repo: str
@@ -18,6 +19,7 @@ class ProductMetadata:
     installer_filename: str
     checksum_filename: str
     app_data_folder: str
+    legacy_app_data_folder: str
     publisher: str
     app_id: str
 
@@ -40,19 +42,45 @@ class ProductMetadata:
             f"{self.github_repo}/releases/latest"
         )
 
+    @property
+    def dist_folder_name(self) -> str:
+        """PyInstaller COLLECT directory, derived so packaging cannot drift."""
+        return self.executable_name.removesuffix(".exe")
 
+    def packaging_metadata(self) -> dict[str, str]:
+        """Every name the Windows build script needs, derived values included.
+
+        `dataclasses.asdict` silently omits properties, which once put the Claude
+        status helper outside the application folder and left it out of the
+        installer entirely. The build script reads this instead.
+        """
+        from dataclasses import asdict
+
+        data = {key: str(value) for key, value in asdict(self).items()}
+        data["dist_folder_name"] = self.dist_folder_name
+        return data
+
+
+# The GitHub owner and repo intentionally keep the original slug. Update
+# discovery is `https://api.github.com/repos/<owner>/<repo>/releases/latest`, so
+# renaming the repository would break every already-installed copy's updater.
+# The user-facing product name is independent of that slug.
 PRODUCT = ProductMetadata(
-    display_name="Window Sentinel",
-    version="0.6.0",
+    display_name="UsageLoop",
+    tagline="Keep your AI coding windows ready.",
+    version="0.7.0",
     github_owner="benthompsondev",
     github_repo="codex-window-sentinel",
-    executable_name="WindowSentinel.exe",
-    claude_status_helper_name="WindowSentinelStatus.exe",
-    icon_filename="windowsentinel.ico",
+    executable_name="UsageLoop.exe",
+    claude_status_helper_name="UsageLoopStatus.exe",
+    icon_filename="usageloop.ico",
     version_resource_filename="version_info.txt",
-    installer_filename="WindowSentinel-Setup.exe",
-    checksum_filename="WindowSentinel-Setup.exe.sha256",
-    app_data_folder="CodexWindowSentinel",
+    installer_filename="UsageLoop-Setup.exe",
+    checksum_filename="UsageLoop-Setup.exe.sha256",
+    app_data_folder="UsageLoop",
+    # Local state written under the previous name. It carries the one-shot
+    # provider guards, so it is migrated rather than abandoned.
+    legacy_app_data_folder="CodexWindowSentinel",
     publisher="Ben Thompson",
     app_id="{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}",
 )

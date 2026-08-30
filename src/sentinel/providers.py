@@ -48,7 +48,7 @@ class CompatibilityResult:
             return cls(
                 True,
                 "Waiting",
-                "Compatibility check passed. Sentinel will use the guarded Codex path.",
+                "Compatibility check passed. The guarded Codex path will be used.",
                 runtime_identity,
             )
         return cls(
@@ -277,7 +277,7 @@ class ClaudeProvider:
                     state,
                     automation_supported=False,
                     status="Needs attention",
-                    detail="Claude changed after its compatibility check. Sentinel paused before initialization.",
+                    detail="Claude changed after its compatibility check, so initialization was paused.",
                     runtime_identity=current_identity,
                 ),
                 False,

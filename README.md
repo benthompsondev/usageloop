@@ -1,29 +1,39 @@
-# Window Sentinel
+# UsageLoop
 
-Window Sentinel is a small Windows app that keeps subscription coding windows
-ready without asking a normal user to manage terminals or config files. Its one
-primary control is **Keep my 5-hour windows ready**.
+**Keep your AI coding windows ready.**
 
-![Window Sentinel dashboard](docs/screenshots/dashboard.png)
+UsageLoop is a small Windows app for people who pay for Codex or Claude Code and
+keep losing hours of their plan without noticing.
 
-Phase 1 observes the real ChatGPT/Codex subscription windows through the local
-Codex app-server and classifies the approximately five-hour window as
-`ANCHORED`, `UNANCHORED`, `ABSENT`, `EXHAUSTED`, or `UNKNOWN`.
+Those plans work in five-hour windows, and a window only starts when you actually
+send something. Close the laptop at 6pm, come back at 9pm, and the window you were
+entitled to at 7pm never existed. UsageLoop watches for that and, once you switch
+it on, starts the next one for you with the smallest request the provider accepts.
 
-The guarded Codex provider handles the product proof. `sentinel chain` handles a proven
-rollover, while the explicit `sentinel bootstrap --confirm` path can start a
-first window when no historical anchored reset exists. Both paths allow one
-minimal request through the local Codex app-server and report success
-only when fresh observations prove that the window anchored.
+![UsageLoop dashboard](docs/screenshots/dashboard.png)
 
-The PySide6 desktop shell adds a focused dashboard, local countdowns,
-background workers, a system tray, optional per-user startup, and manual update
-checks through GitHub Releases. Claude uses a separate, prompt-free
-`--init-only` path after cached statusLine evidence passes its safety gates.
+It runs entirely on your PC. It never sees your provider password or token,
+because Codex and Claude Code keep their own sign-in and UsageLoop just uses the
+client you already have installed. Nothing reaches a provider until you turn the
+main switch on, and the countdowns themselves cost you nothing.
+
+## Provider status
+
+| Provider | State | What actually happens |
+| --- | --- | --- |
+| **Codex** | Verified | I tested this live on a real account: one small request through the local Codex app-server starts a fresh five-hour window. That is the path the app uses. |
+| **Claude Code** | Preview | Claude Code gives you no free way to read your window state, so the app reads the status line Claude Code already writes and runs one prompt-free `--init-only` initialization. I have **not** proven that this actually starts a window, so treat the Claude card as information, not a promise. Either way it is guarded: one attempt, never repeated. |
+
+The repo is still called `codex-window-sentinel`. Renaming it would break update
+checks for anyone who already installed a build, so the slug stays put while the
+product is called UsageLoop.
+
+This is version 0.7.0 and it is still early. It works, it is tested, and I use it,
+but it has not been through a wide beta yet.
 
 ## Boundaries
 
-Sentinel does:
+UsageLoop does:
 
 - use `account/rateLimits/read` through a local `codex app-server`;
 - identify windows by reported duration instead of assuming `primary` means five hours;
@@ -44,7 +54,7 @@ Sentinel does:
 - check GitHub Releases only when the user presses **Check for updates**, then
   verify the downloaded installer against its published SHA-256 checksum.
 
-Sentinel does not:
+UsageLoop does not:
 
 - read `auth.json`, OAuth tokens, account IDs, email, or conversations;
 - call WHAM or another private ChatGPT endpoint;
@@ -57,19 +67,19 @@ Sentinel does not:
 ## Architecture and Privacy
 
 ```text
-Observation:  Sentinel -> local codex app-server -> OpenAI
-Trigger:      Sentinel -> local codex app-server -> OpenAI
-Verification: Sentinel -> local codex app-server -> OpenAI
+Observation:  UsageLoop -> local codex app-server -> OpenAI
+Trigger:      UsageLoop -> local codex app-server -> OpenAI
+Verification: UsageLoop -> local codex app-server -> OpenAI
 Claude state: Claude statusLine -> allowlisted local cache
-Claude init:  Sentinel -> installed claude --init-only
-Updates:      Sentinel -> public GitHub Releases (user initiated only)
+Claude init:  UsageLoop -> installed claude --init-only
+Updates:      UsageLoop -> public GitHub Releases (user initiated only)
 ```
 
-Codex owns authentication and network communication on both paths. Sentinel
+Codex owns authentication and network communication on both paths. UsageLoop
 stores only allowlisted quota evidence and sanitized trigger events in:
 
 ```text
-%LOCALAPPDATA%\CodexWindowSentinel\sentinel.jsonl
+%LOCALAPPDATA%\UsageLoop\sentinel.jsonl
 ```
 
 Trigger log records may contain a safe attempt identifier, provider, trigger mode,
@@ -87,20 +97,20 @@ The original interactive trigger timing strategy was adapted from the MIT-licens
 
 ## Install and First Run
 
-Normal users run `WindowSentinel-Setup.exe`. It installs for the current Windows
+Normal users run `UsageLoop-Setup.exe`. It installs for the current Windows
 user, needs no administrator rights or separate Python installation, and adds a
 Start Menu shortcut. On first launch:
 
 1. Confirm that Codex and Claude Code are detected as expected.
 2. Turn on **Keep my 5-hour windows ready** only if you want guarded provider
    automation. Leaving it off means zero provider-triggering activity. If Claude
-   has no custom status line, Sentinel adds its local status helper to Claude's
+   has no custom status line, UsageLoop adds its local status helper to Claude's
    user settings. It will not replace an existing custom status line.
 3. If Codex has no historical anchored reset, choose **Start my first window
    now** and approve the explicit one-request bootstrap explanation.
-4. Optionally enable **Start Window Sentinel with Windows** in **Settings**.
+4. Optionally enable **Start UsageLoop with Windows** in **Settings**.
 
-Closing the window keeps it in the system tray. Use **Quit Window Sentinel** in
+Closing the window keeps it in the system tray. Use **Quit UsageLoop** in
 the tray menu to exit completely.
 
 The main window has three places:
@@ -124,14 +134,14 @@ From this repository in PowerShell:
 pwsh -NoProfile -File .\scripts\setup.ps1
 ```
 
-Setup creates only `.venv` inside the repository and installs Sentinel there.
+Setup creates only `.venv` inside the repository and installs UsageLoop there.
 It does not need administrator rights, change the global PATH, or install an
 OpenAI API key.
 
 Open the desktop app from source with:
 
 ```powershell
-.\.venv\Scripts\window-sentinel.exe
+.\.venv\Scripts\usageloop.exe
 ```
 
 Build the runnable app and per-user installer with:
@@ -145,15 +155,15 @@ The CLI remains available for diagnostics and controlled provider testing.
 ## Updates
 
 Update checking never runs at launch, on a timer, or in the background. When a
-user presses **Check for updates**, Sentinel reads the latest public GitHub
+user presses **Check for updates**, UsageLoop reads the latest public GitHub
 Release. A usable Windows release must carry both exact files:
 
 ```text
-WindowSentinel-Setup.exe
-WindowSentinel-Setup.exe.sha256
+UsageLoop-Setup.exe
+UsageLoop-Setup.exe.sha256
 ```
 
-Sentinel downloads the installer to the user's temporary folder, checks its
+UsageLoop downloads the installer to the user's temporary folder, checks its
 SHA-256 hash, asks before opening it, then checks the hash again immediately
 before launch. It exits cleanly after the normal per-user installer starts
 instead of replacing its own running files.
@@ -192,14 +202,14 @@ This source push does not create a GitHub Release. See
   It additionally requires every five-hour observation to report zero percent
   used and applies a full 18,000-second cooldown after any possibly sent request.
 
-Sentinel does not persist a model name. Immediately before every trigger it
+UsageLoop does not persist a model name. Immediately before every trigger it
 reads `model/list` from the installed runtime and selects the visible default
 model whose `upgrade` pointer is null. If the catalog has no unique current
-default, Sentinel refuses to guess based on list ordering. It uses `low`
+default, UsageLoop refuses to guess based on list ordering. It uses `low`
 reasoning when the model advertises it, then falls back to the model's advertised
 default. A model carrying an `upgrade` pointer has been superseded and is the
 exact condition that produces a deprecation interstitial, so it is never selected.
-If no model qualifies, Sentinel refuses to trigger rather than guess. The input
+If no model qualifies, UsageLoop refuses to trigger rather than guess. The input
 is the two-character message `ok`.
 
 ## Trigger Safety Gates
@@ -219,23 +229,23 @@ usage across the evidence set, and no possibly sent bootstrap request during the
 previous full five-hour window. It does not invent a historical rollover.
 
 The trigger thread is created with `ephemeral: true`, `sandbox: read-only`,
-`approvalPolicy: never`, `config: {"mcp_servers": {}}`, and a `cwd` of Sentinel's
-dedicated `%LOCALAPPDATA%\CodexWindowSentinel\trigger-workspace` directory, so the
+`approvalPolicy: never`, `config: {"mcp_servers": {}}`, and a `cwd` of UsageLoop's
+dedicated `%LOCALAPPDATA%\UsageLoop\trigger-workspace` directory, so the
 request cannot load MCP servers, write files, request approvals, or persist a
-thread. The workspace must be an empty real directory; Sentinel will not use a
+thread. The workspace must be an empty real directory; UsageLoop will not use a
 link, junction, or directory containing local instructions or other files.
-Sentinel opts out of `experimentalApi` and sends no parameter that
+UsageLoop opts out of `experimentalApi` and sends no parameter that
 requires it. There is no directory-trust prompt on this path because the
 app-server has no such concept.
 
-Sentinel serializes the duplicate check and reservation across local processes,
+UsageLoop serializes the duplicate check and reservation across local processes,
 and writes both the reservation and `launch_attempted` before releasing that
 lock. Bootstrap and rollover attempts block each other within the same window.
 Malformed or unreadable attempt history fails closed instead of appearing empty.
 A rejection that Codex
 emits before dispatching the request, which the JSON-RPC codes -32600, -32601,
 and -32602 identify, becomes `failed_recoverable` and does not burn the
-opportunity. Once `turn/start` has been transmitted by any other path, Sentinel
+opportunity. Once `turn/start` has been transmitted by any other path, UsageLoop
 always performs read-only verification and blocks another request even when the
 lifecycle outcome is ambiguous. A fresh bare reservation is treated as active
 for two minutes, then becomes recoverable after a restart.
@@ -249,14 +259,14 @@ anchoring.
 Claude uses its own provider module and attempt ledger. It does not reuse the
 Codex classifier, app-server transport, model selection, or trigger history.
 
-When automation is on, Sentinel checks the installed Claude artifact for the
+When automation is on, UsageLoop checks the installed Claude artifact for the
 exact `--init-only` capability. A version change reruns that check. A missing or
 ambiguous capability pauses only Claude automation.
 
-Before one initialization, Sentinel requires a cached statusLine observation no
+Before one initialization, UsageLoop requires a cached statusLine observation no
 older than six hours, a known weekly reset, weekly usage below 99%, and either a
 known five-hour reset that passed its 15-second buffer or a fresh zero-percent
-state with no historical boundary. Sentinel reserves the attempt before process
+state with no historical boundary. UsageLoop reserves the attempt before process
 launch. The command contains only the discovered executable and `--init-only`.
 
 A definite local launch or parser failure remains recoverable and cannot loop in
@@ -286,7 +296,7 @@ confirm that the intended Codex account is active, then run exactly:
 .\sentinel.ps1 bootstrap --confirm
 ```
 
-Do not repeat it if Sentinel reports that a request was possibly sent, even when
+Do not repeat it if UsageLoop reports that a request was possibly sent, even when
 anchoring could not be verified.
 
 ## Classifier Semantics
@@ -325,13 +335,13 @@ Live read-only checks are explicit:
 - `model_unavailable`: `model/list` failed or every visible model is superseded.
 - `thread_start_rejected` or `turn_start_rejected`: Codex refused the request
   before dispatching it, so the opportunity stays recoverable.
-- `WEEKLY_UNAVAILABLE` or `WEEKLY_EXHAUSTED`: Sentinel refuses to consume quota.
+- `WEEKLY_UNAVAILABLE` or `WEEKLY_EXHAUSTED`: UsageLoop refuses to consume quota.
 - `ROLLOVER_BOUNDARY_UNKNOWN`: run `sample` during an anchored window, then retry
   only after that recorded reset.
-- `ATTEMPT_ALREADY_RECORDED`: Sentinel will not spend a second request for that rollover.
+- `ATTEMPT_ALREADY_RECORDED`: UsageLoop will not spend a second request for that rollover.
 - `BOOTSTRAP_COOLDOWN`: a bootstrap request may already have been sent within one full window.
 - `TRIGGER_NOT_SENT`: process creation definitely did not occur; the opportunity is recoverable.
-- `VERIFICATION_UNAVAILABLE`: a request may have been sent, so Sentinel blocked a retry.
+- `VERIFICATION_UNAVAILABLE`: a request may have been sent, so UsageLoop blocked a retry.
 - `ANCHOR_NOT_VERIFIED`: the request path ran, but evidence did not prove a fixed reset.
 - `UNKNOWN`: collect a fresh `sample` and treat the state as undetermined.
 
@@ -341,15 +351,15 @@ position, reset timestamp, model, or trigger path will remain valid.
 
 ## Remove Completely
 
-Use Windows **Installed apps** to uninstall Window Sentinel. The uninstaller
+Use Windows **Installed apps** to uninstall UsageLoop. The uninstaller
 removes its per-user startup registration, installed files, and the Claude
-status-line entry only when it still exactly matches Sentinel's helper. It does
-not touch a replacement or custom status line. Sentinel never changes the global
+status-line entry only when it still exactly matches UsageLoop's helper. It does
+not touch a replacement or custom status line. UsageLoop never changes the global
 PATH or creates a scheduled task. To remove its safe local history and
 preferences as well, delete:
 
 ```powershell
-Remove-Item -LiteralPath "$env:LOCALAPPDATA\CodexWindowSentinel" -Recurse
+Remove-Item -LiteralPath "$env:LOCALAPPDATA\UsageLoop" -Recurse
 ```
 
 For a source checkout, delete the project folder after quitting the app.

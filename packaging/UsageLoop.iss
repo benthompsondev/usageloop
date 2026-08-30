@@ -1,11 +1,11 @@
 #ifndef AppName
-  #define AppName "Window Sentinel"
+  #define AppName "UsageLoop"
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.6.0"
+  #define AppVersion "0.7.0"
 #endif
 #ifndef AppExeName
-  #define AppExeName "WindowSentinel.exe"
+  #define AppExeName "UsageLoop.exe"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "Ben Thompson"
@@ -14,7 +14,16 @@
   #define AppId "{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}"
 #endif
 #ifndef InstallerBaseName
-  #define InstallerBaseName "WindowSentinel-Setup"
+  #define InstallerBaseName "UsageLoop-Setup"
+#endif
+#ifndef AppIconFile
+  #define AppIconFile "usageloop.ico"
+#endif
+#ifndef DistFolder
+  #define DistFolder "UsageLoop"
+#endif
+#ifndef StatusHelperName
+  #define StatusHelperName "UsageLoopStatus.exe"
 #endif
 
 [Setup]
@@ -30,7 +39,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
 OutputBaseFilename={#InstallerBaseName}
-SetupIconFile=windowsentinel.ico
+SetupIconFile={#AppIconFile}
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2/max
 SolidCompression=yes
@@ -39,7 +48,7 @@ CloseApplications=yes
 RestartApplications=no
 
 [Files]
-Source: "..\dist\WindowSentinel\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\{#DistFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
@@ -48,7 +57,7 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Filename: "{app}\{#AppExeName}"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\WindowSentinelStatus.exe"; Parameters: "--unregister"; RunOnceId: "RemoveSentinelClaudeStatusLine"; Flags: runhidden
+Filename: "{app}\{#StatusHelperName}"; Parameters: "--unregister"; RunOnceId: "RemoveUsageLoopClaudeStatusLine"; Flags: runhidden
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey

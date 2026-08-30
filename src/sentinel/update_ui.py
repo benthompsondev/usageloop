@@ -70,7 +70,7 @@ class UpdatePanel(QFrame):
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
         copy = QLabel(
-            "Sentinel checks GitHub only when you press the button. Update traffic is separate "
+            "GitHub is checked only when you press the button. Update traffic is separate "
             "from Codex and Claude Code and cannot use provider quota."
         )
         copy.setProperty("muted", True)
@@ -138,7 +138,7 @@ class UpdatePanel(QFrame):
             return
         self._set_state(
             "launching",
-            "Installer started. Sentinel will close so Windows can finish the update.",
+            "Installer started. This app will close so Windows can finish the update.",
             status="success",
         )
         self.action_button.setEnabled(False)

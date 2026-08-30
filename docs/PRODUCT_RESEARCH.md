@@ -1,5 +1,8 @@
 # Window Sentinel: Product Research and Design Pass
 
+> Historical record from 2026-08-29, kept as written. The product was
+> renamed to UsageLoop on 2026-08-30; the GitHub slug did not change.
+
 Read-only research and design. No production code changed, no Codex request sent,
 no quota consumed. The primary Codex account remained at 100% five-hour
 availability throughout.

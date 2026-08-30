@@ -6,6 +6,7 @@ import unittest
 from PySide6.QtWidgets import QApplication
 
 from sentinel.update_ui import UpdatePanel
+from sentinel.product import PRODUCT
 from sentinel.updates import ReleaseAsset, ReleaseInfo
 
 
@@ -34,8 +35,8 @@ class UpdatePanelTests(unittest.TestCase):
             "0.6.0",
             ("Cleaner dashboard", "Safer update checks"),
             "https://github.com/benthompsondev/codex-window-sentinel/releases/tag/v0.6.0",
-            ReleaseAsset("WindowSentinel-Setup.exe", "https://github.com/example"),
-            ReleaseAsset("WindowSentinel-Setup.exe.sha256", "https://github.com/example"),
+            ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example"),
+            ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example"),
         )
         panel._operation_completed("check", release)
         self.assertEqual("available", panel.state)

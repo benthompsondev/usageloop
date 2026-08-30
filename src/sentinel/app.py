@@ -1,4 +1,4 @@
-"""Window Sentinel desktop entry point."""
+"""UsageLoop desktop entry point."""
 
 from __future__ import annotations
 

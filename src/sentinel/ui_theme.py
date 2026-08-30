@@ -19,9 +19,9 @@ class ThemeTokens:
     text_soft: str = "#C2CEDC"
     text_muted: str = "#8B99AA"
     text_faint: str = "#6B7A8C"
-    accent: str = "#34D399"
-    accent_deep: str = "#146B3F"
-    accent_hover: str = "#1A8A4E"
+    accent: str = "#22D3A1"
+    accent_deep: str = "#10B981"
+    accent_hover: str = "#22D3A1"
     accent_ink: str = "#04150E"
     info: str = "#74C4FF"
     warning: str = "#F1D38A"
@@ -105,7 +105,7 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         border-radius: 10px; padding: 4px 9px; font-size: 10px; font-weight: 800;
     }}
     QLabel#statusPill[tone="success"] {{
-        color: {tokens.accent}; background: #34D3991C; border: 1px solid #34D39955;
+        color: {tokens.accent}; background: #22D3A11C; border: 1px solid #22D3A155;
     }}
     QLabel#statusPill[tone="warning"] {{
         color: {tokens.warning}; background: #E3B34118; border: 1px solid #E3B34155;
@@ -155,6 +155,23 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QLabel#updateState[status="success"] {{ color: {tokens.accent}; }}
     QLabel#updateState[status="error"] {{ color: {tokens.error}; }}
     QLabel#updateState[status="warning"] {{ color: {tokens.warning}; }}
+    QLabel#wordmarkPrimary {{ font-size: 21px; font-weight: 800; color: {tokens.text}; }}
+    QLabel#wordmarkAccent {{ font-size: 21px; font-weight: 800; color: {tokens.accent}; }}
+    QLabel#trustChip {{
+        color: {tokens.accent}; background: {tokens.surface_sunken};
+        border: 1px solid {tokens.accent_deep}; border-radius: {tokens.radius_small}px;
+        padding: 6px 11px; font-size: 11px; font-weight: 700;
+    }}
+    QFrame#assuranceStrip {{
+        background: {tokens.surface_sunken}; border: 1px solid {tokens.border};
+        border-radius: {tokens.radius}px;
+    }}
+    QLabel#assuranceTitle {{ font-size: 13px; font-weight: 720; color: {tokens.text_soft}; }}
+    QLabel#assuranceBody {{ font-size: 12px; color: {tokens.text_muted}; }}
+    QLabel#previewTag {{
+        color: {tokens.warning}; background: #E3B34114; border: 1px solid #E3B34140;
+        border-radius: 9px; padding: 3px 8px; font-size: 10px; font-weight: 800;
+    }}
     QToolTip {{
         background: {tokens.surface_raised}; color: {tokens.text};
         border: 1px solid {tokens.border_strong}; padding: 5px;

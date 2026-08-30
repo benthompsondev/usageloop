@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from sentinel.product import PRODUCT
 from sentinel.claude_status import (
     ClaudeStatusLineIntegration,
     ClaudeStatusStore,
@@ -154,7 +155,7 @@ class ClaudeStatusStoreTests(unittest.TestCase):
             "session_id": "private",
             "rate_limits": {"five_hour": {"used_percentage": 0, "resets_at": 1900}},
         }
-        self.assertEqual("Window Sentinel | Claude 0h 15m", render_statusline(payload, now=1000))
+        self.assertEqual(f"{PRODUCT.display_name} | Claude 0h 15m", render_statusline(payload, now=1000))
 
 
 if __name__ == "__main__":

@@ -166,7 +166,7 @@ class ChainCoordinator:
         if weekly is None:
             return self._result(
                 "WEEKLY_UNAVAILABLE",
-                "The weekly Codex window is absent or ambiguous, so Sentinel will not consume quota.",
+                "The weekly Codex window is absent or ambiguous, so no quota is used.",
                 preflight,
                 mode,
                 False,
@@ -220,7 +220,7 @@ class ChainCoordinator:
             if blocking is not None:
                 status = "ATTEMPT_ALREADY_RECORDED" if mode == "rollover" else "BOOTSTRAP_COOLDOWN"
                 reason = (
-                    "A request may already have been sent for this rollover; Sentinel will not send another."
+                    "A request may already have been sent for this rollover; another will not be sent."
                     if mode == "rollover"
                     else "A bootstrap request may have been sent within one full five-hour window."
                 )

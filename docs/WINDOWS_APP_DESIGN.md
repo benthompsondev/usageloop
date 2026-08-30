@@ -1,8 +1,8 @@
-# Window Sentinel desktop shell
+# UsageLoop desktop shell
 
 ## Product shape
 
-Window Sentinel is a small per-user Windows app with one primary control:
+UsageLoop is a small per-user Windows app with one primary control:
 **Keep my 5-hour windows ready**. The dashboard shows cached provider state in
 plain language. Settings owns startup, diagnostics, and updates. About owns the
 privacy boundary and project links.

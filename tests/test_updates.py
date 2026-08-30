@@ -27,20 +27,20 @@ class FakeResponse(BytesIO):
 def release_payload(*, version: str = "0.5.0", include_checksum: bool = True):
     assets = [
         {
-            "name": "WindowSentinel-Setup.exe",
+            "name": PRODUCT.installer_filename,
             "browser_download_url": (
                 "https://github.com/benthompsondev/codex-window-sentinel/"
-                "releases/download/v0.5.0/WindowSentinel-Setup.exe"
+                f"releases/download/v0.5.0/{PRODUCT.installer_filename}"
             ),
         }
     ]
     if include_checksum:
         assets.append(
             {
-                "name": "WindowSentinel-Setup.exe.sha256",
+                "name": PRODUCT.checksum_filename,
                 "browser_download_url": (
                     "https://github.com/benthompsondev/codex-window-sentinel/"
-                    "releases/download/v0.5.0/WindowSentinel-Setup.exe.sha256"
+                    f"releases/download/v0.5.0/{PRODUCT.checksum_filename}"
                 ),
             }
         )
@@ -66,8 +66,8 @@ class UpdateParsingTests(unittest.TestCase):
         release = parse_release(release_payload(), installed_version="0.4.0")
         self.assertIsNotNone(release)
         self.assertEqual("0.5.0", release.version)
-        self.assertEqual("WindowSentinel-Setup.exe", release.installer.name)
-        self.assertEqual("WindowSentinel-Setup.exe.sha256", release.checksum.name)
+        self.assertEqual(PRODUCT.installer_filename, release.installer.name)
+        self.assertEqual(PRODUCT.checksum_filename, release.checksum.name)
 
         with self.assertRaises(UpdateError):
             parse_release(
@@ -100,7 +100,7 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
         installer = b"safe installer bytes"
         checksum = (
             "15c7bd0073705a92a42091875c976f622ee8ac13602127b9bd72d2c9d74ff3ba"
-            "  WindowSentinel-Setup.exe\n"
+            f"  {PRODUCT.installer_filename}\n"
         ).encode("ascii")
         responses = iter([checksum, installer])
 
@@ -119,7 +119,7 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
         installer = b"safe installer bytes"
         checksum = (
             "15c7bd0073705a92a42091875c976f622ee8ac13602127b9bd72d2c9d74ff3ba"
-            "  WindowSentinel-Setup.exe\n"
+            f"  {PRODUCT.installer_filename}\n"
         ).encode("ascii")
         responses = iter([checksum, installer])
         launches = []
@@ -143,7 +143,7 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
     def test_checksum_mismatch_refuses_installer(self) -> None:
         responses = iter(
             [
-                ("0" * 64 + "  WindowSentinel-Setup.exe\n").encode("ascii"),
+                ("0" * 64 + f"  {PRODUCT.installer_filename}\n").encode("ascii"),
                 b"tampered",
             ]
         )
@@ -158,6 +158,38 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
                     release, destination_root=Path(directory)
                 )
             self.assertEqual([], list(Path(directory).rglob("*.exe")))
+
+
+
+
+class ReleaseLookupFailureTests(unittest.TestCase):
+    """GitHub answering is not the same as GitHub being unreachable."""
+
+    def _updater(self, error):
+        def opener(_request, _timeout):
+            raise error
+
+        return GitHubReleaseUpdater(opener=opener)
+
+    def test_repository_without_a_published_release_is_not_an_error(self) -> None:
+        from urllib.error import HTTPError
+
+        error = HTTPError("https://api.github.com", 404, "Not Found", {}, None)
+        self.assertIsNone(self._updater(error).check())
+
+    def test_other_http_errors_say_github_replied(self) -> None:
+        from urllib.error import HTTPError
+
+        error = HTTPError("https://api.github.com", 503, "Unavailable", {}, None)
+        with self.assertRaises(UpdateError) as caught:
+            self._updater(error).check()
+        self.assertIn("503", str(caught.exception))
+        self.assertNotIn("connection", str(caught.exception).lower())
+
+    def test_real_connectivity_failure_still_mentions_the_connection(self) -> None:
+        with self.assertRaises(UpdateError) as caught:
+            self._updater(OSError("no route to host")).check()
+        self.assertIn("connection", str(caught.exception).lower())
 
 
 if __name__ == "__main__":

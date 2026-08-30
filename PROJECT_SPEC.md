@@ -1,4 +1,4 @@
-# Project Spec: Window Sentinel
+# Project Spec: UsageLoop
 
 ## Goal
 

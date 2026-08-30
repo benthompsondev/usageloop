@@ -9,7 +9,7 @@ if (-not (Test-Path -LiteralPath $python) -or -not (Test-Path -LiteralPath $pyin
 
 Push-Location $repoRoot
 try {
-    $product = (& $python -c 'import json; from dataclasses import asdict; from sentinel.product import PRODUCT; print(json.dumps(asdict(PRODUCT)))') | ConvertFrom-Json
+    $product = (& $python -c 'import json; from sentinel.product import PRODUCT; print(json.dumps(PRODUCT.packaging_metadata()))') | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'Product metadata could not be read.' }
 
     & $python .\scripts\render_version_info.py
@@ -18,13 +18,13 @@ try {
     & $python .\scripts\render_icon.py
     if ($LASTEXITCODE -ne 0) { throw 'Icon rendering failed.' }
 
-    & $pyinstaller --noconfirm --clean .\packaging\WindowSentinel.spec
+    & $pyinstaller --noconfirm --clean .\packaging\UsageLoop.spec
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
     $helperEntry = Join-Path $repoRoot 'packaging\claude_status_entrypoint.py'
-    $helperDist = Join-Path $repoRoot 'dist\WindowSentinel'
-    $helperWork = Join-Path $repoRoot 'build\WindowSentinelStatus'
+    $helperDist = Join-Path $repoRoot "dist\$($product.dist_folder_name)"
     $helperName = [IO.Path]::GetFileNameWithoutExtension($product.claude_status_helper_name)
+    $helperWork = Join-Path $repoRoot "build\$helperName"
     & $pyinstaller --noconfirm --clean --onefile --console --name $helperName --distpath $helperDist --workpath $helperWork --specpath $helperWork --paths (Join-Path $repoRoot 'src') $helperEntry
     if ($LASTEXITCODE -ne 0) { throw 'Claude statusLine helper build failed.' }
 
@@ -38,7 +38,7 @@ try {
         throw 'Inno Setup compiler not found. Install the current per-user Inno Setup compiler first.'
     }
     $installerBaseName = [IO.Path]::GetFileNameWithoutExtension($product.installer_filename)
-    & $iscc "/DAppName=$($product.display_name)" "/DAppVersion=$($product.version)" "/DAppExeName=$($product.executable_name)" "/DAppPublisher=$($product.publisher)" "/DAppId=$($product.app_id)" "/DInstallerBaseName=$installerBaseName" .\packaging\WindowSentinel.iss
+    & $iscc "/DAppName=$($product.display_name)" "/DAppIconFile=$($product.icon_filename)" "/DDistFolder=$($product.dist_folder_name)" "/DStatusHelperName=$($product.claude_status_helper_name)" "/DAppVersion=$($product.version)" "/DAppExeName=$($product.executable_name)" "/DAppPublisher=$($product.publisher)" "/DAppId=$($product.app_id)" "/DInstallerBaseName=$installerBaseName" .\packaging\UsageLoop.iss
     if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
 
     $installerPath = Join-Path $repoRoot "dist\$($product.installer_filename)"
@@ -50,7 +50,7 @@ finally {
     Pop-Location
 }
 
-Write-Output "Runnable: $repoRoot\dist\WindowSentinel\WindowSentinel.exe"
-Write-Output "Claude status helper: $repoRoot\dist\WindowSentinel\WindowSentinelStatus.exe"
-Write-Output "Installer: $repoRoot\dist\WindowSentinel-Setup.exe"
-Write-Output "Checksum: $repoRoot\dist\WindowSentinel-Setup.exe.sha256"
+Write-Output "Runnable: $repoRoot\dist\$($product.dist_folder_name)\$($product.executable_name)"
+Write-Output "Claude status helper: $repoRoot\dist\$($product.dist_folder_name)\$($product.claude_status_helper_name)"
+Write-Output "Installer: $installerPath"
+Write-Output "Checksum: $checksumPath"

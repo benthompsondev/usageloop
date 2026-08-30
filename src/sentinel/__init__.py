@@ -1,4 +1,4 @@
-"""Codex Window Sentinel."""
+"""UsageLoop."""
 
 from .product import PRODUCT
 

@@ -63,7 +63,7 @@ class DesktopTests(unittest.TestCase):
 
     def test_packaging_excludes_unrelated_icu_dlls_from_path(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        spec = (repo_root / "packaging" / "WindowSentinel.spec").read_text(
+        spec = (repo_root / "packaging" / "UsageLoop.spec").read_text(
             encoding="utf-8"
         )
 

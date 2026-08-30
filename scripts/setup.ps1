@@ -43,7 +43,7 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Failed to install Sentinel in the local virtual environment.'
 }
 
-Write-Output 'Window Sentinel is ready.'
+Write-Output 'UsageLoop is ready.'
 Write-Output 'Desktop: .\.venv\Scripts\window-sentinel.exe'
 Write-Output 'Run: .\sentinel.ps1 doctor'
 Write-Output 'Then: .\sentinel.ps1 sample'

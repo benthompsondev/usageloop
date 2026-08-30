@@ -76,7 +76,7 @@ CapabilityChecker = Callable[[Path], bool]
 
 
 def build_claude_init_command(executable: Path) -> list[str]:
-    """Build the only Claude operation Sentinel is allowed to launch."""
+    """Build the only Claude operation the app is allowed to launch."""
     if os.name == "nt" and executable.suffix.lower() in {".cmd", ".bat"}:
         return [
             os.environ.get("COMSPEC", "cmd.exe"),
@@ -291,7 +291,7 @@ class ClaudeOperationRunner:
             return CompatibilityResult(
                 True,
                 "Waiting",
-                "Compatibility check passed. Sentinel can use prompt-free Claude initialization.",
+                "Compatibility check passed. prompt-free Claude initialization can be used.",
                 runtime_identity,
             )
         return CompatibilityResult(
@@ -331,7 +331,7 @@ class ClaudeOperationRunner:
                         replace(
                             state,
                             status="Waiting",
-                            detail="Claude initialization may already have run. Sentinel will not repeat it.",
+                            detail="Claude initialization may already have run. It will not be repeated.",
                             automation_blocked_until=guard_until,
                             last_action="Initialization guarded",
                         ),
@@ -393,7 +393,7 @@ class ClaudeOperationRunner:
             replace(
                 state,
                 status="Waiting",
-                detail="Initialization ran once. Sentinel is waiting for the next safe Claude status update.",
+                detail="Initialization ran once. Waiting for the next safe Claude status update.",
                 reset_at=None,
                 last_action="Initialization ran once",
                 automation_blocked_until=completed_at + FIVE_HOURS_SECONDS,
@@ -432,7 +432,7 @@ class ClaudeOperationRunner:
             or state.usage_checked_at is None
             or now - state.usage_checked_at > MAX_EVIDENCE_AGE_SECONDS
         ):
-            return "WEEKLY_UNAVAILABLE", "A current weekly Claude limit was not available, so Sentinel did nothing."
+            return "WEEKLY_UNAVAILABLE", "A current weekly Claude limit was not available, so nothing was done."
         if state.weekly_used_percent >= WEEKLY_PROTECTION_PERCENT:
             return "WEEKLY_EXHAUSTED", "Weekly protection blocked Claude initialization."
         if mode == "bootstrap":
@@ -442,7 +442,7 @@ class ClaudeOperationRunner:
             if state.reset_at is None:
                 return "ROLLOVER_UNKNOWN", "The previous Claude reset boundary was not known."
             if now < state.reset_at + RESET_BUFFER_SECONDS:
-                return "RESET_BUFFER", "Sentinel is waiting for the reset buffer to clear."
+                return "RESET_BUFFER", "Waiting for the reset buffer to clear."
         return None
 
     def _blocking_attempt(

@@ -96,7 +96,7 @@ class StatusLineRegistration:
 
 
 class ClaudeStatusLineIntegration:
-    """Register Sentinel only when no user statusLine would be replaced."""
+    """Register the helper only when no user statusLine would be replaced."""
 
     def __init__(
         self,
@@ -111,7 +111,7 @@ class ClaudeStatusLineIntegration:
         if settings is None:
             return StatusLineRegistration(
                 False,
-                "Claude settings could not be read safely, so Sentinel changed nothing.",
+                "Claude settings could not be read safely, so nothing was changed.",
             )
         current = settings.get("statusLine")
         expected = {"type": "command", "command": self.command}
@@ -120,7 +120,7 @@ class ClaudeStatusLineIntegration:
         if current is not None:
             return StatusLineRegistration(
                 False,
-                "Claude already has a custom status line. Sentinel will not replace it.",
+                "Claude already has a custom status line. It will not be replaced.",
             )
         settings["statusLine"] = expected
         temporary = self.settings_path.with_suffix(f"{self.settings_path.suffix}.sentinel.tmp")
@@ -135,7 +135,7 @@ class ClaudeStatusLineIntegration:
             temporary.unlink(missing_ok=True)
             return StatusLineRegistration(
                 False,
-                "Claude settings could not be updated safely, so Sentinel changed nothing.",
+                "Claude settings could not be updated safely, so nothing was changed.",
             )
         return StatusLineRegistration(True, "Claude status caching is ready.")
 
@@ -180,14 +180,14 @@ def default_statusline_command() -> str:
 def render_statusline(payload: object, *, now: float | None = None) -> str:
     current = time.time() if now is None else now
     if not isinstance(payload, dict) or not isinstance(payload.get("rate_limits"), dict):
-        return "Window Sentinel | Claude status unavailable"
+        return f"{PRODUCT.display_name} | Claude status unavailable"
     five = _window(payload["rate_limits"].get("five_hour"))
     if five is None or five[1] is None:
-        return "Window Sentinel | Claude window waiting"
+        return f"{PRODUCT.display_name} | Claude window waiting"
     remaining = max(0, int(five[1] - current))
     hours, remainder = divmod(remaining, 3600)
     minutes = remainder // 60
-    return f"Window Sentinel | Claude {hours}h {minutes:02d}m"
+    return f"{PRODUCT.display_name} | Claude {hours}h {minutes:02d}m"
 
 
 def _window(value: object) -> tuple[float | None, int | None] | None:

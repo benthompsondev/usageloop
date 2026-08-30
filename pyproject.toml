@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-window-sentinel"
-version = "0.6.0"
-description = "Keep subscription coding windows ready with guarded local provider automation"
+version = "0.7.0"
+description = "Keep your AI coding windows ready with guarded local provider automation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -17,7 +17,7 @@ build = ["PyInstaller>=6.14,<7"]
 
 [project.scripts]
 sentinel = "sentinel.cli:main"
-window-sentinel = "sentinel.app:main"
+usageloop = "sentinel.app:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

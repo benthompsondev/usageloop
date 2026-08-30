@@ -127,6 +127,52 @@ def format_countdown(reset_at: int | None, now: float) -> str:
     return f"{hours}h {minutes:02d}m"
 
 
+_TEXT_FIELDS = ("provider_id", "display_name", "status", "detail")
+_OPTIONAL_TEXT_FIELDS = ("runtime_identity", "runtime_version", "last_action")
+_BOOL_FIELDS = ("installed", "automation_supported", "retry_after_restart")
+_INT_FIELDS = ("reset_at", "weekly_reset_at")
+_FLOAT_FIELDS = (
+    "last_verified_at",
+    "used_percent",
+    "usage_checked_at",
+    "weekly_used_percent",
+    "automation_blocked_until",
+)
+
+
+def _coerce_provider_fields(value: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a cached provider record so bad types cannot reach the UI.
+
+    A dataclass does not enforce its annotations, so a hand-edited or partially
+    written state file could previously load a string where a timestamp was
+    expected and raise a TypeError inside the one-second clock tick. Unusable
+    fields are dropped back to their defaults instead.
+    """
+    cleaned: dict[str, Any] = {}
+    for key, raw in value.items():
+        if key in _TEXT_FIELDS:
+            if not isinstance(raw, str):
+                raise ValueError(f"{key} must be text")
+            cleaned[key] = raw
+        elif key in _OPTIONAL_TEXT_FIELDS:
+            cleaned[key] = raw if isinstance(raw, str) else None
+        elif key in _BOOL_FIELDS:
+            cleaned[key] = raw is True
+        elif key in _INT_FIELDS:
+            cleaned[key] = int(raw) if _is_finite_number(raw) else None
+        elif key in _FLOAT_FIELDS:
+            cleaned[key] = float(raw) if _is_finite_number(raw) else None
+        else:
+            raise ValueError(f"unknown provider field {key}")
+    return cleaned
+
+
+def _is_finite_number(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return value == value and value not in (float("inf"), float("-inf"))
+
+
 class AppStateStore:
     def __init__(self, path: Path | None = None):
         self.path = path or default_app_state_path()
@@ -166,7 +212,7 @@ class AppStateStore:
             if not isinstance(provider_id, str) or not isinstance(value, dict):
                 continue
             try:
-                state = ProviderViewState(**value)
+                state = ProviderViewState(**_coerce_provider_fields(value))
             except (TypeError, ValueError):
                 continue
             if state.provider_id == provider_id:
@@ -198,6 +244,26 @@ class AppStateStore:
         return payload if isinstance(payload, dict) else {}
 
 
-def default_app_state_path() -> Path:
+def app_data_root() -> Path:
+    """Return the local state directory, migrating the pre-rebrand folder once.
+
+    The folder holds the one-shot provider guards. Abandoning it during a rename
+    would silently reset those guards, so a legacy folder is moved when the new
+    name is still free, and is used in place if the move cannot happen.
+    """
     root = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
-    return root / PRODUCT.app_data_folder / "app-state.json"
+    current = root / PRODUCT.app_data_folder
+    legacy = root / PRODUCT.legacy_app_data_folder
+    if current.exists() or legacy == current or not legacy.is_dir():
+        return current
+    try:
+        legacy.rename(current)
+    except OSError:
+        # Renaming can fail while another copy holds a file open. Keeping the
+        # legacy folder preserves the guards; the next start retries.
+        return legacy
+    return current
+
+
+def default_app_state_path() -> Path:
+    return app_data_root() / "app-state.json"

@@ -18,6 +18,7 @@ from .chain import ChainCoordinator, ChainPolicy, ChainResult
 from .classifier import Classification, classify
 from .history import SafeHistory, default_history_path
 from .models import select_trigger_model
+from .product import PRODUCT
 from .protocol import AppServerClient
 from .quota import QuotaSnapshot, QuotaWindow, normalize_rate_limits, select_five_hour
 from .transport import (
@@ -136,7 +137,7 @@ def run_doctor() -> int:
     try:
         observed_at = time.time()
         snapshot = normalize_rate_limits(session.client.read_rate_limits(), observed_at)
-        print(f"Sentinel: {__version__} on Python {platform.python_version()} ({platform.system()})")
+        print(f"{PRODUCT.display_name}: {__version__} on Python {platform.python_version()} ({platform.system()})")
         print(f"Codex executable: {session.executable}")
         print(f"Codex version: {session.codex_version}")
         print(f"App-server handshake: OK ({session.platform_os})")
@@ -372,7 +373,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as exc:
         category = _error_category(exc)
         SafeHistory().record_error(category)
-        print(f"Sentinel could not complete the observation ({category}).", file=sys.stderr)
+        print(f"Could not complete the observation ({category}).", file=sys.stderr)
         return 2
 
 

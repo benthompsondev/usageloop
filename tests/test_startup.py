@@ -1,5 +1,6 @@
 import unittest
 
+from sentinel.product import PRODUCT
 from sentinel.startup import StartupManager
 
 
@@ -38,10 +39,10 @@ class FakeRegistry:
 class StartupManagerTests(unittest.TestCase):
     def test_startup_registration_is_per_user_and_reversible(self):
         registry = FakeRegistry()
-        manager = StartupManager("C:/Apps/WindowSentinel.exe", registry=registry)
+        manager = StartupManager("C:/Apps/UsageLoop.exe", registry=registry)
         manager.set_enabled(True)
         self.assertTrue(manager.is_enabled())
-        self.assertEqual('"C:/Apps/WindowSentinel.exe" --background', registry.values["Window Sentinel"])
+        self.assertEqual('"C:/Apps/UsageLoop.exe" --background', registry.values[PRODUCT.display_name])
         manager.set_enabled(False)
         self.assertFalse(manager.is_enabled())
 

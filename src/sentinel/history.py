@@ -13,8 +13,8 @@ from typing import Any, BinaryIO, Iterator
 import uuid
 
 from . import __version__
+from .app_state import app_data_root
 from .classifier import Classification
-from .product import PRODUCT
 from .quota import QuotaSnapshot, QuotaWindow
 
 
@@ -70,12 +70,12 @@ class HistoryStateError(RuntimeError):
 
 class HistoryIntegrityError(HistoryStateError):
     def __init__(self):
-        super().__init__("history_corrupt", "Sentinel history contains a malformed record.")
+        super().__init__("history_corrupt", "Saved history contains a malformed record.")
 
 
 class HistoryUnavailableError(HistoryStateError):
     def __init__(self):
-        super().__init__("history_unavailable", "Sentinel history could not be read safely.")
+        super().__init__("history_unavailable", "Saved history could not be read safely.")
 
 
 @dataclass(frozen=True)
@@ -141,7 +141,7 @@ class SafeHistory:
     def trigger_reservation_guard(self) -> Iterator[None]:
         """Serialize the short duplicate-check and reservation transaction.
 
-        The operating-system lock is released automatically if Sentinel exits,
+        The operating-system lock is released automatically if the app exits,
         so restart recovery continues to rely on the persisted attempt state.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -412,9 +412,7 @@ class SafeHistory:
 
 
 def default_history_path() -> Path:
-    base = os.environ.get("LOCALAPPDATA")
-    root = Path(base) if base else Path.home() / ".local" / "share"
-    return root / PRODUCT.app_data_folder / "sentinel.jsonl"
+    return app_data_root() / "sentinel.jsonl"
 
 
 def _window_to_dict(window: QuotaWindow) -> dict[str, Any]:

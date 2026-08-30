@@ -7,7 +7,7 @@ import time
 from typing import Callable
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QCloseEvent, QDesktopServices, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -26,11 +27,12 @@ from PySide6.QtWidgets import (
 )
 
 from .app_controller import ApplicationController
+from .branding import make_app_icon, render_mark
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
 from .ui_components import ProviderCard, StatusPill, make_surface_card, present_provider_state
-from .ui_theme import TOKENS, desktop_stylesheet
+from .ui_theme import desktop_stylesheet
 from .update_ui import UpdatePanel
 from .updates import GitHubReleaseUpdater
 
@@ -122,18 +124,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(28, 15, 28, 15)
         layout.setSpacing(13)
 
-        mark = QLabel("5h")
-        mark.setObjectName("brandMark")
-        mark.setFixedSize(42, 42)
-        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mark = QLabel()
+        mark.setPixmap(render_mark(38))
+        mark.setFixedSize(38, 38)
         layout.addWidget(mark)
         identity = QVBoxLayout()
-        identity.setSpacing(1)
-        name = QLabel(PRODUCT.display_name)
-        name.setObjectName("appName")
-        purpose = QLabel("Keep subscription coding windows ready")
+        identity.setSpacing(0)
+        wordmark = QHBoxLayout()
+        wordmark.setSpacing(0)
+        first = QLabel("Usage")
+        first.setObjectName("wordmarkPrimary")
+        second = QLabel("Loop")
+        second.setObjectName("wordmarkAccent")
+        wordmark.addWidget(first)
+        wordmark.addWidget(second)
+        wordmark.addStretch()
+        purpose = QLabel(PRODUCT.tagline)
         purpose.setObjectName("appPurpose")
-        identity.addWidget(name)
+        # The header must survive a 1366 pixel display, so the tagline yields
+        # its width instead of forcing the whole window wider.
+        purpose.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        identity.addLayout(wordmark)
         identity.addWidget(purpose)
         layout.addLayout(identity)
         layout.addStretch()
@@ -148,6 +159,15 @@ class MainWindow(QMainWindow):
             )
             self.nav_buttons.append(button)
             layout.addWidget(button)
+        chip = QLabel("Local-first")
+        chip.setObjectName("trustChip")
+        chip.setToolTip(
+            "Every check runs on this PC. Codex and Claude Code keep their own sign-in."
+        )
+        # The chip keeps its natural width; the tagline above absorbs any
+        # squeeze instead, so nothing here clips at 1366 pixels.
+        layout.addSpacing(10)
+        layout.addWidget(chip)
         return header
 
     def _page(self, title: str, intro: str) -> tuple[QScrollArea, QVBoxLayout]:
@@ -180,7 +200,8 @@ class MainWindow(QMainWindow):
     def _build_dashboard(self) -> QWidget:
         page, root = self._page(
             "Your coding windows",
-            "One quiet place to see what is ready and what Sentinel is allowed to do.",
+            f"{PRODUCT.display_name} watches your Codex and Claude Code five-hour windows and can "
+            "start a fresh one for you the moment the old one runs out.",
         )
         primary = QFrame()
         primary.setObjectName("primaryControl")
@@ -189,13 +210,14 @@ class MainWindow(QMainWindow):
         primary_layout.setSpacing(20)
         primary_copy = QVBoxLayout()
         primary_copy.setSpacing(4)
-        eyebrow = QLabel("PRIMARY CONTROL")
+        eyebrow = QLabel("MAIN SWITCH")
         eyebrow.setObjectName("eyebrow")
         self.automation_toggle = QCheckBox("Keep my 5-hour windows ready")
         self.automation_toggle.setObjectName("automationToggle")
         self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
         explanation = QLabel(
-            "Off means zero provider-triggering activity. When on, Sentinel acts only after its safety checks pass."
+            "While this is off, nothing is ever sent to a provider. Turn it on and "
+            f"{PRODUCT.display_name} uses the smallest possible request, and only after every safety check passes."
         )
         explanation.setProperty("muted", True)
         explanation.setWordWrap(True)
@@ -220,14 +242,44 @@ class MainWindow(QMainWindow):
             provider_row.addWidget(card, 1)
         root.addLayout(provider_row)
 
-        foot = QLabel(
-            "Countdowns move locally from the last verified reset. Usage percentages stay frozen until the next safe provider check."
-        )
-        foot.setProperty("muted", True)
-        foot.setWordWrap(True)
-        root.addWidget(foot)
+        root.addWidget(self._build_assurance_strip())
         root.addStretch()
         return page
+
+    def _build_assurance_strip(self) -> QWidget:
+        """The four things a new user has to understand, kept to one glance."""
+        strip = QFrame()
+        strip.setObjectName("assuranceStrip")
+        layout = QHBoxLayout(strip)
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(22)
+        points = (
+            ("Everything stays local", "Checks and countdowns run on this PC. Nothing is uploaded."),
+            ("No passwords or tokens", "Codex and Claude Code keep their own sign-in. We never read it."),
+            ("Counting down is free", "The timers cost you nothing. Only starting a window uses your plan."),
+            ("One small action, once", "When a window needs starting we send the smallest request, and never retry it."),
+        )
+        for title, body in points:
+            column = QVBoxLayout()
+            column.setSpacing(3)
+            heading = QLabel(title)
+            heading.setObjectName("assuranceTitle")
+            heading.setWordWrap(True)
+            detail = QLabel(body)
+            detail.setObjectName("assuranceBody")
+            detail.setWordWrap(True)
+            # A wrapped label otherwise reports its full single-line width as a
+            # minimum, which would push the window past a 1366 pixel display.
+            for label in (heading, detail):
+                label.setMinimumWidth(140)
+                label.setSizePolicy(
+                    QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+                )
+            column.addWidget(heading)
+            column.addWidget(detail)
+            column.addStretch()
+            layout.addLayout(column, 1)
+        return strip
 
     def _build_settings(
         self,
@@ -236,12 +288,13 @@ class MainWindow(QMainWindow):
     ) -> QWidget:
         page, root = self._page(
             "Settings",
-            "Startup, updates, and the technical details that stay out of the dashboard.",
+            "Startup, updates, and the technical detail that stays out of your way on the dashboard.",
         )
 
         startup_card, startup_layout = make_surface_card(
             "Windows startup",
-            "Start the tray app when you sign in. This is per-user, needs no administrator rights, and defaults off.",
+            "Start in the tray when you sign in to Windows. Applies to your account only, needs no "
+            "administrator rights, and is off until you turn it on.",
         )
         startup_row = QFrame()
         startup_row.setObjectName("settingRow")
@@ -251,7 +304,7 @@ class MainWindow(QMainWindow):
         row_copy.setSpacing(2)
         row_title = QLabel(f"Start {PRODUCT.display_name} with Windows")
         row_title.setObjectName("secondaryMetric")
-        row_hint = QLabel("Keeps the tray available after sign-in")
+        row_hint = QLabel("Opens quietly in the tray, not on screen")
         row_hint.setProperty("muted", True)
         row_copy.addWidget(row_title)
         row_copy.addWidget(row_hint)
@@ -265,7 +318,8 @@ class MainWindow(QMainWindow):
 
         diagnostic_card, diagnostic_layout = make_surface_card(
             "Diagnostics",
-            "Provider versions, compatibility, cached state, and safe failure reasons. No prompts, responses, credentials, or account identity are stored here.",
+            "For when something looks wrong. Provider versions, compatibility, cached state, and the exact "
+            "reason a check stopped. No prompts, responses, credentials, or account identity are ever recorded.",
         )
         self.diagnostic_text = QLabel()
         self.diagnostic_text.setObjectName("diagnosticValue")
@@ -285,16 +339,16 @@ class MainWindow(QMainWindow):
         return page
 
     def _build_about(self) -> QWidget:
-        page, root = self._page(
-            f"About {PRODUCT.display_name}",
-            "A small local-first utility for subscription coding windows.",
-        )
+        page, root = self._page(f"About {PRODUCT.display_name}", PRODUCT.tagline)
         about, about_layout = make_surface_card(PRODUCT.display_name)
-        version = QLabel(f"Version {PRODUCT.version} · Windows alpha · MIT licensed")
+        version = QLabel(f"Version {PRODUCT.version} \u00b7 Windows \u00b7 MIT licensed")
         version.setObjectName("secondaryMetric")
         about_layout.addWidget(version)
         description = QLabel(
-            "Sentinel observes Codex rate windows through the installed Codex app-server, then uses one guarded request only when you have enabled automation and every safety check passes."
+            "Your Codex and Claude Code plans work in five-hour windows. A window only starts when you "
+            "actually use the tool, so a window you never opened is a window you never got. "
+            f"{PRODUCT.display_name} watches for that and, once you allow it, starts the next one using "
+            "the smallest request the provider accepts."
         )
         description.setProperty("muted", True)
         description.setWordWrap(True)
@@ -315,16 +369,48 @@ class MainWindow(QMainWindow):
         about_layout.addLayout(links)
         root.addWidget(about)
 
+        support, support_layout = make_surface_card(
+            "What each provider does today",
+            "The two providers are at different stages, and the app does not pretend otherwise.",
+        )
+        codex_row = QLabel(
+            "<b>Codex</b> is verified. A measured live test proved that one small request through the "
+            "local Codex app-server starts a fresh five-hour window, and that is the path used here."
+        )
+        codex_row.setObjectName("secondaryMetric")
+        codex_row.setWordWrap(True)
+        support_layout.addWidget(codex_row)
+        claude_header = QHBoxLayout()
+        claude_label = QLabel("<b>Claude Code</b>")
+        claude_label.setObjectName("secondaryMetric")
+        preview = QLabel("PREVIEW")
+        preview.setObjectName("previewTag")
+        claude_header.addWidget(claude_label)
+        claude_header.addWidget(preview)
+        claude_header.addStretch()
+        support_layout.addLayout(claude_header)
+        claude_row = QLabel(
+            "Claude Code offers no free way to read your window state, so this provider reads the status "
+            "line Claude Code already writes and runs one prompt-free initialization. Whether that "
+            "initialization starts a five-hour window is not yet proven, so treat the Claude card as "
+            "information rather than a guarantee. It stays guarded either way: one attempt, never repeated."
+        )
+        claude_row.setObjectName("secondaryMetric")
+        claude_row.setWordWrap(True)
+        support_layout.addWidget(claude_row)
+        root.addWidget(support)
+
         privacy, privacy_layout = make_surface_card(
             "Privacy and safety",
-            "Codex and Claude Code keep their own sign-in. Sentinel does not read tokens, credentials, conversations, or account identifiers.",
+            "Codex and Claude Code keep their own sign-in. This app never reads tokens, credentials, "
+            "conversations, or account identifiers.",
         )
         boundaries = QLabel(
-            "• Provider automation starts off\n"
-            "• Update checks run only when you press the button\n"
-            "• Countdown changes are local and cause no provider traffic\n"
-            "• Ambiguous Codex requests are never retried automatically\n"
-            "• Claude Code uses one prompt-free initialization only when cached quota safety checks pass"
+            "\u2022 Provider automation is off until you switch it on\n"
+            "\u2022 Update checks run only when you press the button, and never touch your plan\n"
+            "\u2022 Countdowns are calculated locally and cause no provider traffic\n"
+            "\u2022 A request whose outcome is unclear is never retried automatically\n"
+            "\u2022 Weekly limits are respected before any action is considered"
         )
         boundaries.setObjectName("secondaryMetric")
         boundaries.setWordWrap(True)
@@ -386,7 +472,7 @@ class MainWindow(QMainWindow):
             return
         state = self.controller.states[provider_id]
         self.controller.update_provider_state(
-            replace(state, status="Starting", detail="Sentinel is checking the provider safely.")
+            replace(state, status="Starting", detail="Checking with the provider safely.")
         )
         self.active_operations.add(provider_id)
         operation = (
@@ -418,7 +504,7 @@ class MainWindow(QMainWindow):
             replace(
                 state,
                 status="Needs attention",
-                detail=f"The provider check stopped safely ({category}). No automatic retry will run.",
+                detail=f"The check stopped safely ({category}). Nothing was retried. See Settings for detail.",
             )
         )
         self.refresh_clock()
@@ -480,10 +566,11 @@ class MainWindow(QMainWindow):
     def _confirm_enable(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Turn on guarded automation?",
-            "Sentinel will use each provider's normal signed-in client only after its safety checks pass. "
-            "For Claude, it may add a local statusLine helper only when no custom status line exists. "
-            "A provider action can start a five-hour window, and an ambiguous action is never retried.",
+            "Keep your 5-hour windows ready?",
+            f"{PRODUCT.display_name} will use each provider's own signed-in client, and only after its "
+            "safety checks pass. For Claude Code it may add a local status-line helper, and only when you "
+            "have not set one yourself.\n\nStarting a window uses a small amount of your plan. An action "
+            "whose outcome is unclear is never retried.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
@@ -492,9 +579,9 @@ class MainWindow(QMainWindow):
     def _confirm_bootstrap(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Start the first Codex window?",
-            "Sentinel will run the guarded Codex bootstrap once. It may submit one minimal request only if "
-            "several observations prove the window is inactive and weekly protection passes.",
+            "Start your first Codex window now?",
+            "This sends one small request through your signed-in Codex client, and only if repeated checks "
+            "show no window is running and your weekly limit is safe. It runs once and is not retried.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
@@ -549,21 +636,3 @@ class DesktopShell:
             QSystemTrayIcon.ActivationReason.DoubleClick,
         }:
             self.restore_window()
-
-
-def make_app_icon() -> QIcon:
-    pixmap = QPixmap(64, 64)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor(TOKENS.surface_raised))
-    painter.setPen(QColor(TOKENS.border_strong))
-    painter.drawRoundedRect(4, 4, 56, 56, 15, 15)
-    painter.setBrush(QColor(TOKENS.accent))
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawEllipse(15, 15, 34, 34)
-    painter.setPen(QColor(TOKENS.accent_ink))
-    painter.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "5h")
-    painter.end()
-    return QIcon(pixmap)

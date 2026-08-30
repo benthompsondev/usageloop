@@ -1,4 +1,4 @@
-# Codex Window Sentinel - Agent Instructions
+# UsageLoop (repo: codex-window-sentinel) - Agent Instructions
 
 Applies to Codex and Claude Code. Global rules come from Ben's homebase;
 this file only adds what is specific to this repository.

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QScrollArea
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow
+from sentinel.product import PRODUCT
 from sentinel.updates import ReleaseAsset, ReleaseInfo
 
 
@@ -113,8 +114,8 @@ def main() -> int:
             "0.7.0",
             ("Sharper provider status", "Safer Windows update flow"),
             "https://github.com/example/window-sentinel/releases/tag/v0.7.0",
-            ReleaseAsset("WindowSentinel-Setup.exe", "https://github.com/example"),
-            ReleaseAsset("WindowSentinel-Setup.exe.sha256", "https://github.com/example"),
+            ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example"),
+            ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example"),
         )
         window.update_panel._operation_completed("check", release)
         settings_scroll = window.pages.widget(1)
