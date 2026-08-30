@@ -4,6 +4,8 @@ Window Sentinel is a small Windows app that keeps subscription coding windows
 ready without asking a normal user to manage terminals or config files. Its one
 primary control is **Keep my 5-hour windows ready**.
 
+![Window Sentinel dashboard](docs/screenshots/dashboard.png)
+
 Phase 1 observes the real ChatGPT/Codex subscription windows through the local
 Codex app-server and classifies the approximately five-hour window as
 `ANCHORED`, `UNANCHORED`, `ABSENT`, `EXHAUSTED`, or `UNKNOWN`.
@@ -14,10 +16,11 @@ first window when no historical anchored reset exists. Both paths allow one
 minimal request through the local Codex app-server and report success
 only when fresh observations prove that the window anchored.
 
-The PySide6 desktop shell adds provider cards, local countdowns, background
-workers, a system tray, and optional per-user startup. Claude is detected and
-can show cached status, but automatic Claude anchoring remains deliberately
-disabled until its exact minimal fresh-window operation is proven.
+The PySide6 desktop shell adds a focused dashboard, local countdowns,
+background workers, a system tray, optional per-user startup, and manual update
+checks through GitHub Releases. Claude is detected and can show cached status,
+but automatic Claude anchoring remains deliberately disabled until its exact
+minimal fresh-window operation is proven.
 
 ## Boundaries
 
@@ -27,8 +30,7 @@ Sentinel does:
 - identify windows by reported duration instead of assuming `primary` means five hours;
 - use several observations and conservative timestamp tolerances;
 - submit the one approved trigger as an ephemeral `thread/start` plus a single
-  `turn/start` on that same app-server connection for the
-  one approved trigger;
+  `turn/start` on that same app-server connection;
 - launch native Codex executables directly and Windows `.cmd` shims through
   `cmd.exe`, never by passing a shim to `CreateProcessW`;
 - persist reservation, launch, possibly-sent, verified, and recoverable/guarded
@@ -36,7 +38,9 @@ Sentinel does:
 - require post-trigger `ANCHORED` evidence before reporting verified success;
 - rerun a lightweight capability probe when a provider binary changes, and
   continue only when required behavior remains compatible;
-- advance visible countdowns locally without provider traffic.
+- advance visible countdowns locally without provider traffic;
+- check GitHub Releases only when the user presses **Check for updates**, then
+  verify the downloaded installer against its published SHA-256 checksum.
 
 Sentinel does not:
 
@@ -45,8 +49,8 @@ Sentinel does not:
 - use `codex exec`, an API key, UI scraping, or reset credits;
 - log trigger input or model/process output;
 - retry with another model;
-- automatically anchor Claude, create scheduled tasks, update itself, or opt the
-  user into startup or automation.
+- automatically anchor Claude, create scheduled tasks, silently replace its
+  running executable, or opt the user into startup or automation.
 
 ## Architecture and Privacy
 
@@ -54,6 +58,7 @@ Sentinel does not:
 Observation:  Sentinel -> local codex app-server -> OpenAI
 Trigger:      Sentinel -> local codex app-server -> OpenAI
 Verification: Sentinel -> local codex app-server -> OpenAI
+Updates:      Sentinel -> public GitHub Releases (user initiated only)
 ```
 
 Codex owns authentication and network communication on both paths. Sentinel
@@ -83,10 +88,16 @@ Start Menu shortcut. On first launch:
    automation. Leaving it off means zero provider-triggering activity.
 3. If Codex has no historical anchored reset, choose **Start my first window
    now** and approve the explicit one-request bootstrap explanation.
-4. Optionally enable **Start Window Sentinel with Windows** under Advanced.
+4. Optionally enable **Start Window Sentinel with Windows** in **Settings**.
 
 Closing the window keeps it in the system tray. Use **Quit Window Sentinel** in
 the tray menu to exit completely.
+
+The main window has three places:
+
+- **Dashboard** shows the global control and the two provider cards.
+- **Settings** holds startup, diagnostics, and the manual update check.
+- **About** explains the safety boundary and links back to this repository.
 
 ## Source Requirements and Setup
 
@@ -118,6 +129,24 @@ pwsh -NoProfile -File .\scripts\build-windows.ps1
 ```
 
 The CLI remains available for diagnostics and controlled provider testing.
+
+## Updates
+
+Update checking never runs at launch, on a timer, or in the background. When a
+user presses **Check for updates**, Sentinel reads the latest public GitHub
+Release. A usable Windows release must carry both exact files:
+
+```text
+WindowSentinel-Setup.exe
+WindowSentinel-Setup.exe.sha256
+```
+
+Sentinel downloads the installer to the user's temporary folder, checks its
+SHA-256 hash, asks before opening it, then checks the hash again immediately
+before launch. It exits cleanly after the normal per-user installer starts
+instead of replacing its own running files.
+This source push does not create a GitHub Release. See
+[`docs/RELEASING.md`](docs/RELEASING.md) for the later release checklist.
 
 ## CLI Commands
 

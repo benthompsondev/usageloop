@@ -14,6 +14,7 @@ import uuid
 
 from . import __version__
 from .classifier import Classification
+from .product import PRODUCT
 from .quota import QuotaSnapshot, QuotaWindow
 
 
@@ -413,7 +414,7 @@ class SafeHistory:
 def default_history_path() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     root = Path(base) if base else Path.home() / ".local" / "share"
-    return root / "CodexWindowSentinel" / "sentinel.jsonl"
+    return root / PRODUCT.app_data_folder / "sentinel.jsonl"
 
 
 def _window_to_dict(window: QuotaWindow) -> dict[str, Any]:

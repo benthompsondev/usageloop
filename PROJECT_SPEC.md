@@ -63,14 +63,15 @@ create the token-count events that normally carry that notification.
 
 ## Windows App Scope
 
-In scope: the existing Codex observer and guarded trigger, a thin PySide6 window
-and tray, local countdowns, opt-in per-user startup, background workers, cached
-Claude detection/status, and a per-user PyInstaller/Inno Setup package.
+In scope: the existing Codex observer and guarded trigger, a polished PySide6
+window and tray, local countdowns, opt-in per-user startup, background workers,
+cached Claude detection/status, a manual checksum-gated GitHub Release updater,
+and a per-user PyInstaller/Inno Setup package.
 
 Out of scope: Claude automatic anchoring until its exact fresh-window operation
 is proven, keepalives, reset credits, private endpoints, credential reads, API
-keys, UI scraping, updater services, public release work, telemetry, and global
-PATH changes.
+keys, UI scraping, silent self-replacement, automatic/background update checks,
+telemetry, and global PATH changes.
 
 Ask Ben first before any security-boundary, protocol-method, dependency,
 publishing, deployment, or persistence expansion.
@@ -129,3 +130,4 @@ False `UNKNOWN` is preferable to a false anchored or unanchored result.
 | 2026-08-30 | Block cross-mode attempts within the same five-hour opportunity | Concurrent `chain` and `bootstrap` commands must not each reserve a turn merely because their mode names differ. |
 | 2026-08-30 | Add a PySide6 thin shell without moving provider policy into the GUI | The hardened core remains authoritative while normal users get one understandable control, local countdowns, tray behavior, and a per-user installer. |
 | 2026-08-30 | Treat provider version changes as capability-probe events, not automatic failures | Automation may continue when the required methods and semantics still pass the lightweight compatibility check. |
+| 2026-08-30 | Keep updates manual and checksum-gated | A public GitHub Release check is separate from provider traffic. Sentinel downloads the per-user installer, verifies its companion SHA-256 file, asks for approval, launches setup, and exits instead of modifying itself. |

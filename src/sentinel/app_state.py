@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .product import PRODUCT
+
 
 @dataclass(frozen=True)
 class AppSettings:
@@ -188,4 +190,4 @@ class AppStateStore:
 
 def default_app_state_path() -> Path:
     root = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
-    return root / "CodexWindowSentinel" / "app-state.json"
+    return root / PRODUCT.app_data_folder / "app-state.json"

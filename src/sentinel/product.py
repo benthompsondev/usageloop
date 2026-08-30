@@ -1,0 +1,56 @@
+"""Product identity and release metadata kept in one replaceable place."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ProductMetadata:
+    display_name: str
+    version: str
+    github_owner: str
+    github_repo: str
+    executable_name: str
+    icon_filename: str
+    version_resource_filename: str
+    installer_filename: str
+    checksum_filename: str
+    app_data_folder: str
+    publisher: str
+    app_id: str
+
+    @property
+    def github_url(self) -> str:
+        return f"https://github.com/{self.github_owner}/{self.github_repo}"
+
+    @property
+    def releases_url(self) -> str:
+        return f"{self.github_url}/releases/latest"
+
+    @property
+    def issues_url(self) -> str:
+        return f"{self.github_url}/issues"
+
+    @property
+    def release_api_url(self) -> str:
+        return (
+            f"https://api.github.com/repos/{self.github_owner}/"
+            f"{self.github_repo}/releases/latest"
+        )
+
+
+PRODUCT = ProductMetadata(
+    display_name="Window Sentinel",
+    version="0.5.0",
+    github_owner="benthompsondev",
+    github_repo="codex-window-sentinel",
+    executable_name="WindowSentinel.exe",
+    icon_filename="windowsentinel.ico",
+    version_resource_filename="version_info.txt",
+    installer_filename="WindowSentinel-Setup.exe",
+    checksum_filename="WindowSentinel-Setup.exe.sha256",
+    app_data_folder="CodexWindowSentinel",
+    publisher="Ben Thompson",
+    app_id="{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}",
+)

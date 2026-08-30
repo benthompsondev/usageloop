@@ -1,3 +1,5 @@
 """Codex Window Sentinel."""
 
-__version__ = "0.4.0"
+from .product import PRODUCT
+
+__version__ = PRODUCT.version

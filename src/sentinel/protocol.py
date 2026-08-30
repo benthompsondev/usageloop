@@ -8,6 +8,8 @@ import json
 import time
 from typing import Any, Protocol
 
+from .product import PRODUCT
+
 
 class LineTransport(Protocol):
     def start(self) -> None: ...
@@ -91,7 +93,7 @@ class AppServerClient:
                 "params": {
                     "clientInfo": {
                         "name": "codex-window-sentinel",
-                        "title": "Codex Window Sentinel",
+                        "title": PRODUCT.display_name,
                         "version": self.client_version,
                     },
                     "capabilities": {

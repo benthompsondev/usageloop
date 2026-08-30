@@ -1,0 +1,218 @@
+"""Reusable presentation widgets for the Window Sentinel shell."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+import time
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from .app_state import ProviderViewState, format_countdown
+
+
+STALE_AFTER_SECONDS = 6 * 60 * 60
+
+
+@dataclass(frozen=True)
+class ProviderPresentation:
+    status: str
+    tone: str
+    headline: str
+    reset: str
+    detail: str
+    verified: str
+    usage: str
+
+
+def present_provider_state(state: ProviderViewState, *, now: float) -> ProviderPresentation:
+    if not state.installed:
+        return ProviderPresentation(
+            "NOT DETECTED",
+            "neutral",
+            "Not installed",
+            "No reset information",
+            f"Install {state.display_name} to show its window here.",
+            "No local status yet",
+            "Usage not checked",
+        )
+
+    reset = _reset_copy(state.reset_at, now=now)
+    verified = (
+        f"Last verified {_friendly_time(state.last_verified_at, now=now)}"
+        if state.last_verified_at is not None
+        else "No verified check yet"
+    )
+    usage = (
+        f"Last-known usage {state.used_percent}% · {_friendly_time(state.usage_checked_at, now=now)}"
+        if state.used_percent is not None and state.usage_checked_at is not None
+        else "Usage not checked"
+    )
+
+    if state.provider_id == "claude":
+        return ProviderPresentation(
+            "AUTOMATION PAUSED",
+            "warning",
+            format_countdown(state.reset_at, now) if state.reset_at else "Support being verified",
+            reset,
+            "Sentinel can detect Claude Code, but will not start its windows yet.",
+            verified,
+            usage,
+        )
+
+    if (
+        state.last_verified_at is not None
+        and now - state.last_verified_at > STALE_AFTER_SECONDS
+    ):
+        return ProviderPresentation(
+            "STALE",
+            "warning",
+            format_countdown(state.reset_at, now),
+            reset,
+            "This is cached information. Open Diagnostics before relying on it.",
+            verified,
+            usage,
+        )
+
+    status, tone = {
+        "Ready": ("READY", "success"),
+        "Waiting": ("WAITING", "neutral"),
+        "Starting": ("CHECKING", "info"),
+        "Needs attention": ("CHECK NEEDED", "error"),
+    }.get(state.status, ("UNKNOWN", "warning"))
+    headline = (
+        format_countdown(state.reset_at, now)
+        if state.reset_at is not None
+        else ("Checking safely" if state.status == "Starting" else "Waiting for a verified window")
+    )
+    detail = {
+        "Ready": "This five-hour window is anchored and counting down.",
+        "Waiting": "Sentinel is waiting for enough evidence to act safely.",
+        "Starting": "Sentinel is running a bounded provider check.",
+        "Needs attention": "Open Diagnostics for the technical reason. No retry will run automatically.",
+    }.get(state.status, "The latest provider state was inconclusive.")
+    return ProviderPresentation(status, tone, headline, reset, detail, verified, usage)
+
+
+class StatusPill(QLabel):
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("statusPill")
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def set_status(self, text: str, tone: str) -> None:
+        self.setText(text)
+        self.setProperty("tone", tone)
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+
+class ProviderCard(QFrame):
+    def __init__(self, state: ProviderViewState, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("providerCard")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMinimumHeight(258)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setSpacing(8)
+
+        header = QHBoxLayout()
+        self.name_label = QLabel(state.display_name)
+        self.name_label.setObjectName("providerName")
+        self.status_label = StatusPill()
+        header.addWidget(self.name_label)
+        header.addStretch()
+        header.addWidget(self.status_label)
+        layout.addLayout(header)
+
+        self.countdown_label = QLabel()
+        self.countdown_label.setObjectName("countdown")
+        layout.addWidget(self.countdown_label)
+        self.reset_label = QLabel()
+        self.reset_label.setObjectName("secondaryMetric")
+        layout.addWidget(self.reset_label)
+        self.detail_label = QLabel()
+        self.detail_label.setObjectName("detail")
+        self.detail_label.setWordWrap(True)
+        layout.addWidget(self.detail_label)
+        layout.addStretch()
+        self.metadata_label = QLabel()
+        self.metadata_label.setProperty("muted", True)
+        self.metadata_label.setWordWrap(True)
+        layout.addWidget(self.metadata_label)
+        self.usage_label = QLabel()
+        self.usage_label.setProperty("muted", True)
+        layout.addWidget(self.usage_label)
+
+        self.action_button = QPushButton("Start my first window now")
+        self.action_button.setObjectName("primaryButton")
+        self.action_button.setVisible(False)
+        layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.update_state(state, now=time.time())
+
+    def update_state(self, state: ProviderViewState, *, now: float) -> None:
+        presented = present_provider_state(state, now=now)
+        self.status_label.set_status(presented.status, presented.tone)
+        self.countdown_label.setText(presented.headline)
+        self.reset_label.setText(presented.reset)
+        self.detail_label.setText(presented.detail)
+        self.metadata_label.setText(presented.verified)
+        self.usage_label.setText(presented.usage)
+
+
+def make_surface_card(
+    title: str,
+    description: str | None = None,
+    *,
+    parent: QWidget | None = None,
+) -> tuple[QFrame, QVBoxLayout]:
+    card = QFrame(parent)
+    card.setObjectName("surfaceCard")
+    layout = QVBoxLayout(card)
+    layout.setContentsMargins(22, 20, 22, 20)
+    layout.setSpacing(10)
+    title_label = QLabel(title)
+    title_label.setObjectName("sectionTitle")
+    layout.addWidget(title_label)
+    if description:
+        description_label = QLabel(description)
+        description_label.setProperty("muted", True)
+        description_label.setWordWrap(True)
+        layout.addWidget(description_label)
+    return card, layout
+
+
+def _reset_copy(reset_at: int | None, *, now: float) -> str:
+    if reset_at is None:
+        return "Reset time not verified"
+    try:
+        local = datetime.fromtimestamp(reset_at).astimezone()
+        current = datetime.fromtimestamp(now).astimezone()
+    except (OSError, OverflowError, ValueError):
+        return "Reset time unavailable"
+    if local.date() == current.date():
+        return f"Resets at {local.strftime('%I:%M %p').lstrip('0')}"
+    return f"Resets {local.strftime('%a at %I:%M %p').replace(' 0', ' ')}"
+
+
+def _friendly_time(timestamp: float | None, *, now: float) -> str:
+    if timestamp is None:
+        return "at an unknown time"
+    try:
+        local = datetime.fromtimestamp(timestamp).astimezone()
+        current = datetime.fromtimestamp(now).astimezone()
+    except (OSError, OverflowError, ValueError):
+        return "at an unknown time"
+    if local.date() == current.date():
+        return local.strftime("%I:%M %p").lstrip("0")
+    return local.strftime("%b %d at %I:%M %p").replace(" 0", " ")

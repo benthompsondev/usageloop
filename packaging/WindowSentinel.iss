@@ -1,20 +1,35 @@
-#define AppName "Window Sentinel"
-#define AppVersion "0.4.0"
-#define AppExeName "WindowSentinel.exe"
+#ifndef AppName
+  #define AppName "Window Sentinel"
+#endif
+#ifndef AppVersion
+  #define AppVersion "0.5.0"
+#endif
+#ifndef AppExeName
+  #define AppExeName "WindowSentinel.exe"
+#endif
+#ifndef AppPublisher
+  #define AppPublisher "Ben Thompson"
+#endif
+#ifndef AppId
+  #define AppId "{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}"
+#endif
+#ifndef InstallerBaseName
+  #define InstallerBaseName "WindowSentinel-Setup"
+#endif
 
 [Setup]
-AppId={{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}
+AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher=Ben Thompson
-DefaultDirName={localappdata}\Programs\Window Sentinel
-DefaultGroupName=Window Sentinel
+AppPublisher={#AppPublisher}
+DefaultDirName={localappdata}\Programs\{#AppName}
+DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=WindowSentinel-Setup
+OutputBaseFilename={#InstallerBaseName}
 SetupIconFile=windowsentinel.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2/max
@@ -27,10 +42,10 @@ RestartApplications=no
 Source: "..\dist\WindowSentinel\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Window Sentinel"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "Open Window Sentinel"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExeName}"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Window Sentinel"; Flags: uninsdeletevalue dontcreatekey
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey

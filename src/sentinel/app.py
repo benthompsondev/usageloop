@@ -11,12 +11,13 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from .app_controller import ApplicationController
 from .app_state import AppStateStore
 from .desktop import DesktopShell, MainWindow
+from .product import PRODUCT
 from .providers import ClaudeProvider, CodexProvider
 from .startup import StartupManager
 
 
 def create_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="WindowSentinel")
+    parser = argparse.ArgumentParser(prog=Path(PRODUCT.executable_name).stem)
     parser.add_argument(
         "--background",
         action="store_true",
@@ -28,8 +29,10 @@ def create_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = create_parser().parse_args(argv)
     application = QApplication.instance() or QApplication(sys.argv[:1])
-    application.setApplicationName("Window Sentinel")
-    application.setOrganizationName("Window Sentinel")
+    application.setApplicationName(PRODUCT.display_name)
+    application.setApplicationVersion(PRODUCT.version)
+    application.setOrganizationName(PRODUCT.publisher)
+    application.setStyle("Fusion")
 
     providers = [CodexProvider(), ClaudeProvider()]
     controller = ApplicationController(providers, AppStateStore())

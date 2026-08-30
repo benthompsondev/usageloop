@@ -1,0 +1,146 @@
+"""Render deterministic product-shell screenshots without provider traffic."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import replace
+from pathlib import Path
+import tempfile
+import time
+
+from PySide6.QtWidgets import QApplication, QScrollArea
+
+from sentinel.app_controller import ApplicationController
+from sentinel.app_state import AppStateStore, ProviderViewState
+from sentinel.desktop import MainWindow
+from sentinel.updates import ReleaseAsset, ReleaseInfo
+
+
+class PreviewProvider:
+    def __init__(self, state: ProviderViewState):
+        self.provider_id = state.provider_id
+        self.state = state
+
+    def detect(self) -> ProviderViewState:
+        return self.state
+
+
+class PreviewStartup:
+    def is_enabled(self) -> bool:
+        return False
+
+    def set_enabled(self, _enabled: bool) -> None:
+        return None
+
+
+class PreviewUpdater:
+    def check(self):
+        raise AssertionError("Screenshot rendering must not contact GitHub.")
+
+
+def save(window: MainWindow, target: Path, app: QApplication) -> None:
+    window.show()
+    app.processEvents()
+    if not window.grab().save(str(target), "PNG"):
+        raise RuntimeError(f"Could not save {target}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("output", type=Path)
+    args = parser.parse_args()
+    args.output.mkdir(parents=True, exist_ok=True)
+    app = QApplication.instance() or QApplication([])
+    app.setStyle("Fusion")
+    now = time.time()
+    codex = ProviderViewState(
+        "codex",
+        "Codex",
+        True,
+        True,
+        "Ready",
+        "The last verified five-hour window is ready.",
+        "codex-runtime",
+        "0.96.0",
+        int(now + 3 * 3600 + 42 * 60),
+        now - 60,
+        "Anchor verified",
+        0,
+        now - 60,
+    )
+    claude = ProviderViewState(
+        "claude",
+        "Claude Code",
+        True,
+        False,
+        "Needs attention",
+        "Automatic anchoring awaits one exact fresh-window proof.",
+        "claude-runtime",
+        "2.1.7",
+    )
+    with tempfile.TemporaryDirectory() as directory:
+        providers = [PreviewProvider(codex), PreviewProvider(claude)]
+        controller = ApplicationController(
+            providers, AppStateStore(Path(directory) / "state.json")
+        )
+        controller.start()
+        window = MainWindow(
+            controller,
+            {provider.provider_id: provider for provider in providers},
+            PreviewStartup(),
+            updater=PreviewUpdater(),
+            confirm_enable=lambda: False,
+            confirm_bootstrap=lambda: False,
+            confirm_install=lambda _version: False,
+        )
+        window.resize(1040, 720)
+        save(window, args.output / "dashboard.png", app)
+        window.resize(1366, 768)
+        save(window, args.output / "dashboard-1366x768.png", app)
+        window.resize(1040, 720)
+
+        window.show_page(1)
+        save(window, args.output / "settings.png", app)
+
+        release = ReleaseInfo(
+            "0.6.0",
+            ("Sharper provider status", "Safer Windows update flow"),
+            "https://github.com/benthompsondev/codex-window-sentinel/releases/tag/v0.6.0",
+            ReleaseAsset("WindowSentinel-Setup.exe", "https://github.com/example"),
+            ReleaseAsset("WindowSentinel-Setup.exe.sha256", "https://github.com/example"),
+        )
+        window.update_panel._operation_completed("check", release)
+        settings_scroll = window.pages.widget(1)
+        if isinstance(settings_scroll, QScrollArea):
+            settings_scroll.verticalScrollBar().setValue(
+                settings_scroll.verticalScrollBar().maximum()
+            )
+        save(window, args.output / "updates.png", app)
+
+        window.show_page(2)
+        save(window, args.output / "about.png", app)
+
+        window.show_page(0)
+        controller.update_provider_state(
+            replace(codex, installed=False, status="Needs attention", reset_at=None)
+        )
+        window.refresh_clock(now=now)
+        save(window, args.output / "dashboard-provider-missing.png", app)
+
+        controller.update_provider_state(
+            replace(codex, status="Needs attention", detail="Capability probe failed safely.")
+        )
+        window.refresh_clock(now=now)
+        save(window, args.output / "dashboard-compatibility-failure.png", app)
+
+        controller.update_provider_state(
+            replace(codex, last_verified_at=now - 7 * 3600)
+        )
+        window.refresh_clock(now=now)
+        save(window, args.output / "dashboard-stale.png", app)
+        window.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

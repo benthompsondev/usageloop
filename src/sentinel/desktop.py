@@ -1,14 +1,13 @@
-"""PySide6 desktop window, provider cards, and system-tray lifecycle."""
+"""PySide6 desktop shell, navigation, background work, and tray lifecycle."""
 
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
 import time
 from typing import Callable
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QColor, QCloseEvent, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal
+from PySide6.QtGui import QColor, QCloseEvent, QDesktopServices, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -20,110 +19,20 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
+    QStackedWidget,
     QSystemTrayIcon,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from .app_controller import ApplicationController
-from .app_state import ProviderViewState, format_countdown
+from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
-
-
-_STYLE = """
-QWidget { background: #f4f6f8; color: #18212b; font-family: "Segoe UI"; font-size: 14px; }
-QMainWindow { background: #f4f6f8; }
-QLabel#title { font-size: 25px; font-weight: 700; color: #102a36; }
-QLabel#subtitle { color: #566773; font-size: 14px; }
-QFrame#primaryControl { background: #103b4a; border-radius: 14px; }
-QFrame#primaryControl QLabel { background: transparent; color: white; }
-QFrame#primaryControl QCheckBox { background: transparent; color: white; font-size: 17px; font-weight: 650; spacing: 12px; }
-QCheckBox::indicator { width: 34px; height: 20px; border-radius: 10px; border: 1px solid #89969d; background: #d6dde1; }
-QCheckBox::indicator:checked { border: 1px solid #54c4b0; background: #54c4b0; }
-QFrame#providerCard { background: white; border: 1px solid #dce3e7; border-radius: 12px; }
-QLabel#providerName { font-size: 18px; font-weight: 700; color: #142c36; }
-QLabel#statusReady { color: #16735f; font-weight: 700; }
-QLabel#statusWaiting { color: #5d6b75; font-weight: 700; }
-QLabel#statusStarting { color: #1e6583; font-weight: 700; }
-QLabel#statusAttention { color: #a54832; font-weight: 700; }
-QLabel#countdown { font-size: 26px; font-weight: 700; color: #103b4a; }
-QLabel#muted { color: #64737d; }
-QPushButton { background: #e7eef1; border: 1px solid #ccd8dd; border-radius: 8px; padding: 8px 13px; font-weight: 600; }
-QPushButton:hover { background: #dce8ec; }
-QPushButton:focus { border: 2px solid #227c95; }
-QPushButton#primaryButton { background: #176f7f; color: white; border: none; }
-QPushButton#primaryButton:hover { background: #125e6c; }
-QToolButton { color: #40545f; border: none; padding: 5px; font-weight: 600; }
-QFrame#diagnostics { background: #e9eef1; border-radius: 9px; }
-"""
-
-
-class ProviderCard(QFrame):
-    def __init__(self, state: ProviderViewState, parent: QWidget | None = None):
-        super().__init__(parent)
-        self.setObjectName("providerCard")
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 17, 20, 17)
-        layout.setSpacing(7)
-
-        header = QHBoxLayout()
-        self.name_label = QLabel(state.display_name)
-        self.name_label.setObjectName("providerName")
-        self.status_label = QLabel()
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self.name_label)
-        header.addStretch()
-        header.addWidget(self.status_label)
-        layout.addLayout(header)
-
-        self.countdown_label = QLabel()
-        self.countdown_label.setObjectName("countdown")
-        layout.addWidget(self.countdown_label)
-        self.reset_label = QLabel()
-        self.reset_label.setObjectName("muted")
-        layout.addWidget(self.reset_label)
-        self.detail_label = QLabel()
-        self.detail_label.setWordWrap(True)
-        layout.addWidget(self.detail_label)
-        self.metadata_label = QLabel()
-        self.metadata_label.setObjectName("muted")
-        self.metadata_label.setWordWrap(True)
-        layout.addWidget(self.metadata_label)
-
-        self.action_button = QPushButton("Start my first window now")
-        self.action_button.setObjectName("primaryButton")
-        self.action_button.setVisible(False)
-        layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.update_state(state, now=time.time())
-
-    def update_state(self, state: ProviderViewState, *, now: float) -> None:
-        self.status_label.setText(state.status)
-        status_object = {
-            "Ready": "statusReady",
-            "Waiting": "statusWaiting",
-            "Starting": "statusStarting",
-            "Needs attention": "statusAttention",
-        }.get(state.status, "statusAttention")
-        self.status_label.setObjectName(status_object)
-        self.status_label.style().unpolish(self.status_label)
-        self.status_label.style().polish(self.status_label)
-        self.countdown_label.setText(format_countdown(state.reset_at, now))
-        self.reset_label.setText(_reset_copy(state.reset_at))
-        self.detail_label.setText(state.detail)
-        parts = []
-        if state.last_verified_at is not None:
-            parts.append(f"Last verified {_friendly_time(state.last_verified_at)}")
-        if state.last_action:
-            parts.append(f"Last action: {state.last_action}")
-        if state.used_percent is not None and state.usage_checked_at is not None:
-            parts.append(
-                f"Last-known usage {state.used_percent}% ({_friendly_time(state.usage_checked_at)})"
-            )
-        self.metadata_label.setText("  •  ".join(parts) if parts else "No verified activity yet")
+from .ui_components import ProviderCard, StatusPill, make_surface_card, present_provider_state
+from .ui_theme import TOKENS, desktop_stylesheet
+from .update_ui import UpdatePanel
+from .updates import GitHubReleaseUpdater
 
 
 class WorkerSignals(QObject):
@@ -149,14 +58,18 @@ class OperationWorker(QRunnable):
 
 
 class MainWindow(QMainWindow):
+    PAGE_NAMES = ("Dashboard", "Settings", "About")
+
     def __init__(
         self,
         controller: ApplicationController,
         providers: dict[str, object],
         startup_manager: object,
         *,
+        updater: GitHubReleaseUpdater | None = None,
         confirm_enable: Callable[[], bool] | None = None,
         confirm_bootstrap: Callable[[], bool] | None = None,
+        confirm_install: Callable[[str], bool] | None = None,
     ):
         super().__init__()
         self.controller = controller
@@ -169,83 +82,31 @@ class MainWindow(QMainWindow):
         self.hide_on_close = False
         self.force_close = False
 
-        self.setWindowTitle("Window Sentinel")
+        self.setWindowTitle(PRODUCT.display_name)
         self.setWindowIcon(make_app_icon())
-        self.setMinimumSize(700, 600)
-        self.resize(820, 700)
-        self.setStyleSheet(_STYLE)
+        self.setMinimumSize(820, 640)
+        self.resize(1040, 720)
+        self.setStyleSheet(desktop_stylesheet())
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        content = QWidget()
-        root = QVBoxLayout(content)
-        root.setContentsMargins(34, 28, 34, 28)
-        root.setSpacing(17)
+        app_root = QWidget()
+        app_root.setObjectName("appRoot")
+        shell = QVBoxLayout(app_root)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+        shell.addWidget(self._build_header())
 
-        title = QLabel("Window Sentinel")
-        title.setObjectName("title")
-        subtitle = QLabel("Keep your five-hour coding windows ready, without babysitting reset times.")
-        subtitle.setObjectName("subtitle")
-        subtitle.setWordWrap(True)
-        root.addWidget(title)
-        root.addWidget(subtitle)
-
-        primary = QFrame()
-        primary.setObjectName("primaryControl")
-        primary_layout = QVBoxLayout(primary)
-        primary_layout.setContentsMargins(22, 18, 22, 18)
-        self.automation_toggle = QCheckBox("Keep my 5-hour windows ready")
-        self.automation_toggle.setChecked(controller.settings.automation_enabled)
-        explanation = QLabel(
-            "When enabled, Sentinel acts only at a verified boundary or after you approve the first window."
-        )
-        explanation.setWordWrap(True)
-        primary_layout.addWidget(self.automation_toggle)
-        primary_layout.addWidget(explanation)
-        root.addWidget(primary)
-
+        self.pages = QStackedWidget()
         self.provider_cards: dict[str, ProviderCard] = {}
-        for provider_id, state in controller.states.items():
-            card = ProviderCard(state)
-            card.action_button.clicked.connect(
-                lambda checked=False, key=provider_id: self.start_bootstrap(key)
-            )
-            self.provider_cards[provider_id] = card
-            root.addWidget(card)
-
-        self.advanced_button = QToolButton()
-        self.advanced_button.setText("Advanced / Diagnostics")
-        self.advanced_button.setCheckable(True)
-        self.advanced_button.setArrowType(Qt.ArrowType.RightArrow)
-        root.addWidget(self.advanced_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.diagnostics = QFrame()
-        self.diagnostics.setObjectName("diagnostics")
-        diagnostic_layout = QVBoxLayout(self.diagnostics)
-        diagnostic_layout.setContentsMargins(16, 13, 16, 13)
-        self.startup_toggle = QCheckBox("Start Window Sentinel with Windows")
-        self.startup_toggle.setChecked(bool(startup_manager.is_enabled()))
-        self.diagnostic_text = QLabel()
-        self.diagnostic_text.setWordWrap(True)
-        diagnostic_layout.addWidget(self.startup_toggle)
-        diagnostic_layout.addWidget(self.diagnostic_text)
-        self.diagnostics.setVisible(False)
-        root.addWidget(self.diagnostics)
-        privacy = QLabel(
-            "Local-first. Providers keep their own sign-in. Sentinel stores only safe window state and diagnostics."
+        self.pages.addWidget(self._build_dashboard())
+        self.pages.addWidget(
+            self._build_settings(updater or GitHubReleaseUpdater(), confirm_install)
         )
-        privacy.setObjectName("muted")
-        privacy.setWordWrap(True)
-        root.addWidget(privacy)
-        root.addStretch()
+        self.pages.addWidget(self._build_about())
+        shell.addWidget(self.pages, 1)
+        self.setCentralWidget(app_root)
 
-        scroll.setWidget(content)
-        self.setCentralWidget(scroll)
         self.automation_toggle.toggled.connect(self._automation_toggled)
         self.startup_toggle.toggled.connect(self._startup_toggled)
-        self.advanced_button.toggled.connect(self._advanced_toggled)
-
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.refresh_clock)
         self.clock_timer.start(1_000)
@@ -254,21 +115,252 @@ class MainWindow(QMainWindow):
         self.automation_timer.start(15_000)
         self.refresh_clock()
 
+    def _build_header(self) -> QWidget:
+        header = QFrame()
+        header.setObjectName("appHeader")
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(28, 15, 28, 15)
+        layout.setSpacing(13)
+
+        mark = QLabel("5h")
+        mark.setObjectName("brandMark")
+        mark.setFixedSize(42, 42)
+        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(mark)
+        identity = QVBoxLayout()
+        identity.setSpacing(1)
+        name = QLabel(PRODUCT.display_name)
+        name.setObjectName("appName")
+        purpose = QLabel("Keep subscription coding windows ready")
+        purpose.setObjectName("appPurpose")
+        identity.addWidget(name)
+        identity.addWidget(purpose)
+        layout.addLayout(identity)
+        layout.addStretch()
+
+        self.nav_buttons: list[QPushButton] = []
+        for index, page_name in enumerate(self.PAGE_NAMES):
+            button = QPushButton(page_name)
+            button.setObjectName("navButton")
+            button.setProperty("active", index == 0)
+            button.clicked.connect(
+                lambda checked=False, page_index=index: self.show_page(page_index)
+            )
+            self.nav_buttons.append(button)
+            layout.addWidget(button)
+        return header
+
+    def _page(self, title: str, intro: str) -> tuple[QScrollArea, QVBoxLayout]:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        content = QWidget()
+        content.setMaximumWidth(1080)
+        content.setMinimumWidth(820)
+        root = QVBoxLayout(content)
+        root.setContentsMargins(34, 27, 34, 30)
+        root.setSpacing(16)
+        title_label = QLabel(title)
+        title_label.setObjectName("pageTitle")
+        intro_label = QLabel(intro)
+        intro_label.setObjectName("pageIntro")
+        intro_label.setWordWrap(True)
+        root.addWidget(title_label)
+        root.addWidget(intro_label)
+        wrapper = QWidget()
+        wrapper_layout = QHBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.addStretch()
+        wrapper_layout.addWidget(content, 1)
+        wrapper_layout.addStretch()
+        scroll.setWidget(wrapper)
+        return scroll, root
+
+    def _build_dashboard(self) -> QWidget:
+        page, root = self._page(
+            "Your coding windows",
+            "One quiet place to see what is ready and what Sentinel is allowed to do.",
+        )
+        primary = QFrame()
+        primary.setObjectName("primaryControl")
+        primary_layout = QHBoxLayout(primary)
+        primary_layout.setContentsMargins(22, 18, 22, 18)
+        primary_layout.setSpacing(20)
+        primary_copy = QVBoxLayout()
+        primary_copy.setSpacing(4)
+        eyebrow = QLabel("PRIMARY CONTROL")
+        eyebrow.setObjectName("eyebrow")
+        self.automation_toggle = QCheckBox("Keep my 5-hour windows ready")
+        self.automation_toggle.setObjectName("automationToggle")
+        self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
+        explanation = QLabel(
+            "Off means zero provider-triggering activity. When on, Sentinel acts only after its safety checks pass."
+        )
+        explanation.setProperty("muted", True)
+        explanation.setWordWrap(True)
+        primary_copy.addWidget(eyebrow)
+        primary_copy.addWidget(self.automation_toggle)
+        primary_copy.addWidget(explanation)
+        primary_layout.addLayout(primary_copy, 1)
+        self.automation_state_label = StatusPill()
+        self.automation_state_label.setFixedHeight(28)
+        self.automation_state_label.setMinimumWidth(44)
+        primary_layout.addWidget(self.automation_state_label)
+        root.addWidget(primary)
+
+        provider_row = QHBoxLayout()
+        provider_row.setSpacing(16)
+        for provider_id, state in self.controller.states.items():
+            card = ProviderCard(state)
+            card.action_button.clicked.connect(
+                lambda checked=False, key=provider_id: self.start_bootstrap(key)
+            )
+            self.provider_cards[provider_id] = card
+            provider_row.addWidget(card, 1)
+        root.addLayout(provider_row)
+
+        foot = QLabel(
+            "Countdowns move locally from the last verified reset. Usage percentages stay frozen until the next safe provider check."
+        )
+        foot.setProperty("muted", True)
+        foot.setWordWrap(True)
+        root.addWidget(foot)
+        root.addStretch()
+        return page
+
+    def _build_settings(
+        self,
+        updater: GitHubReleaseUpdater,
+        confirm_install: Callable[[str], bool] | None,
+    ) -> QWidget:
+        page, root = self._page(
+            "Settings",
+            "Startup, updates, and the technical details that stay out of the dashboard.",
+        )
+
+        startup_card, startup_layout = make_surface_card(
+            "Windows startup",
+            "Start the tray app when you sign in. This is per-user, needs no administrator rights, and defaults off.",
+        )
+        startup_row = QFrame()
+        startup_row.setObjectName("settingRow")
+        row_layout = QHBoxLayout(startup_row)
+        row_layout.setContentsMargins(14, 12, 14, 12)
+        row_copy = QVBoxLayout()
+        row_copy.setSpacing(2)
+        row_title = QLabel(f"Start {PRODUCT.display_name} with Windows")
+        row_title.setObjectName("secondaryMetric")
+        row_hint = QLabel("Keeps the tray available after sign-in")
+        row_hint.setProperty("muted", True)
+        row_copy.addWidget(row_title)
+        row_copy.addWidget(row_hint)
+        row_layout.addLayout(row_copy)
+        row_layout.addStretch()
+        self.startup_toggle = QCheckBox()
+        self.startup_toggle.setChecked(bool(self.startup_manager.is_enabled()))
+        row_layout.addWidget(self.startup_toggle)
+        startup_layout.addWidget(startup_row)
+        root.addWidget(startup_card)
+
+        diagnostic_card, diagnostic_layout = make_surface_card(
+            "Diagnostics",
+            "Provider versions, compatibility, cached state, and safe failure reasons. No prompts, responses, credentials, or account identity are stored here.",
+        )
+        self.diagnostic_text = QLabel()
+        self.diagnostic_text.setObjectName("diagnosticValue")
+        self.diagnostic_text.setWordWrap(True)
+        self.diagnostic_text.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        diagnostic_layout.addWidget(self.diagnostic_text)
+        root.addWidget(diagnostic_card)
+
+        self.update_panel = UpdatePanel(
+            updater, confirm_install=confirm_install, parent=self
+        )
+        self.update_panel.installer_launched.connect(self._exit_for_update)
+        root.addWidget(self.update_panel)
+        root.addStretch()
+        return page
+
+    def _build_about(self) -> QWidget:
+        page, root = self._page(
+            f"About {PRODUCT.display_name}",
+            "A small local-first utility for subscription coding windows.",
+        )
+        about, about_layout = make_surface_card(PRODUCT.display_name)
+        version = QLabel(f"Version {PRODUCT.version} · Windows alpha · MIT licensed")
+        version.setObjectName("secondaryMetric")
+        about_layout.addWidget(version)
+        description = QLabel(
+            "Sentinel observes Codex rate windows through the installed Codex app-server, then uses one guarded request only when you have enabled automation and every safety check passes."
+        )
+        description.setProperty("muted", True)
+        description.setWordWrap(True)
+        about_layout.addWidget(description)
+        links = QHBoxLayout()
+        for label, url in (
+            ("View source", PRODUCT.github_url),
+            ("Releases", PRODUCT.releases_url),
+            ("Report an issue", PRODUCT.issues_url),
+        ):
+            button = QPushButton(label)
+            button.setObjectName("linkButton")
+            button.clicked.connect(
+                lambda checked=False, target=url: QDesktopServices.openUrl(QUrl(target))
+            )
+            links.addWidget(button)
+        links.addStretch()
+        about_layout.addLayout(links)
+        root.addWidget(about)
+
+        privacy, privacy_layout = make_surface_card(
+            "Privacy and safety",
+            "Codex and Claude Code keep their own sign-in. Sentinel does not read tokens, credentials, conversations, or account identifiers.",
+        )
+        boundaries = QLabel(
+            "• Provider automation starts off\n"
+            "• Update checks run only when you press the button\n"
+            "• Countdown changes are local and cause no provider traffic\n"
+            "• Ambiguous Codex requests are never retried automatically\n"
+            "• Claude Code automation remains paused while its trigger is being verified"
+        )
+        boundaries.setObjectName("secondaryMetric")
+        boundaries.setWordWrap(True)
+        privacy_layout.addWidget(boundaries)
+        root.addWidget(privacy)
+        root.addStretch()
+        return page
+
+    def show_page(self, index: int) -> None:
+        if not 0 <= index < self.pages.count():
+            return
+        self.pages.setCurrentIndex(index)
+        for button_index, button in enumerate(self.nav_buttons):
+            button.setProperty("active", button_index == index)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
     def refresh_clock(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
+        enabled = self.controller.settings.automation_enabled
+        self.automation_state_label.set_status(
+            "ON" if enabled else "OFF", "success" if enabled else "neutral"
+        )
         for provider_id, state in self.controller.states.items():
             card = self.provider_cards.get(provider_id)
             if card is not None:
                 card.update_state(state, now=current)
                 card.action_button.setVisible(
                     provider_id == "codex"
-                    and self.controller.settings.automation_enabled
+                    and enabled
                     and state.installed
                     and state.automation_supported
                     and state.reset_at is None
                     and state.status != "Starting"
                 )
-        self._update_diagnostics()
+        self._update_diagnostics(now=current)
 
     def evaluate_automation(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
@@ -290,9 +382,9 @@ class MainWindow(QMainWindow):
         if provider is None:
             return
         state = self.controller.states[provider_id]
-        self.controller.update_provider_state(replace(
-            state, status="Starting", detail="Sentinel is checking the provider safely."
-        ))
+        self.controller.update_provider_state(
+            replace(state, status="Starting", detail="Sentinel is checking the provider safely.")
+        )
         self.active_operations.add(provider_id)
         operation = provider.probe if action == "probe" else lambda: provider.run_action(action)
         worker = OperationWorker(provider_id, operation)
@@ -315,11 +407,13 @@ class MainWindow(QMainWindow):
     def _operation_failed(self, provider_id: str, category: str) -> None:
         self.active_operations.discard(provider_id)
         state = self.controller.states[provider_id]
-        self.controller.update_provider_state(replace(
-            state,
-            status="Needs attention",
-            detail=f"The provider check stopped safely ({category}). No automatic retry will run.",
-        ))
+        self.controller.update_provider_state(
+            replace(
+                state,
+                status="Needs attention",
+                detail=f"The provider check stopped safely ({category}). No automatic retry will run.",
+            )
+        )
         self.refresh_clock()
 
     def _automation_toggled(self, enabled: bool) -> None:
@@ -340,28 +434,48 @@ class MainWindow(QMainWindow):
             self.startup_toggle.blockSignals(True)
             self.startup_toggle.setChecked(not enabled)
             self.startup_toggle.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                "Startup setting not changed",
+                "Windows did not allow the per-user startup setting to be changed.",
+            )
             return
         self.controller.set_start_with_windows(enabled)
 
-    def _advanced_toggled(self, visible: bool) -> None:
-        self.diagnostics.setVisible(visible)
-        self.advanced_button.setArrowType(
-            Qt.ArrowType.DownArrow if visible else Qt.ArrowType.RightArrow
-        )
-
-    def _update_diagnostics(self) -> None:
+    def _update_diagnostics(self, *, now: float) -> None:
         rows = []
-        for state in self.controller.states.values():
+        compatible = self.controller.settings.compatible_runtime_identities or {}
+        for provider_id, state in self.controller.states.items():
             version = state.runtime_version or "version unavailable"
-            rows.append(f"{state.display_name}: {version} • {state.status}")
-        self.diagnostic_text.setText("\n".join(rows))
+            compatibility = (
+                "passed"
+                if compatible.get(provider_id) == state.runtime_identity
+                else ("not applicable" if not state.automation_supported else "not confirmed")
+            )
+            rows.append(
+                f"{state.display_name}\n"
+                f"  Installed: {'yes' if state.installed else 'no'}\n"
+                f"  Version: {version}\n"
+                f"  Compatibility: {compatibility}\n"
+                f"  Raw state: {state.status}\n"
+                f"  Detail: {state.detail}"
+            )
+        automation = "enabled" if self.controller.settings.automation_enabled else "off"
+        rows.append(f"Automation\n  Global control: {automation}\n  Provider-triggering activity while off: none")
+        self.diagnostic_text.setText("\n\n".join(rows))
+
+    def _exit_for_update(self) -> None:
+        self.force_close = True
+        application = QApplication.instance()
+        if application is not None:
+            QTimer.singleShot(200, application.quit)
 
     def _confirm_enable(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Enable Window Sentinel?",
-            "Sentinel will use each provider's normal signed-in client only when a window needs attention. "
-            "A provider check can start a five-hour window. It will never retry an ambiguous request.",
+            "Turn on guarded automation?",
+            "Sentinel will use each provider's normal signed-in client only after its safety checks pass. "
+            "A provider action can start a five-hour window, and an ambiguous request is never retried.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
@@ -390,16 +504,19 @@ class DesktopShell:
     def __init__(self, window: MainWindow):
         self.window = window
         self.tray = QSystemTrayIcon(make_app_icon(), window)
-        self.tray.setToolTip("Window Sentinel")
+        self.tray.setToolTip(PRODUCT.display_name)
         menu = QMenu()
-        open_action = menu.addAction("Open Window Sentinel")
+        open_action = menu.addAction(f"Open {PRODUCT.display_name}")
         open_action.triggered.connect(self.restore_window)
         menu.addSeparator()
-        quit_action = menu.addAction("Quit Window Sentinel")
+        quit_action = menu.addAction(f"Quit {PRODUCT.display_name}")
         quit_action.triggered.connect(self.quit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._tray_activated)
         self.window.hide_on_close = QSystemTrayIcon.isSystemTrayAvailable()
+        application = QApplication.instance()
+        if application is not None:
+            application.aboutToQuit.connect(self.tray.hide)
         self.tray.show()
 
     def hide_window(self) -> None:
@@ -431,31 +548,14 @@ def make_app_icon() -> QIcon:
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor("#103b4a"))
-    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(TOKENS.surface_raised))
+    painter.setPen(QColor(TOKENS.border_strong))
     painter.drawRoundedRect(4, 4, 56, 56, 15, 15)
-    painter.setBrush(QColor("#54c4b0"))
-    painter.drawEllipse(17, 17, 30, 30)
-    painter.setPen(QColor("#103b4a"))
+    painter.setBrush(QColor(TOKENS.accent))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawEllipse(15, 15, 34, 34)
+    painter.setPen(QColor(TOKENS.accent_ink))
     painter.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
     painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "5h")
     painter.end()
     return QIcon(pixmap)
-
-
-def _reset_copy(reset_at: int | None) -> str:
-    if reset_at is None:
-        return "Reset time not verified"
-    try:
-        local = datetime.fromtimestamp(reset_at).astimezone()
-    except (OSError, OverflowError, ValueError):
-        return "Reset time unavailable"
-    return f"Resets {local.strftime('%a %I:%M %p').replace(' 0', ' ')}"
-
-
-def _friendly_time(timestamp: float) -> str:
-    try:
-        local = datetime.fromtimestamp(timestamp).astimezone()
-    except (OSError, OverflowError, ValueError):
-        return "at an unknown time"
-    return local.strftime("%b %d at %I:%M %p").replace(" 0", " ")

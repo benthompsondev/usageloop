@@ -21,6 +21,7 @@ __pycache__/
 dist/
 build/
 packaging/windowsentinel.ico
+packaging/version_info.txt
 .coverage
 .pytest_cache/
 .ruff_cache/

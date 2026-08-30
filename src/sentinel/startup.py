@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import winreg
 
+from .product import PRODUCT
+
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_VALUE_NAME = "Window Sentinel"
+_VALUE_NAME = PRODUCT.display_name
 
 
 class StartupManager:

@@ -1,8 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import sys
 
 root = Path(SPEC).resolve().parents[1]
+sys.path.insert(0, str(root / "src"))
+from sentinel.product import PRODUCT
 
 a = Analysis(
     [str(root / "packaging" / "entrypoint.py")],
@@ -33,7 +36,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="WindowSentinel",
+    name=Path(PRODUCT.executable_name).stem,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -44,7 +47,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=[str(root / "packaging" / "windowsentinel.ico")],
+    icon=[str(root / "packaging" / PRODUCT.icon_filename)],
+    version=str(root / "packaging" / PRODUCT.version_resource_filename),
 )
 
 coll = COLLECT(
@@ -54,5 +58,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="WindowSentinel",
+    name=Path(PRODUCT.executable_name).stem,
 )
