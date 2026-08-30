@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -133,7 +134,7 @@ class ProviderCard(QFrame):
         super().__init__(parent)
         self.setObjectName("providerCard")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(258)
+        self.setMinimumHeight(236)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
         layout.setSpacing(8)
@@ -157,7 +158,13 @@ class ProviderCard(QFrame):
         self.detail_label.setObjectName("detail")
         self.detail_label.setWordWrap(True)
         layout.addWidget(self.detail_label)
-        layout.addStretch()
+        layout.addSpacing(4)
+        self.separator = QFrame()
+        self.separator.setObjectName("cardRule")
+        self.separator.setFrameShape(QFrame.Shape.HLine)
+        self.separator.setFixedHeight(1)
+        layout.addWidget(self.separator)
+        layout.addSpacing(2)
         self.metadata_label = QLabel()
         self.metadata_label.setProperty("muted", True)
         self.metadata_label.setWordWrap(True)
@@ -166,6 +173,7 @@ class ProviderCard(QFrame):
         self.usage_label.setProperty("muted", True)
         layout.addWidget(self.usage_label)
 
+        layout.addStretch(1)
         self.action_button = QPushButton("Start my first window now")
         self.action_button.setObjectName("primaryButton")
         self.action_button.setVisible(False)
@@ -175,6 +183,10 @@ class ProviderCard(QFrame):
     def update_state(self, state: ProviderViewState, *, now: float) -> None:
         presented = present_provider_state(state, now=now)
         self.status_label.set_status(presented.status, presented.tone)
+        if self.property("tone") != presented.tone:
+            self.setProperty("tone", presented.tone)
+            self.style().unpolish(self)
+            self.style().polish(self)
         self.countdown_label.setText(presented.headline)
         self.reset_label.setText(presented.reset)
         self.detail_label.setText(presented.detail)
@@ -228,3 +240,52 @@ def _friendly_time(timestamp: float | None, *, now: float) -> str:
     if local.date() == current.date():
         return local.strftime("%I:%M %p").lstrip("0")
     return local.strftime("%b %d at %I:%M %p").replace(" 0", " ")
+
+
+class ElidingLabel(QLabel):
+    """A label that shortens itself instead of forcing its container wider.
+
+    `QSizePolicy.Ignored` looks like the right tool for "let this shrink", but it
+    is a growing policy: Qt disregards the size hint and hands the widget as much
+    room as it can take. Using it on the header tagline let the brand block
+    expand with the window and push the navigation and trust chip off the right
+    edge. This reports a zero minimum width and elides its own text, so it can
+    never drive the layout.
+    """
+
+    def __init__(self, text: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self._full_text = text
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        super().setText(text)
+
+    def full_text(self) -> str:
+        return self._full_text
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt naming
+        self._full_text = text
+        self._apply_elision()
+
+    def sizeHint(self):
+        metrics = QFontMetrics(self.font())
+        return QSize(
+            metrics.horizontalAdvance(self._full_text),
+            super().sizeHint().height(),
+        )
+
+    def minimumSizeHint(self):
+        # Zero width is the point: the header must never grow to fit this.
+        return QSize(0, super().minimumSizeHint().height())
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_elision()
+
+    def _apply_elision(self) -> None:
+        metrics = QFontMetrics(self.font())
+        available = max(0, self.width())
+        elided = metrics.elidedText(
+            self._full_text, Qt.TextElideMode.ElideRight, available
+        )
+        if elided != super().text():
+            super().setText(elided)

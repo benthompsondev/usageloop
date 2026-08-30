@@ -155,6 +155,16 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QLabel#updateState[status="success"] {{ color: {tokens.accent}; }}
     QLabel#updateState[status="error"] {{ color: {tokens.error}; }}
     QLabel#updateState[status="warning"] {{ color: {tokens.warning}; }}
+    QFrame#providerCard[tone="success"] {{ border-left: 3px solid {tokens.accent}; }}
+    QFrame#providerCard[tone="warning"] {{ border-left: 3px solid {tokens.warning}; }}
+    QFrame#providerCard[tone="error"] {{ border-left: 3px solid {tokens.error}; }}
+    QFrame#providerCard[tone="info"] {{ border-left: 3px solid {tokens.info}; }}
+    QFrame#cardRule {{
+        background: {tokens.border}; border: 0; max-height: 1px;
+    }}
+    QFrame#appHeader QWidget#brandBlock, QFrame#appHeader QWidget#headerControls {{
+        background: transparent;
+    }}
     QLabel#wordmarkPrimary {{ font-size: 21px; font-weight: 800; color: {tokens.text}; }}
     QLabel#wordmarkAccent {{ font-size: 21px; font-weight: 800; color: {tokens.accent}; }}
     QLabel#trustChip {{

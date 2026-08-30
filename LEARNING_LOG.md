@@ -35,3 +35,34 @@
   says so rather than implying it works.
 - **Next:** Publish the first release so the updater path can be tested from an
   older installed build.
+
+## 2026-08-30 (later)
+
+- **Did:** Fixed the header clipping Ben found on the installed build, switched
+  the brand mark to the loop-plus-5h logo with size-adaptive detail, and did a
+  visual polish pass on the cards and page container.
+- **Learned:** `QSizePolicy.Ignored` is a *growing* policy, not a shrinking one.
+  It tells Qt to disregard the size hint and hand the widget as much room as it
+  can take. Using it to make the header tagline "flexible" let the brand block
+  expand with the window and squeeze the navigation and trust chip against the
+  right edge, where a maximized Windows window hides them under its invisible
+  resize border. The fix was a label that elides itself and reports a zero
+  minimum width, so it can never drive the layout.
+- **Learned:** Offscreen Qt and real Windows Qt do not share font metrics, so a
+  layout that passes headless can still clip on the desktop. The bug only showed
+  up on the packaged executable. Layout checks now run on the real platform and
+  assert containment directly instead of checking a minimum width.
+- **Learned:** A guessed constant in layout code hides in plain sight. The
+  fallback that hides the chip used a hardcoded brand floor of 52px, which was
+  right at the default font and wrong at 1.6x, so the chip stayed visible with
+  nowhere to go. Measuring the real minimum fixed it, and a larger-font test
+  now pins it.
+- **Learned:** Drawing the "5h" as explicit path geometry rather than typeset
+  text keeps the packaged icon identical regardless of which fonts the build
+  machine has. An earlier attempt rendered tofu boxes headless.
+- **Verified with:** 241 deterministic tests, compile check, packaged build,
+  and screen captures of the real executable maximized, restored, and at 125%
+  and 150% DPI.
+- **Blocked on:** Nothing. Provider, updater, and scheduler code untouched.
+- **Next:** Publish the first release so the updater can be tested from an
+  older installed build.

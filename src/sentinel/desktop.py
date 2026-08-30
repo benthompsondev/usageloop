@@ -6,7 +6,16 @@ from dataclasses import replace
 import time
 from typing import Callable
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal
+from PySide6.QtCore import (
+    QEvent,
+    QObject,
+    QRunnable,
+    Qt,
+    QThreadPool,
+    QTimer,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,7 +40,13 @@ from .branding import make_app_icon, render_mark
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
-from .ui_components import ProviderCard, StatusPill, make_surface_card, present_provider_state
+from .ui_components import (
+    ElidingLabel,
+    ProviderCard,
+    StatusPill,
+    make_surface_card,
+    present_provider_state,
+)
 from .ui_theme import desktop_stylesheet
 from .update_ui import UpdatePanel
 from .updates import GitHubReleaseUpdater
@@ -86,7 +101,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(PRODUCT.display_name)
         self.setWindowIcon(make_app_icon())
-        self.setMinimumSize(820, 640)
+        self.setMinimumSize(720, 560)
         self.resize(1040, 720)
         self.setStyleSheet(desktop_stylesheet())
 
@@ -117,19 +132,36 @@ class MainWindow(QMainWindow):
         self.automation_timer.start(15_000)
         self.refresh_clock()
 
+    #: Windows gives a maximized window an invisible resize border that hangs
+    #: past each screen edge. Content flush against the layout edge lands under
+    #: it and is clipped, so the header keeps a margin wider than that border.
+    HEADER_SIDE_MARGIN = 26
+
     def _build_header(self) -> QWidget:
+        """Brand on the left, navigation and trust chip pinned right.
+
+        The brand block is the only elastic item and it is allowed to shrink to
+        nothing, so the navigation and chip can never be pushed off the edge no
+        matter how narrow or wide the window gets.
+        """
         header = QFrame()
         header.setObjectName("appHeader")
         layout = QHBoxLayout(header)
-        layout.setContentsMargins(28, 15, 28, 15)
-        layout.setSpacing(13)
+        layout.setContentsMargins(self.HEADER_SIDE_MARGIN, 12, self.HEADER_SIDE_MARGIN, 12)
+        layout.setSpacing(16)
 
+        brand = QWidget()
+        brand.setObjectName("brandBlock")
+        brand_layout = QHBoxLayout(brand)
+        brand_layout.setContentsMargins(0, 0, 0, 0)
+        brand_layout.setSpacing(12)
         mark = QLabel()
-        mark.setPixmap(render_mark(38))
-        mark.setFixedSize(38, 38)
-        layout.addWidget(mark)
+        mark.setPixmap(render_mark(40))
+        mark.setFixedSize(40, 40)
+        brand_layout.addWidget(mark)
+
         identity = QVBoxLayout()
-        identity.setSpacing(0)
+        identity.setSpacing(1)
         wordmark = QHBoxLayout()
         wordmark.setSpacing(0)
         first = QLabel("Usage")
@@ -139,36 +171,80 @@ class MainWindow(QMainWindow):
         wordmark.addWidget(first)
         wordmark.addWidget(second)
         wordmark.addStretch()
-        purpose = QLabel(PRODUCT.tagline)
-        purpose.setObjectName("appPurpose")
-        # The header must survive a 1366 pixel display, so the tagline yields
-        # its width instead of forcing the whole window wider.
-        purpose.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.tagline_label = ElidingLabel(PRODUCT.tagline)
+        self.tagline_label.setObjectName("appPurpose")
         identity.addLayout(wordmark)
-        identity.addWidget(purpose)
-        layout.addLayout(identity)
-        layout.addStretch()
+        identity.addWidget(self.tagline_label)
+        brand_layout.addLayout(identity, 1)
+        # Stretch factor 1 gives the brand every spare pixel, and its own
+        # minimum is near zero, so it absorbs the slack and yields it back.
+        layout.addWidget(brand, 1)
 
+        controls = QWidget()
+        controls.setObjectName("headerControls")
+        controls.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        controls_layout = QHBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(6)
         self.nav_buttons: list[QPushButton] = []
         for index, page_name in enumerate(self.PAGE_NAMES):
             button = QPushButton(page_name)
             button.setObjectName("navButton")
             button.setProperty("active", index == 0)
+            button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             button.clicked.connect(
                 lambda checked=False, page_index=index: self.show_page(page_index)
             )
             self.nav_buttons.append(button)
-            layout.addWidget(button)
-        chip = QLabel("Local-first")
-        chip.setObjectName("trustChip")
-        chip.setToolTip(
+            controls_layout.addWidget(button)
+
+        self.trust_chip = QLabel("Local-first")
+        self.trust_chip.setObjectName("trustChip")
+        self.trust_chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.trust_chip.setToolTip(
             "Every check runs on this PC. Codex and Claude Code keep their own sign-in."
         )
-        # The chip keeps its natural width; the tagline above absorbs any
-        # squeeze instead, so nothing here clips at 1366 pixels.
-        layout.addSpacing(10)
-        layout.addWidget(chip)
+        controls_layout.addSpacing(6)
+        controls_layout.addWidget(self.trust_chip)
+        layout.addWidget(controls, 0)
+
+        self.header_widget = header
+        self.header_controls = controls
+        self.brand_block = brand
+        header.installEventFilter(self)
         return header
+
+    def eventFilter(self, watched, event):
+        if watched is getattr(self, "header_widget", None) and event.type() == QEvent.Type.Resize:
+            self._fit_header()
+        return super().eventFilter(watched, event)
+
+    def _fit_header(self) -> None:
+        """Drop decorative header parts before anything can be cut off.
+
+        The eliding tagline handles ordinary squeeze. This is the last resort for
+        genuinely tiny windows: the tagline, then the trust chip, are hidden
+        rather than allowed to clip. Navigation is never hidden.
+        """
+        header = getattr(self, "header_widget", None)
+        if header is None:
+            return
+        available = header.width() - self.HEADER_SIDE_MARGIN * 2
+
+        # Measure rather than assume. A larger Windows UI font, or text scaling
+        # for accessibility, makes the navigation far wider than it looks at the
+        # default size, and a guessed floor silently stopped protecting the chip.
+        brand_floor = self.brand_block.minimumSizeHint().width()
+        spacing = 6
+        nav_cost = sum(button.sizeHint().width() for button in self.nav_buttons)
+        nav_cost += spacing * max(0, len(self.nav_buttons) - 1)
+        chip_cost = self.trust_chip.sizeHint().width() + spacing * 2
+
+        fits_with_chip = available >= brand_floor + nav_cost + chip_cost
+        self.trust_chip.setVisible(fits_with_chip)
+        used = brand_floor + nav_cost + (chip_cost if fits_with_chip else 0)
+        # The tagline is the first thing to go; it is decoration, not navigation.
+        self.tagline_label.setVisible(available - used >= 60)
 
     def _page(self, title: str, intro: str) -> tuple[QScrollArea, QVBoxLayout]:
         scroll = QScrollArea()
@@ -176,8 +252,8 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         content = QWidget()
-        content.setMaximumWidth(1080)
-        content.setMinimumWidth(820)
+        content.setMaximumWidth(1140)
+        content.setMinimumWidth(560)
         root = QVBoxLayout(content)
         root.setContentsMargins(34, 27, 34, 30)
         root.setSpacing(16)
@@ -242,8 +318,8 @@ class MainWindow(QMainWindow):
             provider_row.addWidget(card, 1)
         root.addLayout(provider_row)
 
-        root.addWidget(self._build_assurance_strip())
-        root.addStretch()
+        root.addWidget(self._build_assurance_strip(), 0)
+        root.addStretch(1)
         return page
 
     def _build_assurance_strip(self) -> QWidget:

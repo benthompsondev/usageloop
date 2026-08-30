@@ -103,8 +103,9 @@ def main() -> int:
         )
         window.resize(1040, 720)
         save(window, args.output / "dashboard.png", app)
-        window.resize(1366, 768)
-        save(window, args.output / "dashboard-1366x768.png", app)
+        for width, height in ((1024, 768), (1280, 720), (1366, 768), (1600, 900), (1920, 1080)):
+            window.resize(width, height)
+            save(window, args.output / f"dashboard-{width}x{height}.png", app)
         window.resize(1040, 720)
 
         window.show_page(1)

@@ -1,14 +1,16 @@
 """The UsageLoop mark, drawn once and reused by the app, tray, and installer.
 
-The mark is a broken emerald ring closed by an arrowhead: a loop that keeps
-coming back around. Detail is dropped as the canvas shrinks, because a 16 pixel
-tray icon cannot carry an arrowhead without turning into mush, while the ring
-silhouette stays recognizable at every size.
+The mark is a broken emerald ring closed by an arrowhead, wrapped around a "5h"
+glyph: a five-hour window that keeps coming back around.
 
-The mark carries no lettering. A glyph is unreadable below roughly 48 pixels,
-and depending on a specific font would make the packaged icon vary with whatever
-fonts the build machine happens to have. The wordmark in the app header carries
-the name instead.
+Detail is size-adaptive. At 32 pixels and above the full loop-plus-5h mark is
+drawn. Below that the lettering is genuinely unreadable and only muddies the
+shape, so a thicker ring-only silhouette is used instead, which is what a tray
+icon actually needs.
+
+The "5h" is drawn from explicit path geometry rather than typeset. Rendering
+text would make the packaged icon depend on a font being installed on whichever
+machine ran the build, which is not something an icon should depend on.
 """
 
 from __future__ import annotations
@@ -36,25 +38,49 @@ ICON_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 TILE = "#0D1117"
 TILE_EDGE = "#1F2937"
 RING = "#22D3A1"
+GLYPH = "#F2FFFA"
 
-#: Below this the arrowhead is a couple of pixels and only muddies the ring.
-ARROW_MIN_SIZE = 32
+#: Below this the "5h" lettering and the arrowhead are a few pixels across and
+#: read as noise, so the ring-only silhouette is used.
+DETAIL_MIN_SIZE = 32
 #: The ring is open at the top so the gap reads as motion, not damage.
 ARC_START_DEGREES = 130
 ARC_SPAN_DEGREES = 288
+ARC_END_DEGREES = ARC_START_DEGREES + ARC_SPAN_DEGREES
+#: Fraction of the canvas the glyph occupies on its longest side.
+GLYPH_SCALE = 0.435
+
+
+def five_hour_glyph() -> QPainterPath:
+    """The "5h" lettering on a 100 unit grid, built from geometry not a font."""
+    path = QPainterPath()
+    # 5: top bar, left stem down to the waist, then the bowl.
+    path.moveTo(46, 6)
+    path.lineTo(17, 6)
+    path.lineTo(17, 40)
+    path.lineTo(31, 40)
+    path.arcTo(QRectF(17, 40, 33, 33), 90, -250)
+    # h: full-height stem, shoulder, right leg.
+    path.moveTo(64, 0)
+    path.lineTo(64, 73)
+    path.moveTo(64, 42)
+    path.quadTo(77, 27, 89, 45)
+    path.lineTo(89, 73)
+    return path
 
 
 def render_mark(size: int, *, tile: bool = True) -> QPixmap:
-    """Draw the mark at one pixel size."""
+    """Draw the mark at one pixel size, dropping detail as the canvas shrinks."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    detailed = size >= DETAIL_MIN_SIZE
 
     if tile:
         radius = size * 0.22
         painter.setBrush(QBrush(QColor(TILE)))
-        if size >= 32:
+        if size >= DETAIL_MIN_SIZE:
             edge = QPen(QColor(TILE_EDGE))
             edge.setWidthF(max(1.0, size * 0.015))
             painter.setPen(edge)
@@ -65,9 +91,11 @@ def render_mark(size: int, *, tile: bool = True) -> QPixmap:
             QRectF(inset, inset, size - inset * 2, size - inset * 2), radius, radius
         )
 
-    # A heavier stroke at small sizes keeps the ring from thinning into noise.
-    stroke = size * (0.15 if size < ARROW_MIN_SIZE else 0.105)
-    margin = size * (0.235 if tile else 0.14) + stroke / 2
+    # A heavier stroke on the small ring-only sizes keeps it from thinning out.
+    stroke = size * (0.15 if not detailed else 0.093)
+    margin = size * (0.115 if tile else 0.06) + stroke / 2
+    if not detailed and tile:
+        margin = size * 0.235 + stroke / 2
     box = QRectF(margin, margin, size - margin * 2, size - margin * 2)
 
     pen = QPen(QColor(RING))
@@ -77,8 +105,9 @@ def render_mark(size: int, *, tile: bool = True) -> QPixmap:
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawArc(box, ARC_START_DEGREES * 16, ARC_SPAN_DEGREES * 16)
 
-    if size >= ARROW_MIN_SIZE:
-        _draw_arrowhead(painter, box, ARC_START_DEGREES + ARC_SPAN_DEGREES, stroke)
+    if detailed:
+        _draw_arrowhead(painter, box, ARC_END_DEGREES, stroke)
+        _draw_glyph(painter, size)
 
     painter.end()
     return pixmap
@@ -95,12 +124,12 @@ def _draw_arrowhead(
         centre.x() + radius * math.cos(radians),
         centre.y() - radius * math.sin(radians),
     )
-    reach = stroke * 1.05
+    reach = stroke * 1.15
     triangle = QPolygonF(
         [
             QPointF(reach, 0.0),
-            QPointF(-reach * 0.75, reach * 0.95),
-            QPointF(-reach * 0.75, -reach * 0.95),
+            QPointF(-reach * 0.7, reach),
+            QPointF(-reach * 0.7, -reach),
         ]
     )
     transform = QTransform()
@@ -113,6 +142,23 @@ def _draw_arrowhead(
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QBrush(QColor(RING)))
     painter.drawPath(path)
+
+
+def _draw_glyph(painter: QPainter, size: int) -> None:
+    raw = five_hour_glyph()
+    bounds = raw.boundingRect()
+    scale = (size * GLYPH_SCALE) / max(bounds.width(), bounds.height())
+    transform = QTransform()
+    transform.translate(size / 2, size / 2)
+    transform.scale(scale, scale)
+    transform.translate(-bounds.center().x(), -bounds.center().y())
+    pen = QPen(QColor(GLYPH))
+    pen.setWidthF(max(1.0, size * 0.052))
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawPath(transform.map(raw))
 
 
 def make_app_icon() -> QIcon:
