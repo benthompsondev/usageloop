@@ -56,11 +56,13 @@ def present_provider_state(
         )
 
     reset = _reset_copy(state.reset_at, now=now)
-    verified = (
-        f"Last verified {_friendly_time(state.last_verified_at, now=now)}"
-        if state.last_verified_at is not None
-        else "Not checked yet"
-    )
+    if state.last_verified_at is not None:
+        verified = f"Last verified {_friendly_time(state.last_verified_at, now=now)}"
+    elif state.usage_checked_at is not None:
+        # Observed, but from evidence that reports usage without a boundary.
+        verified = f"Last read {_friendly_time(state.usage_checked_at, now=now)}"
+    else:
+        verified = "Not checked yet"
     usage = (
         f"Last-known usage {state.used_percent}% \u00b7 {_friendly_time(state.usage_checked_at, now=now)}"
         if state.used_percent is not None and state.usage_checked_at is not None
@@ -142,12 +144,16 @@ def present_provider_state(
         )
 
     if state.status == "Ready":
+        # A window observed without a reported boundary has a derived reset. The
+        # countdown is still useful, but the card must not present an estimate
+        # with the same confidence as a verified anchor.
+        estimated = state.last_verified_at is None
         return ProviderPresentation(
             "READY",
             "success",
             format_countdown(state.reset_at, now),
-            reset,
-            "This five-hour window is counting down.",
+            f"{reset} (estimated)" if estimated else reset,
+            state.detail if estimated and state.detail else "This five-hour window is counting down.",
             verified,
             usage,
         )

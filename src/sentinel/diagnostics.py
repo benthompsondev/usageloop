@@ -272,11 +272,16 @@ def technical_summary(
         "  Codex: verified. A measured live test showed that one small request",
         "    through the local Codex app-server starts a fresh five-hour window,",
         "    and that is the path this app uses.",
-        "  Claude Code: preview. Claude Code exposes no free way to read window",
-        "    state, so this reads the status line Claude Code already writes and",
-        "    runs one prompt-free --init-only initialization. Whether that starts",
-        "    a five-hour window is not yet proven. It stays guarded either way:",
-        "    one attempt, never repeated.",
+        "  Claude Code: preview. Two hosts share the ~/.claude home but not the",
+        "    same observation channel. The terminal CLI renders a status line and",
+        "    invokes the configured helper. Claude Code inside the Claude Desktop",
+        "    app does not, so for Desktop users the helper is never called.",
+        "    Desktop usage is instead read from its own local plan-usage history,",
+        "    which reports a usage percentage but no reset timestamp, so the reset",
+        "    shown for Desktop is derived from when usage restarted and is an",
+        "    estimate. Because that source carries no weekly reset, the mandatory",
+        "    weekly guard cannot pass and no Claude request is sent from it.",
+        "    Whether --init-only starts a window remains unproven.",
     ]
     for provider_id, state in states.items():
         version = state.runtime_version or "version unavailable"

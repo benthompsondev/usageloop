@@ -86,6 +86,7 @@ class ClaudeStatusStoreTests(unittest.TestCase):
                 status_integration=mock.Mock(),
                 operation_runner=runner,
                 now=lambda: 200,
+                desktop_observer=lambda now: None,
             )
             state = provider.detect()
             self.assertEqual("Ready", state.status)

@@ -511,7 +511,7 @@ class MainWindow(QMainWindow):
                 "Claude Code",
                 "PREVIEW",
                 "warning",
-                "Shown for information. Starting a window is not proven yet.",
+                "Usage is read from Claude Desktop. Starting a window is not proven yet.",
             ),
         ):
             row = QFrame()

@@ -267,7 +267,16 @@ class TechnicalSummaryTests(unittest.TestCase):
         self.assertIn("Provider support", text)
         self.assertIn("Codex: verified", text)
         self.assertIn("Claude Code: preview", text)
-        self.assertIn("never repeated", text)
+
+    def test_summary_records_the_two_claude_hosts_and_their_channels(self):
+        """The Desktop/terminal split is the thing a bug report needs to say."""
+        text = self.summary()
+        self.assertIn("terminal CLI", text)
+        self.assertIn("Claude Desktop", text)
+        self.assertIn("plan-usage history", text)
+        self.assertIn("estimate", text)
+        self.assertIn("weekly guard cannot pass", text)
+        self.assertIn("unproven", text)
 
 
 if __name__ == "__main__":

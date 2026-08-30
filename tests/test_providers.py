@@ -43,7 +43,11 @@ class ProviderAdapterTests(unittest.TestCase):
 
     def test_claude_missing_degrades_without_running_any_capability_check(self):
         runner = mock.Mock()
-        provider = ClaudeProvider(executable_finder=lambda: None, operation_runner=runner)
+        provider = ClaudeProvider(
+            executable_finder=lambda: None,
+            operation_runner=runner,
+            desktop_observer=lambda now: None,
+        )
         state = provider.detect()
         self.assertFalse(state.installed)
         self.assertFalse(state.automation_supported)
@@ -115,6 +119,7 @@ class ProviderAdapterTests(unittest.TestCase):
                 executable_finder=lambda: executable,
                 identity_reader=lambda path: "claude-file:1",
                 status_integration=integration,
+                desktop_observer=lambda now: None,
             )
             state = provider.detect()
             self.assertTrue(state.installed)
@@ -138,7 +143,9 @@ class ProviderAdapterTests(unittest.TestCase):
                 version_reader=lambda path: "99.0.0",
                 operation_runner=Runner(),
                 status_integration=mock.Mock(
-                    ensure_registered=lambda: mock.Mock(compatible=True)
+                    ensure_registered=lambda: mock.Mock(compatible=True,
+                desktop_observer=lambda now: None,
+            )
                 ),
             )
             result = provider.probe()
@@ -161,6 +168,7 @@ class ProviderAdapterTests(unittest.TestCase):
                 identity_reader=lambda path: "runtime:1",
                 operation_runner=runner,
                 status_integration=integration,
+                desktop_observer=lambda now: None,
             )
             result = provider.probe()
             self.assertFalse(result.compatible)
@@ -175,6 +183,7 @@ class ProviderAdapterTests(unittest.TestCase):
                 executable_finder=lambda: executable,
                 identity_reader=lambda path: "runtime:new",
                 operation_runner=runner,
+                desktop_observer=lambda now: None,
             )
             approved = ProviderViewState(
                 "claude",

@@ -104,3 +104,32 @@
   1024x768, 1366x768, maximized, and at 125% and 150% scaling.
 - **Blocked on:** Nothing. Provider, scheduler, updater, safety, and version
   behaviour untouched.
+
+## 2026-08-30 (Claude Desktop observation)
+
+- **Did:** Found why UsageLoop showed Claude as never checked while Claude
+  Desktop displayed a live window, and added a Desktop-specific observation
+  path.
+- **Learned:** "Claude Code" is two hosts, not one. The terminal CLI and the
+  copy bundled inside Claude Desktop share the `~/.claude` home and both write
+  transcripts there, but only the terminal renders a status line, so only the
+  terminal invokes a configured statusLine helper. A hundred seconds inside a
+  live Desktop session produced zero invocations of a probe that fired
+  immediately when called by hand.
+- **Learned:** They are also different installs with different sign-in state.
+  Executable discovery preferred `~/.local/bin/claude.exe`, which was logged
+  out, while `%APPDATA%/Claude/claude-code/<version>/claude.exe` was the one
+  actually working. A logged-out terminal CLI says nothing about Desktop.
+- **Learned:** Desktop keeps its own `plan-usage-history.json` with a usage
+  percentage every fifteen minutes. It has no reset timestamp, so a boundary can
+  only be derived from when usage returns from zero, and that derivation carries
+  the sampling interval as its error. It is displayed as an estimate rather than
+  promoted to a verified anchor.
+- **Learned:** Because that source has no weekly reset, the mandatory weekly
+  guard can never pass from it. That is the honest outcome and it needed no new
+  safety rule: Claude is observation-only on Desktop evidence, by construction.
+- **Verified with:** 317 tests, a live read matching what Desktop displays, and
+  the real packaged app showing Claude's countdown for the first time.
+- **Blocked on:** Whether `--init-only` starts a window is still unproven, and
+  Desktop offers no reported reset, so Claude cannot yet take part in an
+  unattended rollover.
