@@ -65,16 +65,19 @@ class ProductMetadata:
         return data
 
 
-# The GitHub owner and repo intentionally keep the original slug. Update
-# discovery is `https://api.github.com/repos/<owner>/<repo>/releases/latest`, so
-# renaming the repository would break every already-installed copy's updater.
-# The user-facing product name is independent of that slug.
+# The repository was renamed from `codex-window-sentinel` to `usageloop` so the
+# slug matches the product. Update discovery is
+# `https://api.github.com/repos/<owner>/<repo>/releases/latest`, and copies built
+# before the rename still request the old slug. GitHub answers those with a
+# redirect to the same repository, and the updater's GET follows it, so 0.8.0
+# installs keep updating. That redirect is the only thing keeping them working:
+# do not rename again without checking it still resolves.
 PRODUCT = ProductMetadata(
     display_name="UsageLoop",
     tagline="Keep your Codex reset clock running.",
     version="0.9.1",
     github_owner="benthompsondev",
-    github_repo="codex-window-sentinel",
+    github_repo="usageloop",
     executable_name="UsageLoop.exe",
     icon_filename="usageloop.ico",
     version_resource_filename="version_info.txt",

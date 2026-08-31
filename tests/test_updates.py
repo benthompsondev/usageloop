@@ -30,7 +30,7 @@ def release_payload(*, version: str = "0.5.0", include_checksum: bool = True):
         {
             "name": PRODUCT.installer_filename,
             "browser_download_url": (
-                "https://github.com/benthompsondev/codex-window-sentinel/"
+                "https://github.com/benthompsondev/usageloop/"
                 f"releases/download/v0.5.0/{PRODUCT.installer_filename}"
             ),
         }
@@ -40,14 +40,14 @@ def release_payload(*, version: str = "0.5.0", include_checksum: bool = True):
             {
                 "name": PRODUCT.checksum_filename,
                 "browser_download_url": (
-                    "https://github.com/benthompsondev/codex-window-sentinel/"
+                    "https://github.com/benthompsondev/usageloop/"
                     f"releases/download/v0.5.0/{PRODUCT.checksum_filename}"
                 ),
             }
         )
     return {
         "tag_name": f"v{version}",
-        "html_url": "https://github.com/benthompsondev/codex-window-sentinel/releases/tag/v0.5.0",
+        "html_url": "https://github.com/benthompsondev/usageloop/releases/tag/v0.5.0",
         "body": "## Changes\n- Cleaner dashboard\n- Safer updater\n\nLonger detail.",
         "draft": False,
         "prerelease": False,
@@ -96,7 +96,7 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
         self.assertEqual("update_available", result.status)
         self.assertEqual("0.5.0", result.release.version)
         self.assertEqual(1, len(calls))
-        self.assertIn("api.github.com/repos/benthompsondev/codex-window-sentinel", calls[0][0])
+        self.assertIn("api.github.com/repos/benthompsondev/usageloop", calls[0][0])
 
     def test_download_verifies_checksum_before_returning_installer(self) -> None:
         installer = b"safe installer bytes"

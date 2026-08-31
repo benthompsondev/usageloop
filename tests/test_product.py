@@ -16,13 +16,13 @@ class ProductMetadataTests(unittest.TestCase):
     def test_release_lookup_keeps_the_published_repository_slug(self) -> None:
         """Renaming the repository would break every installed copy's updater."""
         self.assertEqual("benthompsondev", PRODUCT.github_owner)
-        self.assertEqual("codex-window-sentinel", PRODUCT.github_repo)
+        self.assertEqual("usageloop", PRODUCT.github_repo)
         self.assertEqual(
-            "https://api.github.com/repos/benthompsondev/codex-window-sentinel/releases/latest",
+            "https://api.github.com/repos/benthompsondev/usageloop/releases/latest",
             PRODUCT.release_api_url,
         )
         self.assertEqual(
-            "https://github.com/benthompsondev/codex-window-sentinel/releases/latest",
+            "https://github.com/benthompsondev/usageloop/releases/latest",
             PRODUCT.releases_url,
         )
 

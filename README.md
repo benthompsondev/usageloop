@@ -84,7 +84,7 @@ is off, UsageLoop performs no provider-triggering work.
 ## Install and run
 
 Download the current per-user installer from
-[GitHub Releases](https://github.com/benthompsondev/codex-window-sentinel/releases/latest).
+[GitHub Releases](https://github.com/benthompsondev/usageloop/releases/latest).
 The installer does not need administrator rights or change the global PATH.
 
 To build it yourself on Windows:

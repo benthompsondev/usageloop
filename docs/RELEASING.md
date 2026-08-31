@@ -31,6 +31,6 @@ For a release:
 5. Confirm `/releases/latest` returns the tag and both exact assets.
 
 The updater reads the latest GitHub Release for
-`benthompsondev/codex-window-sentinel`. It rejects missing assets, untrusted
+`benthompsondev/usageloop`. It rejects missing assets, untrusted
 download hosts, older versions, and checksum mismatches. Repository and asset
 names are therefore compatibility contracts for already-installed copies.

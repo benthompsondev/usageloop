@@ -50,7 +50,7 @@ class UpdatePanelTests(unittest.TestCase):
         panel.release = ReleaseInfo(
             "0.9.1",
             ("Fix the Windows installer launch.",),
-            "https://github.com/benthompsondev/codex-window-sentinel/releases/tag/v0.9.1",
+            "https://github.com/benthompsondev/usageloop/releases/tag/v0.9.1",
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example"),
         )
@@ -158,7 +158,7 @@ class UpdatePanelTests(unittest.TestCase):
         release = ReleaseInfo(
             "0.6.0",
             ("Cleaner dashboard", "Safer update checks"),
-            "https://github.com/benthompsondev/codex-window-sentinel/releases/tag/v0.6.0",
+            "https://github.com/benthompsondev/usageloop/releases/tag/v0.6.0",
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example"),
         )
