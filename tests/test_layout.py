@@ -323,9 +323,10 @@ class SettingsSurfaceTests(unittest.TestCase):
         self.assertIn("Automation", text)
 
     def test_copying_the_summary_puts_it_on_the_clipboard(self):
-        self.window._copy_diagnostics()
+        self.window.copy_summary_button.click()
         clipboard = QApplication.clipboard()
         self.assertEqual(self.window.diagnostic_text.text(), clipboard.text())
+        self.assertEqual("Copied", self.window.copy_summary_button.text())
 
 
 class FooterTests(unittest.TestCase):

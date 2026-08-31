@@ -24,3 +24,20 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Compile
         run: python -m compileall -q src tests
+
+  clean-windows-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --editable ".[build]"
+          choco install innosetup --no-progress -y
+      - name: Build Windows package
+        run: .\scripts\build-windows.ps1
+      - name: Verify clean install and uninstall
+        run: .\scripts\verify-clean-install.ps1

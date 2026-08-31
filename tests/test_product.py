@@ -43,6 +43,7 @@ class ProductMetadataTests(unittest.TestCase):
         match = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
         self.assertIsNotNone(match)
         self.assertEqual(PRODUCT.version, match.group(1))
+        self.assertIn('name = "usageloop"', pyproject)
 
     def test_windows_package_reads_product_metadata_and_emits_checksum(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -69,6 +70,8 @@ class ProductMetadataTests(unittest.TestCase):
 
         self.assertEqual("{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}", PRODUCT.app_id)
         self.assertIn("DefaultDirName={localappdata}\\Programs\\{#AppName}", installer)
+        self.assertIn("UsePreviousAppDir=no", installer)
+        self.assertIn("{#LegacyInstallFolder}", installer)
         self.assertNotIn("app-state.json", installer)
         self.assertNotIn("[UninstallDelete]", installer)
         self.assertNotIn("uninsdeletekey", installer.lower())
@@ -84,6 +87,15 @@ class ProductMetadataTests(unittest.TestCase):
             text = (root / relative).read_text(encoding="utf-8")
             self.assertNotIn("WindowSentinel", text, relative)
             self.assertNotIn("windowsentinel", text, relative)
+
+    def test_codex_only_runtime_contains_no_retired_claude_integration(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        runtime_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (root / "src" / "sentinel").glob("*.py")
+        )
+        self.assertNotIn(".claude", runtime_text.lower())
+        self.assertNotIn("claude-status", runtime_text.lower())
 
     def test_local_setup_and_verification_use_the_current_desktop_entrypoint(self) -> None:
         root = Path(__file__).resolve().parents[1]

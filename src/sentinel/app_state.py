@@ -49,6 +49,7 @@ class ProviderViewState:
     weekly_reset_at: int | None = None
     automation_blocked_until: float | None = None
     retry_after_restart: bool = False
+    quota_state: str | None = None
 
     @classmethod
     def waiting(
@@ -149,7 +150,12 @@ def format_countdown(reset_at: int | None, now: float) -> str:
 
 
 _TEXT_FIELDS = ("provider_id", "display_name", "status", "detail")
-_OPTIONAL_TEXT_FIELDS = ("runtime_identity", "runtime_version", "last_action")
+_OPTIONAL_TEXT_FIELDS = (
+    "runtime_identity",
+    "runtime_version",
+    "last_action",
+    "quota_state",
+)
 _BOOL_FIELDS = ("installed", "automation_supported", "retry_after_restart")
 _INT_FIELDS = ("reset_at", "weekly_reset_at")
 _FLOAT_FIELDS = (

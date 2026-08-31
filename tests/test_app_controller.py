@@ -183,6 +183,50 @@ class ApplicationControllerTests(unittest.TestCase):
             self.assertEqual(200, recovered.last_verified_at)
             self.assertEqual(15, recovered.used_percent)
 
+    def test_restart_migrates_legacy_exhausted_cache_back_to_recoverable_waiting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            legacy = ProviderViewState(
+                "codex",
+                "Codex",
+                True,
+                True,
+                "Needs attention",
+                "The last check reported that this window was exhausted.",
+                runtime_identity="runtime:1",
+                reset_at=1_000,
+                usage_checked_at=900,
+            )
+            store.save(
+                AppSettings(
+                    True,
+                    False,
+                    True,
+                    {"codex": "runtime:1"},
+                    {"codex": "runtime:1"},
+                ),
+                {"codex": legacy},
+            )
+            detected = ProviderViewState(
+                "codex",
+                "Codex",
+                True,
+                True,
+                "Waiting",
+                "The last check reported that this window was exhausted.",
+                runtime_identity="runtime:1",
+                reset_at=1_000,
+                usage_checked_at=900,
+                quota_state="EXHAUSTED",
+            )
+
+            controller = ApplicationController([FakeProvider(detected)], store)
+            controller.start()
+
+            self.assertEqual("Waiting", controller.states["codex"].status)
+            self.assertEqual("EXHAUSTED", controller.states["codex"].quota_state)
+            self.assertEqual("ROLLOVER", controller.decisions(now=1_015)["codex"].action)
+
 
 if __name__ == "__main__":
     unittest.main()

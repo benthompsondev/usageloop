@@ -278,6 +278,18 @@ class TriggerOutcomeTests(unittest.TestCase):
         self.assertEqual("turn_start_unconfirmed", result.terminal_outcome)
         self.assertTrue(result.request_possibly_sent)
 
+    def test_reservation_write_failure_before_turn_start_sends_nothing(self):
+        client = FakeClient()
+
+        def fail_reservation_write():
+            raise OSError("simulated state write failure")
+
+        result = self.trigger(client).run(on_request_starting=fail_reservation_write)
+
+        self.assertEqual("reservation_state_failed", result.terminal_outcome)
+        self.assertFalse(result.request_possibly_sent)
+        self.assertEqual(0, client.turn_calls)
+
     def test_turn_timeout_is_reported_but_still_possibly_sent(self):
         client = FakeClient(turn_outcome="turn_timeout")
         result = self.trigger(client).run()

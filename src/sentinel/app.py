@@ -11,11 +11,10 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from .app_controller import ApplicationController
 from .app_state import AppStateStore
 from .desktop import DesktopShell, MainWindow
-from .legacy_cleanup import remove_retired_claude_integration
 from .product import PRODUCT
 from .providers import CodexProvider
 from .single_instance import SingleInstanceGuard
-from .startup import StartupManager
+from .startup import StartupManager, reconcile_startup_preference
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -39,11 +38,16 @@ def main(argv: list[str] | None = None) -> int:
     application.setOrganizationName(PRODUCT.publisher)
     application.setStyle("Fusion")
 
-    remove_retired_claude_integration()
     providers = [CodexProvider()]
     controller = ApplicationController(providers, AppStateStore())
     controller.start()
     startup = StartupManager(str(Path(sys.executable).resolve()))
+    try:
+        reconcile_startup_preference(controller.settings.start_with_windows, startup)
+    except OSError:
+        # Startup registration is optional. The Settings control remains the
+        # visible recovery path if Windows temporarily denies registry access.
+        pass
     window = MainWindow(
         controller,
         {provider.provider_id: provider for provider in providers},

@@ -2,7 +2,7 @@
   #define AppName "UsageLoop"
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.9.1"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef AppExeName
   #define AppExeName "UsageLoop.exe"
@@ -22,12 +22,16 @@
 #ifndef DistFolder
   #define DistFolder "UsageLoop"
 #endif
+#ifndef LegacyInstallFolder
+  #define LegacyInstallFolder "Window Sentinel"
+#endif
 [Setup]
 AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\{#AppName}
+UsePreviousAppDir=no
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -48,6 +52,7 @@ Source: "..\dist\{#DistFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recurs
 
 [InstallDelete]
 Type: files; Name: "{app}\UsageLoopStatus.exe"
+Type: filesandordirs; Name: "{localappdata}\Programs\{#LegacyInstallFolder}"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

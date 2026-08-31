@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from .app_controller import ApplicationController
+from .chain import WEEKLY_PROTECTION_PERCENT
 from .branding import make_app_icon, render_mark
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
@@ -549,9 +550,9 @@ class MainWindow(QMainWindow):
         privacy_note.setProperty("muted", True)
         privacy_note.setWordWrap(True)
         technical.add_widget(privacy_note)
-        copy_button = QPushButton("Copy this summary")
-        copy_button.clicked.connect(self._copy_diagnostics)
-        technical.add_widget(copy_button)
+        self.copy_summary_button = QPushButton("Copy this summary")
+        self.copy_summary_button.clicked.connect(self._copy_diagnostics)
+        technical.add_widget(self.copy_summary_button)
         technical_layout.addWidget(technical)
         root.addWidget(technical_card)
 
@@ -707,10 +708,10 @@ class MainWindow(QMainWindow):
                 self.weekly_detail.setText(
                     f"{codex.weekly_used_percent:g}% used · resets {weekly_reset}"
                 )
-                weekly_safe = codex.weekly_used_percent < 100
+                weekly_safe = codex.weekly_used_percent < WEEKLY_PROTECTION_PERCENT
                 self.weekly_status.set_status(
-                    "SAFE" if weekly_safe else "EXHAUSTED",
-                    "success" if weekly_safe else "error",
+                    "SAFE" if weekly_safe else "PROTECTED",
+                    "success" if weekly_safe else "warning",
                 )
             self.last_action_label.setText(presented.action)
         self._update_diagnostics(now=current)
@@ -852,10 +853,25 @@ class MainWindow(QMainWindow):
             technical_summary(self.controller.states, self.controller.settings)
         )
 
-    def _copy_diagnostics(self) -> None:
-        clipboard = QApplication.clipboard()
-        if clipboard is not None:
+    def _copy_diagnostics(self, _checked: bool = False) -> None:
+        try:
+            clipboard = QApplication.clipboard()
+            if clipboard is None:
+                raise RuntimeError("Windows clipboard is unavailable")
             clipboard.setText(self.diagnostic_text.text())
+        except Exception:
+            self.copy_summary_button.setText("Copy failed")
+            QMessageBox.warning(
+                self,
+                "Summary not copied",
+                "Windows did not allow UsageLoop to copy the diagnostic summary. Try again after closing other clipboard tools.",
+            )
+            return
+        self.copy_summary_button.setText("Copied")
+        QTimer.singleShot(
+            2_000,
+            lambda: self.copy_summary_button.setText("Copy this summary"),
+        )
 
     def _exit_for_update(self) -> None:
         application = QApplication.instance()

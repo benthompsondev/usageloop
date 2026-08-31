@@ -135,6 +135,28 @@ class CodexOperationRunnerTests(unittest.TestCase):
             self.assertEqual(0, client.model_calls)
             self.assertEqual(0, client.turn_calls)
 
+    def test_exhausted_sync_is_conclusive_but_remains_eligible_for_later_recheck(self):
+        with tempfile.TemporaryDirectory() as directory:
+            exhausted = payload(1_000, used=100)
+            exhausted["rateLimitsByLimitId"]["codex"]["primary"][
+                "blockedReason"
+            ] = "rate_limit_reached"
+            times = iter((900.0, 910.0, 920.0, 930.0))
+            client = FakeClient([exhausted] * 4)
+            runner = CodexOperationRunner(
+                SafeHistory(Path(directory) / "history.jsonl"),
+                session_factory=lambda: FakeSession(client),
+                clock=lambda: next(times),
+                sleep=lambda _seconds: None,
+            )
+
+            result = runner.sync("runtime:1")
+
+            self.assertEqual("SYNC_UPDATED", result.outcome)
+            self.assertEqual("Waiting", result.state.status)
+            self.assertEqual("EXHAUSTED", result.state.quota_state)
+            self.assertEqual(0, client.turn_calls)
+
     def test_compatibility_probe_is_read_only_and_accepts_required_capabilities(self):
         with tempfile.TemporaryDirectory() as directory:
             client = FakeClient([payload(18_000)] * 4)

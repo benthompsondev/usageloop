@@ -39,6 +39,33 @@ def unanchored(start=BOUNDARY + 20, *, used=0, weekly_used=10):
     ]
 
 
+def exhausted(start=BOUNDARY + 20, *, weekly_used=10):
+    return [
+        QuotaSnapshot(
+            start + offset,
+            (
+                QuotaWindow(
+                    "codex",
+                    "primary",
+                    100,
+                    300,
+                    BOUNDARY,
+                    "rate_limit_reached",
+                ),
+                QuotaWindow(
+                    "codex",
+                    "secondary",
+                    weekly_used,
+                    10080,
+                    BOUNDARY + 500_000,
+                    None,
+                ),
+            ),
+        )
+        for offset in (0, 10, 20, 30)
+    ]
+
+
 def unanchored_with_weekly_limit(limit_id):
     return [
         QuotaSnapshot(
@@ -79,8 +106,10 @@ class FakeTrigger:
             prompt_characters=2,
         )
 
-    def run(self):
+    def run(self, *, on_request_starting=None):
         self.calls += 1
+        if on_request_starting is not None:
+            on_request_starting()
         return self.result
 
 
@@ -113,6 +142,50 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ANCHOR_VERIFIED", result.status)
         self.assertEqual(1, trigger.calls)
         self.assertTrue(result.request_possibly_sent)
+
+    def test_transient_exhausted_preflight_never_triggers_then_unanchored_triggers_once(self):
+        trigger = FakeTrigger()
+
+        blocked = self.coordinator(trigger).run(exhausted(), lambda: anchored())
+        recovered = self.coordinator(trigger).run(
+            unanchored(BOUNDARY + 80),
+            lambda: anchored(BOUNDARY + 80),
+        )
+
+        self.assertEqual("NOT_ELIGIBLE", blocked.status)
+        self.assertEqual("ANCHOR_VERIFIED", recovered.status)
+        self.assertEqual(1, trigger.calls)
+
+    def test_missed_boundary_after_long_sleep_still_uses_verified_history(self):
+        trigger = FakeTrigger()
+        much_later = BOUNDARY + (8 * 60 * 60)
+
+        result = self.coordinator(trigger).run(
+            unanchored(much_later), lambda: anchored(much_later)
+        )
+
+        self.assertEqual("ANCHOR_VERIFIED", result.status)
+        self.assertEqual(BOUNDARY, result.boundary_reset_at)
+        self.assertEqual(1, trigger.calls)
+
+    def test_crash_before_request_start_keeps_reservation_recoverable(self):
+        class CrashBeforeRequest(FakeTrigger):
+            def run(self, *, on_request_starting=None):
+                self.calls += 1
+                raise SystemExit("simulated process death before turn/start")
+
+        crashing = CrashBeforeRequest()
+        with self.assertRaises(SystemExit):
+            self.coordinator(crashing).run(unanchored(), lambda: anchored())
+
+        self.assertEqual("reserved", self.history.trigger_attempts()[-1].state)
+
+        working = FakeTrigger()
+        recovered = self.coordinator(working).run(
+            unanchored(BOUNDARY + 180), lambda: anchored(BOUNDARY + 180)
+        )
+        self.assertEqual("ANCHOR_VERIFIED", recovered.status)
+        self.assertEqual(1, working.calls)
 
     def test_reservation_is_written_inside_exclusive_guard(self):
         class GuardTrackingHistory(SafeHistory):

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 from .models import ModelChoice, select_trigger_model
 from .protocol import AppServerProtocolError, AppServerRequestRejected
@@ -48,7 +48,9 @@ class TriggerRunResult:
 
 class Trigger(Protocol):
     def describe(self) -> TriggerDescription: ...
-    def run(self) -> TriggerRunResult: ...
+    def run(
+        self, *, on_request_starting: Callable[[], None] | None = None
+    ) -> TriggerRunResult: ...
 
 
 class TurnClient(Protocol):
@@ -119,7 +121,9 @@ class AppServerTrigger:
             params["effort"] = choice.reasoning_effort
         return params
 
-    def run(self) -> TriggerRunResult:
+    def run(
+        self, *, on_request_starting: Callable[[], None] | None = None
+    ) -> TriggerRunResult:
         choice = self.resolve_model()
         if choice is None:
             return TriggerRunResult("model_unavailable", False)
@@ -133,6 +137,12 @@ class AppServerTrigger:
             return TriggerRunResult("thread_start_rejected", False)
         except (AppServerProtocolError, SentinelRuntimeError, OSError):
             return TriggerRunResult("thread_start_failed", False)
+
+        if on_request_starting is not None:
+            try:
+                on_request_starting()
+            except Exception:
+                return TriggerRunResult("reservation_state_failed", False)
 
         try:
             self.client.start_turn(self.turn_parameters(thread_id, choice))

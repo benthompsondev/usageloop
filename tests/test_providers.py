@@ -188,6 +188,47 @@ class ProviderAdapterTests(unittest.TestCase):
             self.assertEqual(20, state.weekly_used_percent)
             self.assertEqual(600_000, state.weekly_reset_at)
 
+    def test_exhausted_history_remains_recoverable_after_the_reset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "codex.exe"
+            executable.write_bytes(b"native")
+            history = SafeHistory(Path(directory) / "history.jsonl")
+            classification = Classification(
+                "EXHAUSTED",
+                "explicit",
+                "The selected window reports exhaustion.",
+                {"sample_count": 4, "used_percent": 100},
+            )
+            for observed_at in (100.0, 110.0, 120.0, 130.0):
+                history.record_observation(
+                    QuotaSnapshot(
+                        observed_at,
+                        (
+                            QuotaWindow(
+                                "codex",
+                                "primary",
+                                100,
+                                300,
+                                1_000,
+                                "rate_limit_reached",
+                            ),
+                        ),
+                    ),
+                    classification,
+                    "codex-cli test",
+                )
+            provider = CodexProvider(
+                history=history,
+                executable_finder=lambda: executable,
+                identity_reader=lambda _path: "runtime:1",
+                now=lambda: 140.0,
+            )
+
+            state = provider.detect()
+
+            self.assertEqual("Waiting", state.status)
+            self.assertEqual("EXHAUSTED", state.quota_state)
+
     def test_capability_probe_accepts_version_change_when_contract_is_intact(self):
         result = CompatibilityResult.from_capabilities(
             runtime_identity="codex-file:new", initialized=True,

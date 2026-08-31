@@ -112,8 +112,13 @@ dist\UsageLoop-Setup.exe.sha256
 4. On a true first run, choose **Start my first window now**. This explicit
    action is guarded by the same evidence and weekly checks.
 5. Leave UsageLoop in the tray. The local countdown continues without Codex
-traffic between observations. Automation and Windows startup stay off until you
-enable them.
+   traffic between observations. Automation and Windows startup stay off until
+   you enable them.
+
+Windows startup runs UsageLoop in your signed-in desktop session. If the PC
+sleeps, the app catches up after wake. If the PC is powered off or you are
+signed out, it catches up the next time you sign in. UsageLoop does not install
+a Windows service or store your Windows password.
 
 Use **Sync usage** when the dashboard looks stale or Codex changes a limit
 unexpectedly. Settings contains the schedule, Windows startup, manual updates,

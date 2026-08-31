@@ -113,7 +113,7 @@ class CodexOperationRunner:
             status = {
                 "ANCHORED": "Ready",
                 "UNANCHORED": "Waiting",
-                "EXHAUSTED": "Needs attention",
+                "EXHAUSTED": "Waiting",
             }.get(classification.state, "Needs attention")
             detail = {
                 "ANCHORED": "Codex usage was updated from a fixed reset clock.",
@@ -136,6 +136,7 @@ class CodexOperationRunner:
                 usage_checked_at=latest.observed_at,
                 weekly_used_percent=weekly.used_percent if weekly else None,
                 weekly_reset_at=weekly.resets_at if weekly else None,
+                quota_state=classification.state,
             )
             return ProviderOperationResult(
                 "SYNC_UPDATED" if conclusive else "SYNC_INCONCLUSIVE",
@@ -224,4 +225,5 @@ class CodexOperationRunner:
             usage_checked_at=latest.observed_at if latest else None,
             weekly_used_percent=weekly.used_percent if weekly else None,
             weekly_reset_at=weekly.resets_at if weekly else None,
+            quota_state=classification_state,
         )

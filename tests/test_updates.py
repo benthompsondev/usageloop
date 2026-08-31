@@ -63,6 +63,9 @@ class UpdateParsingTests(unittest.TestCase):
         with self.assertRaises(UpdateError):
             is_newer_version("latest", "0.4.0")
 
+    def test_installed_091_accepts_100_as_a_normal_update(self) -> None:
+        self.assertTrue(is_newer_version("1.0.0", "0.9.1"))
+
     def test_release_requires_exact_installer_and_checksum_assets(self) -> None:
         release = parse_release(release_payload(), installed_version="0.4.0")
         self.assertIsNotNone(release)

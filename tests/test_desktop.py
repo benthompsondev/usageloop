@@ -206,6 +206,40 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 
+    def test_weekly_guard_threshold_is_not_presented_as_safe(self):
+        state = ProviderViewState(
+            "codex",
+            "Codex",
+            True,
+            True,
+            "Ready",
+            "Verified.",
+            reset_at=1000,
+            last_verified_at=90,
+            used_percent=0,
+            usage_checked_at=90,
+            weekly_used_percent=99,
+            weekly_reset_at=5000,
+        )
+        window, _provider = self.make_window(state)
+
+        window.refresh_clock(now=100)
+
+        self.assertEqual("PROTECTED", window.weekly_status.text())
+
+    def test_clipboard_failure_is_visible_instead_of_silent(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        with (
+            patch("sentinel.desktop.QApplication.clipboard", side_effect=RuntimeError),
+            patch("sentinel.desktop.QMessageBox.warning") as warning,
+        ):
+            window.copy_summary_button.click()
+
+        self.assertEqual("Copy failed", window.copy_summary_button.text())
+        warning.assert_called_once()
+
     def test_daily_schedule_settings_persist_and_update_summary_without_provider_work(self):
         state = ProviderViewState.waiting(
             "codex", "Codex", installed=True, runtime_identity="runtime:1"

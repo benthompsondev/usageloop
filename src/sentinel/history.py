@@ -327,7 +327,7 @@ class SafeHistory:
         self,
         now: float,
         *,
-        max_age_seconds: float = 21600,
+        max_age_seconds: float | None = None,
     ) -> int | None:
         candidates: list[int] = []
         for row in self._read_rows():
@@ -336,7 +336,10 @@ class SafeHistory:
             observed_at = row.get("observed_at")
             if not isinstance(observed_at, (int, float)) or isinstance(observed_at, bool):
                 continue
-            if observed_at < now - max_age_seconds or observed_at > now + 60:
+            if (
+                (max_age_seconds is not None and observed_at < now - max_age_seconds)
+                or observed_at > now + 60
+            ):
                 continue
             windows = row.get("windows")
             if not isinstance(windows, list):

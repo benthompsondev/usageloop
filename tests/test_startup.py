@@ -1,7 +1,8 @@
 import unittest
 
 from sentinel.product import PRODUCT
-from sentinel.startup import StartupManager
+from sentinel.app_state import AppSettings
+from sentinel.startup import StartupManager, reconcile_startup_preference
 
 
 class FakeRegistry:
@@ -45,6 +46,24 @@ class StartupManagerTests(unittest.TestCase):
         self.assertEqual('"C:/Apps/UsageLoop.exe" --background', registry.values[PRODUCT.display_name])
         manager.set_enabled(False)
         self.assertFalse(manager.is_enabled())
+
+    def test_upgrade_rewrites_enabled_startup_to_the_current_executable(self):
+        registry = FakeRegistry()
+        manager = StartupManager(r"C:\\Program Files\\UsageLoop\\UsageLoop.exe", registry=registry)
+        registry.values["UsageLoop"] = r'"C:\\Old UsageLoop\\UsageLoop.exe" --background'
+
+        reconcile_startup_preference(AppSettings(start_with_windows=True).start_with_windows, manager)
+
+        self.assertEqual(manager.command, registry.values["UsageLoop"])
+
+    def test_upgrade_removes_stale_startup_when_saved_preference_is_off(self):
+        registry = FakeRegistry()
+        manager = StartupManager(r"C:\\Program Files\\UsageLoop\\UsageLoop.exe", registry=registry)
+        registry.values["UsageLoop"] = r'"C:\\Old UsageLoop\\UsageLoop.exe" --background'
+
+        reconcile_startup_preference(False, manager)
+
+        self.assertNotIn("UsageLoop", registry.values)
 
 
 if __name__ == "__main__":

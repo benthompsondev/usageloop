@@ -68,11 +68,14 @@ checksum-gated. Version and package names come from `sentinel.product`.
 ## Out of scope
 
 Other providers, UI scraping, private APIs, credential reads, keepalives,
-reset credits, telemetry, Windows Task Scheduler jobs, silent updates, admin
-requirements, and global PATH changes.
+reset credits, telemetry, Windows services, Windows Task Scheduler jobs, silent
+updates, admin requirements, and global PATH changes.
 
 ## Current proof boundary
 
 The observer, app-server trigger transport, and live anchoring behavior have
-each been proven. The remaining release blocker is one genuine fresh-window
-rollover/bootstrap run through the final packaged Codex-only app.
+each been proven. A packaged build has completed a genuine unattended rollover:
+it observed an unanchored window, reserved once, sent the guarded app-server
+turn, and verified a new fixed reset. The trigger payload remains unchanged for
+1.0; the reliability changes only tighten missed-boundary and pre-submit crash
+handling.

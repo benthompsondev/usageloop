@@ -12,10 +12,13 @@ from .quota import QuotaSnapshot, QuotaWindow, select_five_hour, select_weekly
 from .trigger import Trigger, TriggerDescription, TriggerRunResult
 
 
+WEEKLY_PROTECTION_PERCENT = 99
+
+
 @dataclass(frozen=True)
 class ChainPolicy:
     reset_buffer_seconds: float = 15.0
-    weekly_protection_percent: int = 99
+    weekly_protection_percent: int = WEEKLY_PROTECTION_PERCENT
     bootstrap_cooldown_seconds: float = 18_000.0
     reservation_recovery_seconds: float = 120.0
 
@@ -254,13 +257,30 @@ class ChainCoordinator:
                 reasoning_effort=description.reasoning_effort,
                 now=current.observed_at,
             )
-            self.history.transition_trigger(
-                attempt.attempt_id, "launch_attempted", now=current.observed_at
-            )
-        try:
-            trigger_result = self.trigger.run()
-        except Exception:
-            trigger_result = TriggerRunResult("runtime_error", True)
+            launch_recorded = False
+
+            def record_request_starting() -> None:
+                nonlocal launch_recorded
+                self.history.transition_trigger(
+                    attempt.attempt_id, "launch_attempted", now=current.observed_at
+                )
+                launch_recorded = True
+
+            try:
+                trigger_result = self.trigger.run(
+                    on_request_starting=record_request_starting
+                )
+            except Exception:
+                trigger_result = TriggerRunResult("runtime_error", launch_recorded)
+
+            # A third-party Trigger implementation may conservatively report
+            # that a request could have been sent without using the callback.
+            # Persist the guard before interpreting that result. Keeping the
+            # short reservation lock through this point prevents another
+            # process from recovering a live reservation while thread/start is
+            # still in flight.
+            if trigger_result.request_possibly_sent and not launch_recorded:
+                record_request_starting()
 
         if not trigger_result.request_possibly_sent:
             self.history.transition_trigger(

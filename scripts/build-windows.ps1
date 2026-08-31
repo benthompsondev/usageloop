@@ -31,7 +31,7 @@ try {
         throw 'Inno Setup compiler not found. Install the current per-user Inno Setup compiler first.'
     }
     $installerBaseName = [IO.Path]::GetFileNameWithoutExtension($product.installer_filename)
-    & $iscc "/DAppName=$($product.display_name)" "/DAppIconFile=$($product.icon_filename)" "/DDistFolder=$($product.dist_folder_name)" "/DAppVersion=$($product.version)" "/DAppExeName=$($product.executable_name)" "/DAppPublisher=$($product.publisher)" "/DAppId=$($product.app_id)" "/DInstallerBaseName=$installerBaseName" .\packaging\UsageLoop.iss
+    & $iscc "/DAppName=$($product.display_name)" "/DAppIconFile=$($product.icon_filename)" "/DDistFolder=$($product.dist_folder_name)" "/DLegacyInstallFolder=$($product.legacy_install_folder)" "/DAppVersion=$($product.version)" "/DAppExeName=$($product.executable_name)" "/DAppPublisher=$($product.publisher)" "/DAppId=$($product.app_id)" "/DInstallerBaseName=$installerBaseName" .\packaging\UsageLoop.iss
     if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
 
     $installerPath = Join-Path $repoRoot "dist\$($product.installer_filename)"

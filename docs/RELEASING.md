@@ -18,9 +18,10 @@ dist\UsageLoop-Setup.exe.sha256
 
 Install for the current user, verify the dashboard and tray, then uninstall from
 Windows Installed apps. The installer also removes the obsolete
-`UsageLoopStatus.exe` helper if an earlier local alpha left it in the app folder.
-The app itself removes only an exact UsageLoop-owned legacy status-line entry;
-custom user configuration is never changed.
+`UsageLoopStatus.exe` helper if an earlier local alpha left it in the app folder,
+and consolidates the retired `Window Sentinel` install directory into the
+current `%LOCALAPPDATA%\Programs\UsageLoop` location. Codex and other provider
+configuration is never changed.
 
 For a release:
 

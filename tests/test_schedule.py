@@ -62,6 +62,37 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(timestamp(2026, 11, 1, 1, 30, fold=0), first)
         self.assertEqual(first, second)
 
+    def test_daily_schedule_crosses_year_boundary(self):
+        boundary = timestamp(2026, 12, 31, 23, 30)
+        self.assertEqual(
+            timestamp(2027, 1, 1, 4, 0),
+            next_daily_start_after(boundary, 4, 0, timezone=TORONTO),
+        )
+
+    def test_clock_moving_back_before_due_does_not_make_schedule_early(self):
+        boundary = timestamp(2026, 8, 31, 3, 32)
+        summary = schedule_summary(
+            "daily",
+            boundary_reset_at=boundary,
+            now=timestamp(2026, 8, 31, 3, 0),
+            hour=4,
+            minute=0,
+            timezone=TORONTO,
+        )
+        self.assertFalse(summary.due)
+        self.assertEqual(timestamp(2026, 8, 31, 4, 0), summary.next_action_at)
+
+    def test_timezone_change_reinterprets_daily_time_in_the_new_local_zone(self):
+        london = ZoneInfo("Europe/London")
+        boundary = timestamp(2026, 8, 31, 3, 32)
+
+        toronto_due = next_daily_start_after(boundary, 4, 0, timezone=TORONTO)
+        london_due = next_daily_start_after(boundary, 4, 0, timezone=london)
+
+        self.assertEqual(4, datetime.fromtimestamp(toronto_due, TORONTO).hour)
+        self.assertEqual(4, datetime.fromtimestamp(london_due, london).hour)
+        self.assertNotEqual(toronto_due, london_due)
+
 
 if __name__ == "__main__":
     unittest.main()

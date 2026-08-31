@@ -72,9 +72,18 @@ class ApplicationController:
                     and (
                         previous.usage_checked_at is None
                         or state.usage_checked_at > previous.usage_checked_at
+                        or (
+                            state.usage_checked_at == previous.usage_checked_at
+                            and state.quota_state == "EXHAUSTED"
+                            and previous.quota_state is None
+                        )
                     )
                 ):
-                    pass
+                    state = replace(
+                        state,
+                        last_action=previous.last_action,
+                        automation_blocked_until=previous.automation_blocked_until,
+                    )
                 elif previous.retry_after_restart:
                     state = replace(
                         state,
@@ -178,6 +187,11 @@ class ApplicationController:
                 and (
                     current.usage_checked_at is None
                     or detected.usage_checked_at > current.usage_checked_at
+                    or (
+                        detected.usage_checked_at == current.usage_checked_at
+                        and detected.quota_state == "EXHAUSTED"
+                        and current.quota_state is None
+                    )
                 )
             ):
                 self.states[provider_id] = replace(

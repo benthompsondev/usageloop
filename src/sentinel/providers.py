@@ -106,7 +106,11 @@ class CodexProvider:
         status = {
             "ANCHORED": "Ready",
             "UNANCHORED": "Waiting",
-            "EXHAUSTED": "Needs attention",
+            # Exhaustion is a real, conclusive quota state, not a permanent
+            # compatibility or transport failure. Once its reset passes, the
+            # scheduler must be allowed to re-read until Codex exposes the new
+            # unanchored window.
+            "EXHAUSTED": "Waiting",
         }.get(classification.state, "Needs attention")
         detail = {
             "ANCHORED": "The last verified five-hour window is ready.",
@@ -129,6 +133,7 @@ class CodexProvider:
             weekly_used_percent=weekly.used_percent if weekly else None,
             weekly_reset_at=weekly.resets_at if weekly else None,
             last_action=_latest_trigger_action(self.history),
+            quota_state=classification.state,
         )
 
     def probe(self) -> CompatibilityResult:

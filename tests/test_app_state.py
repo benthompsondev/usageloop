@@ -186,6 +186,59 @@ class AppStateTests(unittest.TestCase):
 
         self.assertEqual("WAIT", decision.action)
 
+    def test_switching_daily_to_continuous_makes_an_expired_boundary_due(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        timezone = ZoneInfo("America/Toronto")
+        reset = datetime(2026, 8, 31, 3, 32, tzinfo=timezone).timestamp()
+        now = datetime(2026, 8, 31, 3, 40, tzinfo=timezone).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        daily = automation_decision(
+            True,
+            state,
+            now=now,
+            compatible_runtime_identity="native:same",
+            schedule_mode="daily",
+            daily_hour=4,
+            daily_minute=0,
+            timezone=timezone,
+        )
+        continuous = automation_decision(
+            True,
+            state,
+            now=now,
+            compatible_runtime_identity="native:same",
+            schedule_mode="continuous",
+        )
+
+        self.assertEqual("WAIT", daily.action)
+        self.assertEqual("ROLLOVER", continuous.action)
+
+    def test_automation_off_then_on_recovers_one_missed_boundary(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(1_000, verified_at=900)
+
+        off = automation_decision(
+            False,
+            state,
+            now=1_100,
+            compatible_runtime_identity="native:same",
+        )
+        on = automation_decision(
+            True,
+            state,
+            now=1_100,
+            compatible_runtime_identity="native:same",
+        )
+
+        self.assertEqual("NONE", off.action)
+        self.assertEqual("ROLLOVER", on.action)
+
     def test_needs_attention_state_never_retries_automatically(self):
         state = ProviderViewState(
             provider_id="codex",
@@ -205,6 +258,35 @@ class AppStateTests(unittest.TestCase):
         )
 
         self.assertEqual("NONE", decision.action)
+
+    def test_expired_exhausted_window_is_rechecked_after_reset_buffer(self):
+        state = ProviderViewState(
+            provider_id="codex",
+            display_name="Codex",
+            installed=True,
+            automation_supported=True,
+            status="Waiting",
+            detail="Codex reports that the five-hour window is exhausted.",
+            runtime_identity="native:same",
+            reset_at=1_000,
+            quota_state="EXHAUSTED",
+        )
+
+        before = automation_decision(
+            True,
+            state,
+            now=1_014,
+            compatible_runtime_identity="native:same",
+        )
+        after = automation_decision(
+            True,
+            state,
+            now=1_015,
+            compatible_runtime_identity="native:same",
+        )
+
+        self.assertEqual("WAIT", before.action)
+        self.assertEqual("ROLLOVER", after.action)
 
     def test_daily_mode_fails_closed_on_an_unusable_cached_reset_timestamp(self):
         state = ProviderViewState.waiting(
