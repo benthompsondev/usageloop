@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from PySide6.QtCore import QTime, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget
@@ -13,6 +14,8 @@ from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow, DesktopShell, present_provider_state
 from sentinel.provider_runtime import ProviderOperationResult
+from sentinel.product import PRODUCT
+from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateError, VerifiedInstaller
 
 
 class FakeProvider:
@@ -60,6 +63,17 @@ class FakeStartup:
 
     def set_enabled(self, enabled):
         self.enabled = enabled
+
+
+class FakeInstallerUpdater:
+    def __init__(self, *, fail: bool = False):
+        self.fail = fail
+        self.launches = []
+
+    def launch_installer(self, installer):
+        self.launches.append(installer)
+        if self.fail:
+            raise UpdateError("Windows refused the installer.")
 
 
 class DesktopTests(unittest.TestCase):
@@ -299,6 +313,77 @@ class DesktopTests(unittest.TestCase):
         self.addCleanup(window.close)
         self.assertEqual(0, updater.check_calls)
         self.assertEqual("Check for updates", window.update_panel.action_button.text())
+
+    def _prepare_install(self, window, updater):
+        window.update_panel.updater = updater
+        window.update_panel.confirm_install = lambda _version: True
+        window.update_panel.release = ReleaseInfo(
+            "0.9.1",
+            (),
+            "https://github.com/benthompsondev/codex-window-sentinel/releases/tag/v0.9.1",
+            ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example"),
+            ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example"),
+        )
+        window.update_panel.installer = VerifiedInstaller(
+            Path(PRODUCT.installer_filename), "0" * 64
+        )
+        window.update_panel._set_state("downloaded", "Installer verified.")
+        window.update_panel.action_button.setText("Install update")
+
+    def test_successful_installer_start_schedules_exit_without_provider_traffic(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        updater = FakeInstallerUpdater()
+        self._prepare_install(window, updater)
+
+        with patch("sentinel.desktop.QTimer.singleShot") as single_shot:
+            window.update_panel.action_button.click()
+
+        self.assertEqual(1, len(updater.launches))
+        self.assertTrue(window.force_close)
+        single_shot.assert_called_once()
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+
+    def test_failed_installer_start_keeps_app_open(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        updater = FakeInstallerUpdater(fail=True)
+        self._prepare_install(window, updater)
+
+        with patch("sentinel.desktop.QTimer.singleShot") as single_shot:
+            window.update_panel.action_button.click()
+
+        self.assertFalse(window.force_close)
+        single_shot.assert_not_called()
+        self.assertEqual("error", window.update_panel.state)
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+
+    def test_shutdown_handoff_failure_is_visible_and_keeps_app_open(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        updater = FakeInstallerUpdater()
+        self._prepare_install(window, updater)
+
+        with patch(
+            "sentinel.desktop.QTimer.singleShot",
+            side_effect=RuntimeError("Qt timer unavailable"),
+        ):
+            window.update_panel.action_button.click()
+
+        self.assertEqual(1, len(updater.launches))
+        self.assertFalse(window.force_close)
+        self.assertEqual("error", window.update_panel.state)
+        self.assertIn("close automatically", window.update_panel.state_label.text())
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
 
     def test_tray_shell_can_hide_and_restore_same_window(self):
         window, _provider = self.make_window(

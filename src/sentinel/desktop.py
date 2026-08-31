@@ -858,10 +858,22 @@ class MainWindow(QMainWindow):
             clipboard.setText(self.diagnostic_text.text())
 
     def _exit_for_update(self) -> None:
-        self.force_close = True
         application = QApplication.instance()
-        if application is not None:
+        if application is None:
+            self.update_panel._operation_failed(
+                "install",
+                "The installer started, but UsageLoop could not close automatically. Close it before continuing setup.",
+            )
+            return
+        try:
             QTimer.singleShot(200, application.quit)
+        except Exception:
+            self.update_panel._operation_failed(
+                "install",
+                "The installer started, but UsageLoop could not close automatically. Close it before continuing setup.",
+            )
+            return
+        self.force_close = True
 
     def _confirm_enable(self) -> bool:
         answer = QMessageBox.question(

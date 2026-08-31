@@ -61,6 +61,18 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("PRODUCT.version_resource_filename", pyinstaller)
         self.assertIn("render_version_info.py", build)
 
+    def test_in_place_update_keeps_the_same_app_identity_and_local_state(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        installer = (root / "packaging" / "UsageLoop.iss").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual("{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}", PRODUCT.app_id)
+        self.assertIn("DefaultDirName={localappdata}\\Programs\\{#AppName}", installer)
+        self.assertNotIn("app-state.json", installer)
+        self.assertNotIn("[UninstallDelete]", installer)
+        self.assertNotIn("uninsdeletekey", installer.lower())
+
     def test_packaging_paths_are_not_hardcoded_to_the_old_name(self) -> None:
         """The rebrand must not leave a stale path that silently breaks a build."""
         root = Path(__file__).resolve().parents[1]

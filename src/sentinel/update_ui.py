@@ -135,12 +135,26 @@ class UpdatePanel(QFrame):
     def start_install(self) -> None:
         if self.installer is None or self.release is None:
             return
-        if not self.confirm_install(self.release.version):
+        try:
+            confirmed = self.confirm_install(self.release.version)
+        except Exception:
+            self._operation_failed(
+                "install",
+                "The install confirmation could not be opened. Try again.",
+            )
+            return
+        if not confirmed:
             return
         try:
             self.updater.launch_installer(self.installer)
         except UpdateError as exc:
             self._operation_failed("install", str(exc))
+            return
+        except Exception:
+            self._operation_failed(
+                "install",
+                "The verified installer could not be started. Your current app is still running.",
+            )
             return
         self._set_state(
             "launching",
@@ -234,7 +248,7 @@ class UpdatePanel(QFrame):
             f"Install {PRODUCT.display_name} update?",
             f"The verified installer for version {version} is ready. {PRODUCT.display_name} will "
             "close and the normal per-user setup window will open.",
-            QMessageBox.StandardButton.Install | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Install,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Yes,
         )
-        return answer == QMessageBox.StandardButton.Install
+        return answer == QMessageBox.StandardButton.Yes
