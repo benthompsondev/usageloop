@@ -4,7 +4,21 @@
 
 Give a normal Windows user one understandable control: **Keep my 5-hour
 windows ready**. The app shows the current five-hour clock, reset time,
-five-hour usage, weekly safety, and last action without terminal setup.
+five-hour usage, weekly safety, schedule, and last action without terminal
+setup.
+
+## Schedule semantics
+
+- **Continuous** makes the existing guarded rollover eligible after the last
+  verified reset plus its safety buffer.
+- **Daily start time** makes it eligible at the first selected local time after
+  that same boundary. It never starts early. A missed time remains due after
+  sleep or restart, while a selected time that occurred during an active window
+  rolls to the next day.
+- Daylight-saving gaps normalize forward to a real local time. Repeated local
+  times use one stable first occurrence.
+- Scheduling never bypasses observation, weekly protection, atomic reservation,
+  ambiguous-outcome guards, or post-trigger reset verification.
 
 ## Runtime flow
 
@@ -54,8 +68,8 @@ checksum-gated. Version and package names come from `sentinel.product`.
 ## Out of scope
 
 Other providers, UI scraping, private APIs, credential reads, keepalives,
-reset credits, telemetry, scheduled tasks, silent updates, admin requirements,
-and global PATH changes.
+reset credits, telemetry, Windows Task Scheduler jobs, silent updates, admin
+requirements, and global PATH changes.
 
 ## Current proof boundary
 

@@ -13,6 +13,7 @@ from .app_state import (
     automation_decision,
 )
 from .providers import CompatibilityResult
+from .schedule import SCHEDULE_MODES
 
 
 class DetectingProvider(Protocol):
@@ -121,6 +122,22 @@ class ApplicationController:
         self.settings = replace(self.settings, start_with_windows=bool(enabled))
         self._save()
 
+    def set_schedule_mode(self, mode: str) -> None:
+        if mode not in SCHEDULE_MODES:
+            raise ValueError(f"unsupported schedule mode: {mode}")
+        self.settings = replace(self.settings, schedule_mode=mode)
+        self._save()
+
+    def set_daily_start_time(self, hour: int, minute: int) -> None:
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ValueError("daily start time is outside the supported range")
+        self.settings = replace(
+            self.settings,
+            daily_start_hour=int(hour),
+            daily_start_minute=int(minute),
+        )
+        self._save()
+
     def decisions(self, *, now: float) -> dict[str, AutomationDecision]:
         compatible = self.settings.compatible_runtime_identities or {}
         checked = self.settings.checked_runtime_identities or {}
@@ -131,6 +148,9 @@ class ApplicationController:
                 now=now,
                 compatible_runtime_identity=compatible.get(provider_id),
                 checked_runtime_identity=checked.get(provider_id),
+                schedule_mode=self.settings.schedule_mode,
+                daily_hour=self.settings.daily_start_hour,
+                daily_minute=self.settings.daily_start_minute,
             )
             for provider_id, state in self.states.items()
         }

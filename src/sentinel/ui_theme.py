@@ -84,21 +84,29 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     }}
     QLabel#pageTitle {{ font-size: 27px; font-weight: 760; color: {tokens.text}; }}
     QLabel#pageIntro {{ font-size: 14px; color: {tokens.text_muted}; }}
-    QFrame#surfaceCard, QFrame#providerCard, QFrame#primaryControl {{
+    QFrame#surfaceCard, QFrame#providerCard, QFrame#scheduleCard,
+    QFrame#overallStatusCard, QFrame#weeklySafetyCard {{
         background: {tokens.surface};
         border: 1px solid {tokens.border};
         border-radius: {tokens.radius}px;
     }}
-    QFrame#primaryControl {{
-        background: {tokens.surface_raised};
-        border: 1px solid {tokens.accent_deep};
+    QFrame#overallStatusCard {{
+        background: {tokens.surface_raised}; border: 1px solid {tokens.border_strong};
     }}
+    QLabel#overallIcon {{
+        background: #22D3A11C; color: {tokens.accent}; border: 1px solid #22D3A14A;
+        border-radius: 19px; font-size: 19px; font-weight: 800;
+    }}
+    QLabel#overallTitle {{ font-size: 18px; font-weight: 760; color: {tokens.text}; }}
     QLabel#eyebrow {{
         color: {tokens.accent}; font-size: 11px; font-weight: 800;
     }}
     QLabel#sectionTitle {{ font-size: 17px; font-weight: 720; color: {tokens.text}; }}
     QLabel#providerName {{ font-size: 18px; font-weight: 740; color: {tokens.text}; }}
     QLabel#countdown {{ font-size: 29px; font-weight: 780; color: {tokens.text}; }}
+    QLabel#scheduleMode {{ font-size: 26px; font-weight: 770; color: {tokens.text}; }}
+    QLabel#scheduleNext {{ font-size: 17px; font-weight: 700; color: {tokens.accent}; }}
+    QLabel#lastAction {{ color: {tokens.text_muted}; font-size: 12px; padding: 0 4px; }}
     QLabel#secondaryMetric {{ color: {tokens.text_soft}; font-size: 13px; }}
     QLabel#detail {{ color: {tokens.text_muted}; line-height: 1.4; }}
     QLabel#statusPill {{
@@ -132,6 +140,18 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         background: {tokens.accent}; border: 1px solid {tokens.accent};
     }}
     QCheckBox:focus {{ color: {tokens.accent}; }}
+    QComboBox, QTimeEdit {{
+        min-width: 132px; background: {tokens.surface_raised}; color: {tokens.text};
+        border: 1px solid {tokens.border_strong}; border-radius: {tokens.radius_small}px;
+        padding: 8px 12px;
+    }}
+    QComboBox:hover, QTimeEdit:hover {{ border-color: {tokens.accent}; }}
+    QComboBox:focus, QTimeEdit:focus {{ border: 1px solid {tokens.accent}; }}
+    QComboBox::drop-down {{ border: 0; width: 24px; }}
+    QComboBox QAbstractItemView {{
+        background: {tokens.surface_raised}; color: {tokens.text};
+        border: 1px solid {tokens.border_strong}; selection-background-color: {tokens.accent_deep};
+    }}
     QPushButton {{
         background: {tokens.surface_raised}; color: {tokens.text_soft};
         border: 1px solid {tokens.border_strong}; border-radius: {tokens.radius_small}px;

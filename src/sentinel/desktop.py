@@ -10,6 +10,7 @@ from PySide6.QtCore import (
     QEvent,
     QObject,
     QRunnable,
+    QTime,
     Qt,
     QThreadPool,
     QTimer,
@@ -19,7 +20,8 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
+    QAbstractSpinBox,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -31,6 +33,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStackedWidget,
     QSystemTrayIcon,
+    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -40,13 +43,14 @@ from .branding import make_app_icon, render_mark
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
-from .diagnostics import build_health_rows, overall_summary, technical_summary
+from .diagnostics import technical_summary
 from .ui_components import (
     Disclosure,
     ElidingLabel,
-    HealthRowWidget,
     ProviderCard,
+    ScheduleCard,
     StatusPill,
+    ToggleSwitch,
     make_surface_card,
     present_provider_state,
 )
@@ -128,6 +132,8 @@ class MainWindow(QMainWindow):
 
         self.automation_toggle.toggled.connect(self._automation_toggled)
         self.startup_toggle.toggled.connect(self._startup_toggled)
+        self.schedule_mode.currentIndexChanged.connect(self._schedule_mode_changed)
+        self.daily_time.timeChanged.connect(self._daily_time_changed)
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.refresh_clock)
         self.clock_timer.start(1_000)
@@ -307,35 +313,32 @@ class MainWindow(QMainWindow):
     def _build_dashboard(self) -> QWidget:
         page, root = self._page(
             "Your Codex reset clock",
-            "See whether the five-hour clock is running, when it resets, and whether weekly allowance is safe.",
+            "See the real five-hour clock, choose when the next one starts, and keep weekly usage protected.",
         )
-        primary = QFrame()
-        primary.setObjectName("primaryControl")
-        primary_layout = QHBoxLayout(primary)
-        primary_layout.setContentsMargins(22, 18, 22, 18)
-        primary_layout.setSpacing(20)
-        primary_copy = QVBoxLayout()
-        primary_copy.setSpacing(4)
-        eyebrow = QLabel("MAIN SWITCH")
-        eyebrow.setObjectName("eyebrow")
-        self.automation_toggle = QCheckBox("Keep my 5-hour windows ready")
-        self.automation_toggle.setObjectName("automationToggle")
-        self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
-        explanation = QLabel(
-            "UsageLoop does not add quota. Off sends no window-start requests. On uses one "
-            "minimal request after rollover, then verifies the new reset before reporting success."
-        )
-        explanation.setProperty("muted", True)
-        explanation.setWordWrap(True)
-        primary_copy.addWidget(eyebrow)
-        primary_copy.addWidget(self.automation_toggle)
-        primary_copy.addWidget(explanation)
-        primary_layout.addLayout(primary_copy, 1)
+        overall = QFrame()
+        overall.setObjectName("overallStatusCard")
+        overall_layout = QHBoxLayout(overall)
+        overall_layout.setContentsMargins(22, 17, 22, 17)
+        overall_layout.setSpacing(16)
+        self.overall_icon = QLabel("✓")
+        self.overall_icon.setObjectName("overallIcon")
+        self.overall_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.overall_icon.setFixedSize(38, 38)
+        overall_layout.addWidget(self.overall_icon)
+        overall_copy = QVBoxLayout()
+        overall_copy.setSpacing(3)
+        self.overall_title = QLabel()
+        self.overall_title.setObjectName("overallTitle")
+        self.overall_detail = QLabel()
+        self.overall_detail.setProperty("muted", True)
+        self.overall_detail.setWordWrap(True)
+        overall_copy.addWidget(self.overall_title)
+        overall_copy.addWidget(self.overall_detail)
+        overall_layout.addLayout(overall_copy, 1)
         self.automation_state_label = StatusPill()
         self.automation_state_label.setFixedHeight(28)
-        self.automation_state_label.setMinimumWidth(44)
-        primary_layout.addWidget(self.automation_state_label)
-        root.addWidget(primary)
+        overall_layout.addWidget(self.automation_state_label)
+        root.addWidget(overall)
 
         provider_row = QHBoxLayout()
         provider_row.setSpacing(16)
@@ -349,7 +352,30 @@ class MainWindow(QMainWindow):
             )
             self.provider_cards[provider_id] = card
             provider_row.addWidget(card, 1)
+        self.schedule_card = ScheduleCard()
+        self.schedule_card.manage_button.clicked.connect(lambda: self.show_page(1))
+        provider_row.addWidget(self.schedule_card, 1)
         root.addLayout(provider_row)
+
+        weekly = QFrame()
+        weekly.setObjectName("weeklySafetyCard")
+        weekly_layout = QHBoxLayout(weekly)
+        weekly_layout.setContentsMargins(20, 14, 20, 14)
+        weekly_layout.setSpacing(14)
+        weekly_title = QLabel("Weekly allowance")
+        weekly_title.setObjectName("assuranceTitle")
+        weekly_layout.addWidget(weekly_title)
+        self.weekly_detail = QLabel()
+        self.weekly_detail.setProperty("muted", True)
+        weekly_layout.addWidget(self.weekly_detail, 1)
+        self.weekly_status = StatusPill()
+        weekly_layout.addWidget(self.weekly_status)
+        root.addWidget(weekly)
+
+        self.last_action_label = QLabel()
+        self.last_action_label.setObjectName("lastAction")
+        self.last_action_label.setWordWrap(True)
+        root.addWidget(self.last_action_label)
 
         root.addWidget(self._build_assurance_strip(), 0)
         # A little slack above and more below reads as deliberate spacing
@@ -358,17 +384,16 @@ class MainWindow(QMainWindow):
         return page
 
     def _build_assurance_strip(self) -> QWidget:
-        """The four things a new user has to understand, kept to one glance."""
+        """The three promises a new user has to understand, kept to one glance."""
         strip = QFrame()
         strip.setObjectName("assuranceStrip")
         layout = QHBoxLayout(strip)
         layout.setContentsMargins(22, 15, 22, 15)
         layout.setSpacing(26)
         points = (
-            ("Codex stays signed in", "UsageLoop uses the local Codex app-server and never reads credentials."),
-            ("Countdowns are free", "The reset clock moves locally with no prompt polling or provider traffic."),
-            ("Weekly limit protected", "Weekly allowance is checked before any window-start request."),
-            ("Ambiguous means stop", "A request with an unclear outcome is guarded and never retried automatically."),
+            ("Safe and private", "Codex keeps its own sign-in. UsageLoop never reads credentials."),
+            ("Local and lightweight", "Countdowns move on this PC with no provider polling."),
+            ("Quota protected", "Weekly allowance is checked, and unclear requests are never retried."),
         )
         for title, body in points:
             column = QVBoxLayout()
@@ -399,8 +424,86 @@ class MainWindow(QMainWindow):
     ) -> QWidget:
         page, root = self._page(
             "Settings",
-            "Codex readiness, local safeguards, startup, and updates.",
+            "Choose how UsageLoop keeps your reset clock running.",
         )
+
+        automation_card, automation_layout = make_surface_card(
+            "Automation",
+            "UsageLoop sends no window-start request while this is off.",
+        )
+        automation_row = QFrame()
+        automation_row.setObjectName("settingRow")
+        automation_row_layout = QHBoxLayout(automation_row)
+        automation_row_layout.setContentsMargins(14, 12, 14, 12)
+        automation_copy = QVBoxLayout()
+        self.automation_title_label = QLabel("Keep my 5-hour windows ready")
+        self.automation_title_label.setObjectName("secondaryMetric")
+        automation_hint = QLabel(
+            "Uses one minimal guarded request only when a new window needs to start."
+        )
+        automation_hint.setProperty("muted", True)
+        automation_hint.setWordWrap(True)
+        automation_copy.addWidget(self.automation_title_label)
+        automation_copy.addWidget(automation_hint)
+        automation_row_layout.addLayout(automation_copy, 1)
+        self.automation_toggle = ToggleSwitch()
+        self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
+        automation_row_layout.addWidget(self.automation_toggle)
+        automation_layout.addWidget(automation_row)
+        root.addWidget(automation_card)
+
+        schedule_card, schedule_layout = make_surface_card(
+            "Schedule",
+            "Continuous keeps every five-hour window moving. Daily waits for your chosen local time after a window ends.",
+        )
+        schedule_row = QFrame()
+        schedule_row.setObjectName("settingRow")
+        schedule_row_layout = QHBoxLayout(schedule_row)
+        schedule_row_layout.setContentsMargins(14, 12, 14, 12)
+        mode_copy = QVBoxLayout()
+        mode_title = QLabel("Window start mode")
+        mode_title.setObjectName("secondaryMetric")
+        self.schedule_explanation = QLabel()
+        self.schedule_explanation.setProperty("muted", True)
+        self.schedule_explanation.setWordWrap(True)
+        mode_copy.addWidget(mode_title)
+        mode_copy.addWidget(self.schedule_explanation)
+        schedule_row_layout.addLayout(mode_copy, 1)
+        self.schedule_mode = QComboBox()
+        self.schedule_mode.setObjectName("scheduleModePicker")
+        self.schedule_mode.addItem("Continuous", "continuous")
+        self.schedule_mode.addItem("Daily start time", "daily")
+        index = self.schedule_mode.findData(self.controller.settings.schedule_mode)
+        self.schedule_mode.setCurrentIndex(max(0, index))
+        schedule_row_layout.addWidget(self.schedule_mode)
+        schedule_layout.addWidget(schedule_row)
+
+        self.daily_time_row = QFrame()
+        self.daily_time_row.setObjectName("settingRow")
+        time_layout = QHBoxLayout(self.daily_time_row)
+        time_layout.setContentsMargins(14, 12, 14, 12)
+        time_copy = QVBoxLayout()
+        time_title = QLabel("Daily start time")
+        time_title.setObjectName("secondaryMetric")
+        time_hint = QLabel("Local time on this PC. Missed starts catch up once after wake or restart.")
+        time_hint.setProperty("muted", True)
+        time_hint.setWordWrap(True)
+        time_copy.addWidget(time_title)
+        time_copy.addWidget(time_hint)
+        time_layout.addLayout(time_copy, 1)
+        self.daily_time = QTimeEdit(
+            QTime(
+                self.controller.settings.daily_start_hour,
+                self.controller.settings.daily_start_minute,
+            )
+        )
+        self.daily_time.setObjectName("dailyStartTime")
+        self.daily_time.setDisplayFormat("h:mm AP")
+        self.daily_time.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.daily_time.setToolTip("Type a local time or use the keyboard arrow keys")
+        time_layout.addWidget(self.daily_time)
+        schedule_layout.addWidget(self.daily_time_row)
+        root.addWidget(schedule_card)
 
         startup_card, startup_layout = make_surface_card(
             "Windows startup",
@@ -421,24 +524,16 @@ class MainWindow(QMainWindow):
         row_copy.addWidget(row_hint)
         row_layout.addLayout(row_copy)
         row_layout.addStretch()
-        self.startup_toggle = QCheckBox()
+        self.startup_toggle = ToggleSwitch()
         self.startup_toggle.setChecked(bool(self.startup_manager.is_enabled()))
         row_layout.addWidget(self.startup_toggle)
         startup_layout.addWidget(startup_row)
         root.addWidget(startup_card)
 
-        health_card, health_layout = make_surface_card(
-            "Codex and local status",
-            "Installation, five-hour evidence, weekly safety, automation, and saved local state.",
+        technical_card, technical_layout = make_surface_card(
+            "Advanced",
+            "Compatibility and diagnostic information for troubleshooting.",
         )
-        self.health_summary = HealthRowWidget()
-        self.health_summary.setObjectName("healthSummary")
-        health_layout.addWidget(self.health_summary)
-        self.health_rows: list[HealthRowWidget] = []
-        self.health_container = QVBoxLayout()
-        self.health_container.setSpacing(8)
-        health_layout.addLayout(self.health_container)
-
         technical = Disclosure("Technical details")
         self.diagnostic_text = QLabel()
         self.diagnostic_text.setObjectName("diagnosticValue")
@@ -457,15 +552,14 @@ class MainWindow(QMainWindow):
         copy_button = QPushButton("Copy this summary")
         copy_button.clicked.connect(self._copy_diagnostics)
         technical.add_widget(copy_button)
-        health_layout.addSpacing(2)
-        health_layout.addWidget(technical)
-        root.addWidget(health_card)
+        technical_layout.addWidget(technical)
+        root.addWidget(technical_card)
 
         self.update_panel = UpdatePanel(
             updater, confirm_install=confirm_install, parent=self
         )
         self.update_panel.installer_launched.connect(self._exit_for_update)
-        root.addWidget(self.update_panel)
+        root.insertWidget(root.count() - 1, self.update_panel)
         root.addStretch()
         return page
 
@@ -563,6 +657,62 @@ class MainWindow(QMainWindow):
                     and state.reset_at is None
                     and state.status != "Starting"
                 )
+        codex = self.controller.states.get("codex")
+        if codex is not None:
+            presented = present_provider_state(
+                codex, now=current, automation_enabled=enabled
+            )
+            self.schedule_card.update_schedule(
+                self.controller.settings, codex, now=current
+            )
+            if not codex.installed:
+                self.overall_icon.setText("!")
+                self.overall_title.setText("Codex needs attention")
+                self.overall_detail.setText(
+                    "Install and sign in to Codex before UsageLoop can observe a reset clock."
+                )
+            elif codex.status == "Needs attention":
+                self.overall_icon.setText("!")
+                self.overall_title.setText("UsageLoop stopped safely")
+                self.overall_detail.setText(
+                    "No request was retried. Open Technical details for the reason."
+                )
+            elif codex.reset_at is not None and codex.reset_at > current:
+                self.overall_icon.setText("✓")
+                self.overall_title.setText("Your Codex reset clock is running")
+                self.overall_detail.setText(
+                    "The countdown is local. UsageLoop will follow your schedule when this window ends."
+                )
+            else:
+                self.overall_icon.setText("○")
+                self.overall_title.setText("Waiting for a verified Codex window")
+                self.overall_detail.setText(
+                    "Sync usage to read the current state. Starting a first window always needs your approval."
+                )
+
+            if codex.weekly_used_percent is None:
+                self.weekly_detail.setText("Not available in the last read-only sync")
+                self.weekly_status.set_status("NOT CHECKED", "neutral")
+            else:
+                try:
+                    weekly_reset = (
+                        time.strftime(
+                            "%a %I:%M %p", time.localtime(codex.weekly_reset_at)
+                        ).replace(" 0", " ")
+                        if codex.weekly_reset_at is not None
+                        else "reset time unavailable"
+                    )
+                except (OSError, OverflowError, ValueError):
+                    weekly_reset = "reset time unavailable"
+                self.weekly_detail.setText(
+                    f"{codex.weekly_used_percent:g}% used · resets {weekly_reset}"
+                )
+                weekly_safe = codex.weekly_used_percent < 100
+                self.weekly_status.set_status(
+                    "SAFE" if weekly_safe else "EXHAUSTED",
+                    "success" if weekly_safe else "error",
+                )
+            self.last_action_label.setText(presented.action)
         self._update_diagnostics(now=current)
 
     def evaluate_automation(self, *, now: float | None = None) -> None:
@@ -681,32 +831,23 @@ class MainWindow(QMainWindow):
             return
         self.controller.set_start_with_windows(enabled)
 
+    def _schedule_mode_changed(self) -> None:
+        mode = self.schedule_mode.currentData()
+        self.controller.set_schedule_mode(str(mode))
+        self.refresh_clock()
+
+    def _daily_time_changed(self, selected: QTime) -> None:
+        self.controller.set_daily_start_time(selected.hour(), selected.minute())
+        self.refresh_clock()
+
     def _update_diagnostics(self, *, now: float) -> None:
-        try:
-            state_file_exists = self.controller.store.path.is_file()
-        except OSError:
-            state_file_exists = False
-        rows = build_health_rows(
-            self.controller.states,
-            self.controller.settings,
-            startup_enabled=self.startup_toggle.isChecked(),
-            state_file_exists=state_file_exists,
-            now=now,
+        daily = self.controller.settings.schedule_mode == "daily"
+        self.daily_time_row.setVisible(daily)
+        self.schedule_explanation.setText(
+            "Wait for the selected local time after a window ends."
+            if daily
+            else "Start the next window after the current one ends."
         )
-        self.health_summary.update_row(
-            overall_summary(
-                rows, automation_enabled=self.controller.settings.automation_enabled
-            )
-        )
-        while len(self.health_rows) < len(rows):
-            widget = HealthRowWidget()
-            self.health_rows.append(widget)
-            self.health_container.addWidget(widget)
-        for index, widget in enumerate(self.health_rows):
-            visible = index < len(rows)
-            widget.setVisible(visible)
-            if visible:
-                widget.update_row(rows[index])
         self.diagnostic_text.setText(
             technical_summary(self.controller.states, self.controller.settings)
         )

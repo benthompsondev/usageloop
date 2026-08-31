@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTime, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget
 
 from sentinel.app_controller import ApplicationController
@@ -117,7 +117,9 @@ class DesktopTests(unittest.TestCase):
         window, _provider = self.make_window(
             ProviderViewState.waiting("codex", "Codex", installed=True)
         )
-        self.assertEqual("Keep my 5-hour windows ready", window.automation_toggle.text())
+        self.assertEqual(
+            "Keep my 5-hour windows ready", window.automation_title_label.text()
+        )
         # A freshly detected provider has never been checked, so it must not
         # borrow the language of a window that is actually counting down.
         self.assertEqual(
@@ -185,8 +187,25 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual("CLOCK RUNNING", card.status_label.text())
         self.assertEqual("0h 15m", card.countdown_label.text())
         self.assertIn("12% used", card.usage_label.text())
-        self.assertIn("34% used", card.weekly_label.text())
-        self.assertIn("Anchor verified", card.action_label.text())
+        self.assertIn("34% used", window.weekly_detail.text())
+        self.assertIn("Anchor verified", window.last_action_label.text())
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+
+    def test_daily_schedule_settings_persist_and_update_summary_without_provider_work(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(2_000_000_000, verified_at=1_999_990_000)
+        window, provider = self.make_window(state)
+
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("daily"))
+        window.daily_time.setTime(QTime(6, 30))
+        self.app.processEvents()
+
+        self.assertEqual("daily", window.controller.settings.schedule_mode)
+        self.assertEqual(6, window.controller.settings.daily_start_hour)
+        self.assertEqual(30, window.controller.settings.daily_start_minute)
+        self.assertEqual("Daily at 6:30 AM", window.schedule_card.mode_label.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 

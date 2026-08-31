@@ -4,8 +4,8 @@
 
 UsageLoop is a small Windows app for Codex subscribers. It shows whether the
 current five-hour window is genuinely counting down, displays the last-known
-five-hour and weekly usage, and can start the next window after rollover with
-one minimal guarded Codex request.
+five-hour and weekly usage, and can start the next window with one minimal
+guarded Codex request.
 
 It does not grant extra quota or change the limits on your plan. It starts the
 normal next clock early so more of that five-hour period can pass before you
@@ -24,6 +24,19 @@ endorsed by, or sponsored by OpenAI.
 
 The countdown moves locally. It does not poll Codex to make the UI look live.
 Usage percentages are snapshots from the last real observation.
+
+Automation has two local schedule modes:
+
+- **Continuous** starts the next window after the current reset and safety
+  buffer.
+- **Daily start time** waits until your chosen local time after a window ends.
+  If the PC is asleep at that time, UsageLoop catches up once after wake or
+  restart. If a Codex window is still active at that time, it waits for the next
+  day's selected time rather than starting early.
+
+Daylight-saving changes use the Windows local clock. A missing spring-forward
+time moves to the corresponding first real time; a repeated fall-back time uses
+the first occurrence consistently.
 
 **Sync usage** is the exception you control. Pressing it takes four read-only
 Codex observations over about 30 seconds, then refreshes the five-hour and
@@ -94,16 +107,18 @@ dist\UsageLoop-Setup.exe.sha256
 
 1. Open UsageLoop and confirm Codex is detected.
 2. Review the cached five-hour and weekly state.
-3. Turn on **Keep my 5-hour windows ready**.
+3. In Settings, choose **Continuous** or **Daily start time**, then turn on
+   **Keep my 5-hour windows ready**.
 4. On a true first run, choose **Start my first window now**. This explicit
    action is guarded by the same evidence and weekly checks.
 5. Leave UsageLoop in the tray. The local countdown continues without Codex
-   traffic between observations.
+traffic between observations. Automation and Windows startup stay off until you
+enable them.
 
 Use **Sync usage** when the dashboard looks stale or Codex changes a limit
-unexpectedly. Settings contains startup, health, technical diagnostics, and
-manual updates. Update checks contact GitHub only after a button click and
-never affect quota.
+unexpectedly. Settings contains the schedule, Windows startup, manual updates,
+and collapsed technical diagnostics. Update checks contact GitHub only after a
+button click and never affect quota.
 
 ## CLI
 

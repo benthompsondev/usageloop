@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .product import PRODUCT
+from .schedule import CONTINUOUS, DAILY, SCHEDULE_MODES, schedule_summary
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,9 @@ class AppSettings:
     first_run_complete: bool = False
     compatible_runtime_identities: dict[str, str] | None = None
     checked_runtime_identities: dict[str, str] | None = None
+    schedule_mode: str = CONTINUOUS
+    daily_start_hour: int = 4
+    daily_start_minute: int = 0
 
     def __post_init__(self) -> None:
         if self.compatible_runtime_identities is None:
@@ -92,6 +96,10 @@ def automation_decision(
     now: float,
     compatible_runtime_identity: str | None = None,
     checked_runtime_identity: str | None = None,
+    schedule_mode: str = CONTINUOUS,
+    daily_hour: int = 4,
+    daily_minute: int = 0,
+    timezone: Any = None,
 ) -> AutomationDecision:
     if not enabled:
         return AutomationDecision("NONE", "Automation is off.")
@@ -107,8 +115,25 @@ def automation_decision(
         return AutomationDecision("PROBE", "Provider runtime capabilities must be checked.")
     if state.reset_at is None:
         return AutomationDecision("BOOTSTRAP", "No verified window is known yet.")
-    if now >= state.reset_at + 15:
+    try:
+        schedule = schedule_summary(
+            schedule_mode,
+            boundary_reset_at=state.reset_at,
+            now=now,
+            hour=daily_hour,
+            minute=daily_minute,
+            timezone=timezone,
+        )
+    except (OSError, OverflowError, ValueError):
+        return AutomationDecision("NONE", "The saved schedule evidence is unusable.")
+    if schedule.due:
+        if schedule_mode == DAILY:
+            return AutomationDecision(
+                "ROLLOVER", "The selected daily start is due after the verified reset."
+            )
         return AutomationDecision("ROLLOVER", "The verified reset boundary has passed.")
+    if schedule_mode == DAILY and now >= state.reset_at + 15:
+        return AutomationDecision("WAIT", "Waiting for the selected daily start time.")
     return AutomationDecision("WAIT", "The countdown is maintained locally.")
 
 
@@ -190,12 +215,24 @@ class AppStateStore:
             if isinstance(checked, dict)
             else {}
         )
+        schedule_mode = settings.get("schedule_mode")
+        if schedule_mode not in SCHEDULE_MODES:
+            schedule_mode = CONTINUOUS
+        daily_hour = settings.get("daily_start_hour")
+        if isinstance(daily_hour, bool) or not isinstance(daily_hour, int) or not 0 <= daily_hour <= 23:
+            daily_hour = 4
+        daily_minute = settings.get("daily_start_minute")
+        if isinstance(daily_minute, bool) or not isinstance(daily_minute, int) or not 0 <= daily_minute <= 59:
+            daily_minute = 0
         return AppSettings(
             automation_enabled=settings.get("automation_enabled") is True,
             start_with_windows=settings.get("start_with_windows") is True,
             first_run_complete=settings.get("first_run_complete") is True,
             compatible_runtime_identities=safe_identities,
             checked_runtime_identities=safe_checked,
+            schedule_mode=schedule_mode,
+            daily_start_hour=daily_hour,
+            daily_start_minute=daily_minute,
         )
 
     def load_provider_cache(self) -> dict[str, ProviderViewState]:

@@ -2,7 +2,7 @@
   #define AppName "UsageLoop"
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.8.0"
+  #define AppVersion "0.9.0"
 #endif
 #ifndef AppExeName
   #define AppExeName "UsageLoop.exe"

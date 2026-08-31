@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import time
 
+from PySide6.QtCore import QTime
 from PySide6.QtWidgets import QApplication, QScrollArea
 
 from sentinel.app_controller import ApplicationController
@@ -41,6 +42,8 @@ class PreviewUpdater:
 
 
 def save(window: MainWindow, target: Path, app: QApplication) -> None:
+    window.hide()
+    app.processEvents()
     window.show()
     for _ in range(3):
         app.processEvents()
@@ -73,7 +76,13 @@ def main() -> int:
             confirm_enable=lambda: False, confirm_bootstrap=lambda: False,
             confirm_install=lambda _version: False,
         )
-        for width, height in ((1024, 768), (1366, 768), (1920, 1080)):
+        for width, height in (
+            (1024, 768),
+            (1280, 720),
+            (1366, 768),
+            (1600, 900),
+            (1920, 1080),
+        ):
             window.resize(width, height)
             save(window, args.output / f"dashboard-{width}x{height}.png", app)
         window.resize(1040, 720)
@@ -81,9 +90,13 @@ def main() -> int:
 
         window.show_page(1)
         save(window, args.output / "settings.png", app)
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("daily"))
+        window.daily_time.setTime(QTime(4, 0))
+        window.refresh_clock(now=now)
+        save(window, args.output / "settings-daily.png", app)
         release = ReleaseInfo(
-            "0.9.0", ("Codex reliability fixes", "Clearer reset-clock status"),
-            "https://github.com/example/usage-loop/releases/tag/v0.9.0",
+            "0.10.0", ("Example reliability update", "Small interface fixes"),
+            "https://github.com/example/usage-loop/releases/tag/v0.10.0",
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example/installer"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example/checksum"),
         )
@@ -114,6 +127,19 @@ def main() -> int:
         controller.update_provider_state(replace(codex, last_verified_at=now - 7 * 3600))
         window.refresh_clock(now=now)
         save(window, args.output / "dashboard-stale.png", app)
+        controller.update_provider_state(
+            ProviderViewState.waiting(
+                "codex",
+                "Codex",
+                installed=True,
+                runtime_identity=codex.runtime_identity,
+            )
+        )
+        window.refresh_clock(now=now)
+        window.resize(1040, 720)
+        save(window, args.output / "dashboard-first-run.png", app)
+        window.resize(1920, 1080)
+        save(window, args.output / "dashboard-first-run-1920x1080.png", app)
         window.close()
     return 0
 

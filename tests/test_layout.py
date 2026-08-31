@@ -289,8 +289,8 @@ class LargerUiFontTests(unittest.TestCase):
 
 
 
-class SettingsHealthSurfaceTests(unittest.TestCase):
-    """The raw monospace dump was replaced by badges plus an expander."""
+class SettingsSurfaceTests(unittest.TestCase):
+    """Normal controls stay prominent while raw diagnostics stay collapsed."""
 
     def setUp(self):
         import tempfile
@@ -306,17 +306,13 @@ class SettingsHealthSurfaceTests(unittest.TestCase):
         for _ in range(4):
             self.app.processEvents()
 
-    def test_health_rows_are_rendered_with_badges(self):
-        visible = [row for row in self.window.health_rows if row.isVisible()]
-        self.assertGreaterEqual(len(visible), 4)
-        for row in visible:
-            self.assertTrue(row.label.text())
-            self.assertTrue(row.badge.text())
-            self.assertTrue(row.detail.text())
-
-    def test_overall_summary_row_is_populated(self):
-        self.assertTrue(self.window.health_summary.label.text())
-        self.assertTrue(self.window.health_summary.badge.text())
+    def test_consumer_settings_show_automation_schedule_startup_and_updates(self):
+        self.assertEqual(
+            "Keep my 5-hour windows ready", self.window.automation_title_label.text()
+        )
+        self.assertEqual("Continuous", self.window.schedule_mode.currentText())
+        self.assertIsNotNone(self.window.startup_toggle)
+        self.assertEqual("Check for updates", self.window.update_panel.action_button.text())
 
     def test_technical_details_start_collapsed(self):
         self.assertFalse(self.window.diagnostic_text.isVisible())

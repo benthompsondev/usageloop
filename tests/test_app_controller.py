@@ -20,6 +20,26 @@ class FakeProvider:
 
 
 class ApplicationControllerTests(unittest.TestCase):
+    def test_schedule_choice_survives_restart_without_provider_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            state = ProviderViewState.waiting(
+                "codex", "Codex", installed=True, runtime_identity="runtime:1"
+            )
+            provider = FakeProvider(state)
+            controller = ApplicationController([provider], store)
+            controller.start()
+            controller.set_schedule_mode("daily")
+            controller.set_daily_start_time(6, 45)
+
+            restarted = ApplicationController([provider], store)
+            restarted.start()
+
+            self.assertEqual("daily", restarted.settings.schedule_mode)
+            self.assertEqual(6, restarted.settings.daily_start_hour)
+            self.assertEqual(45, restarted.settings.daily_start_minute)
+            self.assertEqual(0, provider.operation_calls)
+
     def test_start_prunes_retired_provider_cache_and_identities(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AppStateStore(Path(directory) / "state.json")

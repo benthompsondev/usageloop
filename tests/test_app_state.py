@@ -25,7 +25,15 @@ class AppStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "app-state.json"
             store = AppStateStore(path)
-            settings = AppSettings(True, True, True, {"codex": "native:123"})
+            settings = AppSettings(
+                True,
+                True,
+                True,
+                {"codex": "native:123"},
+                schedule_mode="daily",
+                daily_start_hour=6,
+                daily_start_minute=30,
+            )
             state = ProviderViewState(
                 provider_id="codex",
                 display_name="Codex",
@@ -47,6 +55,27 @@ class AppStateTests(unittest.TestCase):
             raw = json.loads(path.read_text(encoding="utf-8"))
             self.assertNotIn("prompt", json.dumps(raw).lower())
             self.assertNotIn("token", json.dumps(raw).lower())
+
+    def test_invalid_schedule_settings_fall_back_to_safe_defaults(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "app-state.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "settings": {
+                            "automation_enabled": True,
+                            "schedule_mode": "surprise",
+                            "daily_start_hour": 99,
+                            "daily_start_minute": True,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = AppStateStore(path).load()
+            self.assertEqual("continuous", settings.schedule_mode)
+            self.assertEqual(4, settings.daily_start_hour)
+            self.assertEqual(0, settings.daily_start_minute)
 
     def test_countdown_is_derived_locally_from_cached_reset(self):
         self.assertEqual("1h 01m", format_countdown(10_000, 6_340))
@@ -97,6 +126,66 @@ class AppStateTests(unittest.TestCase):
 
         self.assertEqual("ROLLOVER", decision.action)
 
+    def test_daily_mode_waits_when_reset_expired_before_selected_time(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        timezone = ZoneInfo("America/Toronto")
+        reset = datetime(2026, 8, 31, 3, 32, tzinfo=timezone).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        decision = automation_decision(
+            True, state,
+            now=datetime(2026, 8, 31, 3, 50, tzinfo=timezone).timestamp(),
+            compatible_runtime_identity="native:same",
+            schedule_mode="daily", daily_hour=4, daily_minute=0,
+            timezone=timezone,
+        )
+
+        self.assertEqual("WAIT", decision.action)
+
+    def test_daily_mode_catches_up_once_after_sleeping_past_due_time(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        timezone = ZoneInfo("America/Toronto")
+        reset = datetime(2026, 8, 31, 3, 32, tzinfo=timezone).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        decision = automation_decision(
+            True, state,
+            now=datetime(2026, 8, 31, 7, 0, tzinfo=timezone).timestamp(),
+            compatible_runtime_identity="native:same",
+            schedule_mode="daily", daily_hour=4, daily_minute=0,
+            timezone=timezone,
+        )
+
+        self.assertEqual("ROLLOVER", decision.action)
+
+    def test_daily_mode_does_not_start_after_active_window_missed_time(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        timezone = ZoneInfo("America/Toronto")
+        reset = datetime(2026, 8, 31, 5, 0, tzinfo=timezone).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        decision = automation_decision(
+            True, state,
+            now=datetime(2026, 8, 31, 7, 0, tzinfo=timezone).timestamp(),
+            compatible_runtime_identity="native:same",
+            schedule_mode="daily", daily_hour=4, daily_minute=0,
+            timezone=timezone,
+        )
+
+        self.assertEqual("WAIT", decision.action)
+
     def test_needs_attention_state_never_retries_automatically(self):
         state = ProviderViewState(
             provider_id="codex",
@@ -113,6 +202,23 @@ class AppStateTests(unittest.TestCase):
             state,
             now=1_100,
             compatible_runtime_identity="native:same",
+        )
+
+        self.assertEqual("NONE", decision.action)
+
+    def test_daily_mode_fails_closed_on_an_unusable_cached_reset_timestamp(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(10**20, verified_at=100)
+
+        decision = automation_decision(
+            True,
+            state,
+            now=200,
+            compatible_runtime_identity="native:same",
+            schedule_mode="daily",
+            daily_hour=4,
+            daily_minute=0,
         )
 
         self.assertEqual("NONE", decision.action)

@@ -3,20 +3,48 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QFontMetrics
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy,
+    QCheckBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy,
     QVBoxLayout, QWidget,
 )
 
-from .app_state import ProviderViewState, format_countdown
+from .app_state import AppSettings, ProviderViewState, format_countdown
+from .schedule import DAILY, schedule_summary
+from .ui_theme import TOKENS
 
 
 STALE_AFTER_SECONDS = 6 * 60 * 60
+
+
+class ToggleSwitch(QCheckBox):
+    """A compact, keyboard-accessible switch with no platform-default chrome."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("toggleSwitch")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(42, 24)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        track = self.rect().adjusted(1, 1, -1, -1)
+        border = TOKENS.accent if self.isChecked() or self.hasFocus() else TOKENS.border_strong
+        painter.setPen(QPen(QColor(border), 1))
+        painter.setBrush(
+            QColor(TOKENS.accent_deep if self.isChecked() else TOKENS.surface_sunken)
+        )
+        painter.drawRoundedRect(track, 11, 11)
+        diameter = 16
+        x = self.width() - diameter - 4 if self.isChecked() else 4
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#F4FFFB" if self.isChecked() else TOKENS.text_muted))
+        painter.drawEllipse(x, 4, diameter, diameter)
 
 
 @dataclass(frozen=True)
@@ -133,7 +161,7 @@ class ProviderCard(QFrame):
         super().__init__(parent)
         self.setObjectName("providerCard")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(330)
+        self.setMinimumHeight(280)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 21, 24, 21)
         layout.setSpacing(8)
@@ -171,15 +199,7 @@ class ProviderCard(QFrame):
         layout.addWidget(self.usage_label)
         self.usage_bar = _metric_bar("usageBar")
         layout.addWidget(self.usage_bar)
-        self.weekly_label = QLabel()
-        self.weekly_label.setObjectName("metricLabel")
-        layout.addWidget(self.weekly_label)
-        self.weekly_bar = _metric_bar("weeklyBar")
-        layout.addWidget(self.weekly_bar)
-        self.action_label = QLabel()
-        self.action_label.setProperty("muted", True)
-        self.action_label.setWordWrap(True)
-        layout.addWidget(self.action_label)
+        layout.addSpacing(2)
         sync_row = QHBoxLayout()
         self.sync_button = QPushButton("Sync usage")
         self.sync_button.setObjectName("secondaryButton")
@@ -208,10 +228,7 @@ class ProviderCard(QFrame):
         self.detail_label.setText(presented.detail)
         self.metadata_label.setText(presented.verified)
         self.usage_label.setText(presented.usage)
-        self.weekly_label.setText(presented.weekly)
-        self.action_label.setText(presented.action)
         self.usage_bar.setValue(int(state.used_percent or 0))
-        self.weekly_bar.setValue(int(state.weekly_used_percent or 0))
 
     def set_sync_state(self, state: str) -> None:
         messages = {
@@ -223,6 +240,105 @@ class ProviderCard(QFrame):
         }
         self.sync_status.setText(messages[state])
         self.sync_button.setEnabled(state != "syncing")
+
+
+class ScheduleCard(QFrame):
+    """Consumer-facing summary of when the guarded action can run."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("scheduleCard")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMinimumHeight(280)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 21, 24, 21)
+        layout.setSpacing(9)
+
+        header = QHBoxLayout()
+        name = QLabel("Automation")
+        name.setObjectName("providerName")
+        self.status_label = StatusPill()
+        header.addWidget(name)
+        header.addStretch()
+        header.addWidget(self.status_label)
+        layout.addLayout(header)
+
+        self.mode_label = QLabel()
+        self.mode_label.setObjectName("scheduleMode")
+        layout.addWidget(self.mode_label)
+        self.detail_label = QLabel()
+        self.detail_label.setObjectName("detail")
+        self.detail_label.setWordWrap(True)
+        layout.addWidget(self.detail_label)
+        layout.addStretch(1)
+
+        next_title = QLabel("NEXT ACTION")
+        next_title.setObjectName("eyebrow")
+        layout.addWidget(next_title)
+        self.next_label = QLabel()
+        self.next_label.setObjectName("scheduleNext")
+        self.next_label.setWordWrap(True)
+        layout.addWidget(self.next_label)
+        self.manage_button = QPushButton("Manage schedule")
+        self.manage_button.setObjectName("secondaryButton")
+        layout.addWidget(self.manage_button, 0, Qt.AlignmentFlag.AlignLeft)
+
+    def update_schedule(
+        self,
+        settings: AppSettings,
+        state: ProviderViewState,
+        *,
+        now: float,
+    ) -> None:
+        enabled = settings.automation_enabled
+        if settings.schedule_mode == DAILY:
+            time_text = datetime(2000, 1, 1, settings.daily_start_hour, settings.daily_start_minute).strftime(
+                "%I:%M %p"
+            ).lstrip("0")
+            self.mode_label.setText(f"Daily at {time_text}")
+            self.detail_label.setText(
+                "Starts only after the current window ends and this local time arrives."
+            )
+        else:
+            self.mode_label.setText("Continuous")
+            self.detail_label.setText(
+                "Starts the next window after the current reset and safety buffer."
+            )
+
+        if not enabled:
+            self.status_label.set_status("OFF", "neutral")
+            self.next_label.setText("No automatic requests while automation is off")
+            return
+
+        self.status_label.set_status("ON", "success")
+        if state.reset_at is None:
+            self.next_label.setText("First window starts only when you ask")
+            return
+        summary = schedule_summary(
+            settings.schedule_mode,
+            boundary_reset_at=state.reset_at,
+            now=now,
+            hour=settings.daily_start_hour,
+            minute=settings.daily_start_minute,
+        )
+        if summary.due:
+            self.next_label.setText("Safety checks are due now")
+        elif summary.next_action_at is not None:
+            self.next_label.setText(_schedule_time(summary.next_action_at, now=now))
+
+
+def _schedule_time(timestamp: float, *, now: float) -> str:
+    try:
+        local = datetime.fromtimestamp(timestamp).astimezone()
+        current = datetime.fromtimestamp(now).astimezone()
+    except (OSError, OverflowError, ValueError):
+        return "After the current reset"
+    time_text = local.strftime("%I:%M %p").lstrip("0")
+    if local.date() == current.date():
+        return f"Today at {time_text}"
+    if local.date() == current.date() + timedelta(days=1):
+        return f"Tomorrow at {time_text}"
+    return local.strftime("%a, %b %d at %I:%M %p").replace(" 0", " ")
 
 
 def _metric_bar(name: str) -> QProgressBar:

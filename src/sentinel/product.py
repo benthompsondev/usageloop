@@ -72,7 +72,7 @@ class ProductMetadata:
 PRODUCT = ProductMetadata(
     display_name="UsageLoop",
     tagline="Keep your Codex reset clock running.",
-    version="0.8.0",
+    version="0.9.0",
     github_owner="benthompsondev",
     github_repo="codex-window-sentinel",
     executable_name="UsageLoop.exe",

@@ -1,12 +1,11 @@
 """The UsageLoop mark, drawn once and reused by the app, tray, and installer.
 
-The mark is a broken emerald ring closed by an arrowhead, wrapped around a "5hr"
-glyph: a five-hour window that keeps coming back around.
+The mark is a set of emerald arrows wrapped around a "5hr" glyph: a five-hour
+window that keeps coming back around.
 
 Detail is size-adaptive. At 32 pixels and above the full loop-plus-5hr mark is
-drawn. Below that the three characters are genuinely unreadable and only muddy
-the shape, so a thicker ring-only silhouette is used instead, which is what a
-tray icon actually needs.
+drawn. Below that the lettering is removed and the loop becomes a thicker,
+high-contrast silhouette for the Windows tray.
 
 The "5hr" is drawn from explicit path geometry rather than typeset. Rendering
 text would make the packaged icon depend on a font being installed on whichever
@@ -38,15 +37,12 @@ ICON_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 TILE = "#08131F"
 TILE_EDGE = "#284158"
 RING = "#20D5A4"
+RING_SECONDARY = "#14B8A6"
 GLYPH = "#F6FFFC"
 
 #: Below this the "5hr" lettering and the arrowhead are a few pixels across and
 #: read as noise, so the ring-only silhouette is used.
 DETAIL_MIN_SIZE = 32
-#: The ring is open at the top so the gap reads as motion, not damage.
-ARC_START_DEGREES = 130
-ARC_SPAN_DEGREES = 288
-ARC_END_DEGREES = ARC_START_DEGREES + ARC_SPAN_DEGREES
 #: Fraction of the canvas the glyph occupies on its longest side. Three
 #: characters are wider than two, so this is measured across the width.
 GLYPH_SCALE = 0.47
@@ -110,15 +106,23 @@ def render_mark(size: int, *, tile: bool = True) -> QPixmap:
         margin = size * 0.235 + stroke / 2
     box = QRectF(margin, margin, size - margin * 2, size - margin * 2)
 
-    pen = QPen(QColor(RING))
-    pen.setWidthF(stroke)
-    pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-    painter.setPen(pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-    painter.drawArc(box, ARC_START_DEGREES * 16, ARC_SPAN_DEGREES * 16)
+    segments = (
+        ((16, 96), (142, 94), (266, 88))
+        if size >= 64
+        else ((28, 132), (205, 124))
+    )
+    colours = (RING, RING_SECONDARY, RING)
+    for index, (start, span) in enumerate(segments):
+        pen = QPen(QColor(colours[index]))
+        pen.setWidthF(stroke)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawArc(box, start * 16, span * 16)
+        if detailed:
+            _draw_arrowhead(painter, box, start + span, stroke, colours[index])
 
     if detailed:
-        _draw_arrowhead(painter, box, ARC_END_DEGREES, stroke)
         _draw_glyph(painter, size)
 
     painter.end()
@@ -126,7 +130,11 @@ def render_mark(size: int, *, tile: bool = True) -> QPixmap:
 
 
 def _draw_arrowhead(
-    painter: QPainter, box: QRectF, angle_degrees: float, stroke: float
+    painter: QPainter,
+    box: QRectF,
+    angle_degrees: float,
+    stroke: float,
+    colour: str = RING,
 ) -> None:
     """Cap the open end of the ring with a triangle following the arc."""
     radius = box.width() / 2
@@ -152,7 +160,7 @@ def _draw_arrowhead(
     path = QPainterPath()
     path.addPolygon(transform.map(triangle))
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QBrush(QColor(RING)))
+    painter.setBrush(QBrush(QColor(colour)))
     painter.drawPath(path)
 
 
