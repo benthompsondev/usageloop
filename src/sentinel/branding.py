@@ -35,10 +35,10 @@ from PySide6.QtGui import (
 # tray, and the installer wizard.
 ICON_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 
-TILE = "#0D1117"
-TILE_EDGE = "#1F2937"
-RING = "#22D3A1"
-GLYPH = "#F2FFFA"
+TILE = "#08131F"
+TILE_EDGE = "#284158"
+RING = "#20D5A4"
+GLYPH = "#F6FFFC"
 
 #: Below this the "5hr" lettering and the arrowhead are a few pixels across and
 #: read as noise, so the ring-only silhouette is used.
@@ -49,7 +49,7 @@ ARC_SPAN_DEGREES = 288
 ARC_END_DEGREES = ARC_START_DEGREES + ARC_SPAN_DEGREES
 #: Fraction of the canvas the glyph occupies on its longest side. Three
 #: characters are wider than two, so this is measured across the width.
-GLYPH_SCALE = 0.445
+GLYPH_SCALE = 0.47
 
 
 def five_hour_glyph() -> QPainterPath:
@@ -60,22 +60,24 @@ def five_hour_glyph() -> QPainterPath:
     """
     path = QPainterPath()
     # 5: top bar, left stem to the waist, then the bowl.
-    path.moveTo(32, 6)
-    path.lineTo(10, 6)
-    path.lineTo(10, 32)
-    path.lineTo(21, 32)
-    path.arcTo(QRectF(10, 32, 24, 28), 90, -250)
+    path.moveTo(34, 6)
+    path.lineTo(9, 6)
+    path.lineTo(9, 31)
+    path.lineTo(21, 31)
+    path.cubicTo(31, 31, 35, 36, 35, 45)
+    path.cubicTo(35, 55, 28, 61, 18, 61)
+    path.cubicTo(12, 61, 8, 59, 5, 56)
     # h: full-height stem, shoulder, right leg.
-    path.moveTo(46, 2)
-    path.lineTo(46, 60)
-    path.moveTo(46, 34)
-    path.quadTo(55, 22, 65, 34)
-    path.lineTo(65, 60)
+    path.moveTo(46, 3)
+    path.lineTo(46, 61)
+    path.moveTo(46, 35)
+    path.cubicTo(51, 27, 60, 27, 66, 35)
+    path.lineTo(66, 61)
     # r: short stem and a single arm.
-    path.moveTo(77, 26)
-    path.lineTo(77, 60)
-    path.moveTo(77, 36)
-    path.quadTo(81, 25, 92, 27)
+    path.moveTo(78, 29)
+    path.lineTo(78, 61)
+    path.moveTo(78, 39)
+    path.cubicTo(82, 31, 87, 29, 94, 31)
     return path
 
 
@@ -102,7 +104,7 @@ def render_mark(size: int, *, tile: bool = True) -> QPixmap:
         )
 
     # A heavier stroke on the small ring-only sizes keeps it from thinning out.
-    stroke = size * (0.15 if not detailed else 0.085)
+    stroke = size * (0.15 if not detailed else 0.078)
     margin = size * (0.085 if tile else 0.05) + stroke / 2
     if not detailed and tile:
         margin = size * 0.235 + stroke / 2
@@ -134,7 +136,7 @@ def _draw_arrowhead(
         centre.x() + radius * math.cos(radians),
         centre.y() - radius * math.sin(radians),
     )
-    reach = stroke * 1.15
+    reach = stroke * 1.02
     triangle = QPolygonF(
         [
             QPointF(reach, 0.0),

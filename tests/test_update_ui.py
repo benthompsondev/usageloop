@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from sentinel.update_ui import UpdatePanel
 from sentinel.product import PRODUCT
-from sentinel.updates import ReleaseAsset, ReleaseInfo
+from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult
 
 
 class FakeUpdater:
@@ -27,9 +27,13 @@ class UpdatePanelTests(unittest.TestCase):
 
     def test_latest_available_and_failure_states_have_clear_actions(self) -> None:
         panel = self.make_panel()
-        panel._operation_completed("check", None)
+        panel._operation_completed("check", UpdateCheckResult("latest"))
         self.assertEqual("latest", panel.state)
         self.assertEqual("Check again", panel.action_button.text())
+
+        panel._operation_completed("check", UpdateCheckResult("no_release"))
+        self.assertEqual("no_release", panel.state)
+        self.assertIn("No public release", panel.state_label.text())
 
         release = ReleaseInfo(
             "0.6.0",
@@ -38,7 +42,7 @@ class UpdatePanelTests(unittest.TestCase):
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example"),
         )
-        panel._operation_completed("check", release)
+        panel._operation_completed("check", UpdateCheckResult("update_available", release))
         self.assertEqual("available", panel.state)
         self.assertEqual("Download installer", panel.action_button.text())
         self.assertIn("Cleaner dashboard", panel.notes_label.text())

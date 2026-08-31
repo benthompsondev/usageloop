@@ -45,6 +45,12 @@ class ReleaseInfo:
 
 
 @dataclass(frozen=True)
+class UpdateCheckResult:
+    status: str
+    release: ReleaseInfo | None = None
+
+
+@dataclass(frozen=True)
 class VerifiedInstaller:
     path: Path
     sha256: str
@@ -154,7 +160,7 @@ class GitHubReleaseUpdater:
             lambda args, cwd: subprocess.Popen(args, cwd=cwd)
         )
 
-    def check(self) -> ReleaseInfo | None:
+    def check(self) -> UpdateCheckResult:
         request = self._request(self.product.release_api_url)
         try:
             with self._open(request, CHECK_TIMEOUT_SECONDS) as response:
@@ -164,7 +170,7 @@ class GitHubReleaseUpdater:
             # reached and the answer is simply "nothing to install yet", so
             # blaming the user's connection would be wrong.
             if exc.code == 404:
-                return None
+                return UpdateCheckResult("no_release")
             raise UpdateError(
                 f"GitHub replied with an error ({exc.code}). Try again later."
             ) from exc
@@ -176,9 +182,12 @@ class GitHubReleaseUpdater:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise UpdateError("GitHub returned a release record that could not be read.") from exc
-        return parse_release(
+        release = parse_release(
             payload, installed_version=self.product.version, product=self.product
         )
+        if release is None:
+            return UpdateCheckResult("latest")
+        return UpdateCheckResult("update_available", release)
 
     def download(
         self,

@@ -46,6 +46,11 @@ class ProductMetadata:
         """PyInstaller COLLECT directory, derived so packaging cannot drift."""
         return self.executable_name.removesuffix(".exe")
 
+    @property
+    def single_instance_name(self) -> str:
+        identifier = self.app_id.strip("{}")
+        return f"Local\\{self.display_name}-{identifier}"
+
     def packaging_metadata(self) -> dict[str, str]:
         """Every name the Windows build script needs, derived values included.
 
@@ -56,6 +61,7 @@ class ProductMetadata:
 
         data = {key: str(value) for key, value in asdict(self).items()}
         data["dist_folder_name"] = self.dist_folder_name
+        data["single_instance_name"] = self.single_instance_name
         return data
 
 
@@ -66,7 +72,7 @@ class ProductMetadata:
 PRODUCT = ProductMetadata(
     display_name="UsageLoop",
     tagline="Keep your Codex reset clock running.",
-    version="0.7.0",
+    version="0.8.0",
     github_owner="benthompsondev",
     github_repo="codex-window-sentinel",
     executable_name="UsageLoop.exe",

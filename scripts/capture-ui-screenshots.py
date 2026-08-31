@@ -14,7 +14,7 @@ from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow
 from sentinel.product import PRODUCT
-from sentinel.updates import ReleaseAsset, ReleaseInfo
+from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult
 
 
 class PreviewProvider:
@@ -82,12 +82,14 @@ def main() -> int:
         window.show_page(1)
         save(window, args.output / "settings.png", app)
         release = ReleaseInfo(
-            "0.8.0", ("Codex reliability fixes", "Clearer reset-clock status"),
-            "https://github.com/example/usage-loop/releases/tag/v0.8.0",
+            "0.9.0", ("Codex reliability fixes", "Clearer reset-clock status"),
+            "https://github.com/example/usage-loop/releases/tag/v0.9.0",
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example/installer"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example/checksum"),
         )
-        window.update_panel._operation_completed("check", release)
+        window.update_panel._operation_completed(
+            "check", UpdateCheckResult("update_available", release)
+        )
         settings = window.pages.widget(1)
         if isinstance(settings, QScrollArea):
             settings.verticalScrollBar().setValue(settings.verticalScrollBar().maximum())

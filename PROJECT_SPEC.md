@@ -2,8 +2,8 @@
 
 ## Outcome
 
-Give a normal Windows user one understandable control: **Keep my Codex reset
-clock running**. The app shows the current five-hour clock, reset time,
+Give a normal Windows user one understandable control: **Keep my 5-hour
+windows ready**. The app shows the current five-hour clock, reset time,
 five-hour usage, weekly safety, and last action without terminal setup.
 
 ## Runtime flow
@@ -22,7 +22,7 @@ local app-server observation
 ## Consumer states
 
 - `CLOCK RUNNING`
-- `STARTING WINDOW`
+- `STARTING NEXT WINDOW`
 - `WAITING FOR RESET`
 - `AUTOMATION OFF`
 - `NEEDS ATTENTION`
@@ -41,6 +41,8 @@ local app-server observation
 - Turn lifecycle events are diagnostic. Only a newly anchored fixed reset is
   success.
 - Automation off performs no compatibility probe, quota read, or trigger.
+- Manual Sync is explicitly user-started, collects four read-only rate-limit
+  observations, and never discovers models or starts a thread or turn.
 
 ## App and packaging
 

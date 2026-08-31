@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
         self.startup_manager = startup_manager
         self.confirm_enable = confirm_enable or self._confirm_enable
         self.confirm_bootstrap = confirm_bootstrap or self._confirm_bootstrap
-        self.active_operations: set[str] = set()
+        self.active_operations: dict[str, str] = {}
         self.thread_pool = QThreadPool.globalInstance()
         self.hide_on_close = False
         self.force_close = False
@@ -161,8 +161,8 @@ class MainWindow(QMainWindow):
         brand_layout.setSpacing(12)
         mark = QLabel()
         # The mark supports the wordmark rather than competing with it.
-        mark.setPixmap(render_mark(32))
-        mark.setFixedSize(32, 32)
+        mark.setPixmap(render_mark(36))
+        mark.setFixedSize(36, 36)
         brand_layout.addWidget(mark)
 
         identity = QVBoxLayout()
@@ -318,12 +318,12 @@ class MainWindow(QMainWindow):
         primary_copy.setSpacing(4)
         eyebrow = QLabel("MAIN SWITCH")
         eyebrow.setObjectName("eyebrow")
-        self.automation_toggle = QCheckBox("Keep my Codex reset clock running")
+        self.automation_toggle = QCheckBox("Keep my 5-hour windows ready")
         self.automation_toggle.setObjectName("automationToggle")
         self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
         explanation = QLabel(
-            "Off means zero Codex-triggering activity. On uses one minimal request after rollover, "
-            "then verifies the new reset before reporting success."
+            "UsageLoop does not add quota. Off sends no window-start requests. On uses one "
+            "minimal request after rollover, then verifies the new reset before reporting success."
         )
         explanation.setProperty("muted", True)
         explanation.setWordWrap(True)
@@ -343,6 +343,9 @@ class MainWindow(QMainWindow):
             card = ProviderCard(state)
             card.action_button.clicked.connect(
                 lambda checked=False, key=provider_id: self.start_bootstrap(key)
+            )
+            card.sync_button.clicked.connect(
+                lambda checked=False, key=provider_id: self.start_usage_sync(key)
             )
             self.provider_cards[provider_id] = card
             provider_row.addWidget(card, 1)
@@ -476,7 +479,8 @@ class MainWindow(QMainWindow):
             "Codex subscription windows start when Codex receives a real request. UsageLoop watches "
             "the official local Codex app-server, keeps the countdown on this PC, and can start the "
             "next five-hour clock after rollover with one minimal guarded request. It reports success "
-            "only after Codex exposes a fixed new reset time."
+            "only after Codex exposes a fixed new reset time. It does not grant extra quota or change "
+            "your subscription limits."
         )
         description.setProperty("muted", True)
         description.setWordWrap(True)
@@ -577,6 +581,27 @@ class MainWindow(QMainWindow):
             return
         self._start_operation(provider_id, "bootstrap")
 
+    def start_usage_sync(self, provider_id: str) -> None:
+        if provider_id in self.active_operations:
+            return
+        provider = self.providers.get(provider_id)
+        state = self.controller.states.get(provider_id)
+        card = self.provider_cards.get(provider_id)
+        if provider is None or state is None or not state.installed:
+            if card is not None:
+                card.set_sync_state("unavailable")
+            return
+        self.active_operations[provider_id] = "sync"
+        if card is not None:
+            card.set_sync_state("syncing")
+        worker = OperationWorker(
+            provider_id,
+            lambda: provider.sync_usage(current_state=state),
+        )
+        worker.signals.completed.connect(self._operation_completed)
+        worker.signals.failed.connect(self._operation_failed)
+        self.thread_pool.start(worker)
+
     def _start_operation(self, provider_id: str, action: str) -> None:
         provider = self.providers.get(provider_id)
         if provider is None:
@@ -585,7 +610,7 @@ class MainWindow(QMainWindow):
         self.controller.update_provider_state(
             replace(state, status="Starting", detail="Checking with the provider safely.")
         )
-        self.active_operations.add(provider_id)
+        self.active_operations[provider_id] = action
         operation = (
             provider.probe
             if action == "probe"
@@ -598,18 +623,28 @@ class MainWindow(QMainWindow):
         self.refresh_clock()
 
     def _operation_completed(self, provider_id: str, result: object) -> None:
-        self.active_operations.discard(provider_id)
+        action = self.active_operations.pop(provider_id, None)
         if isinstance(result, CompatibilityResult):
             self.controller.apply_compatibility(provider_id, result)
         elif isinstance(result, ProviderOperationResult):
             self.controller.update_provider_state(result.state)
+            if action == "sync":
+                self.provider_cards[provider_id].set_sync_state(
+                    "updated" if result.outcome == "SYNC_UPDATED" else "inconclusive"
+                )
         else:
             self._operation_failed(provider_id, "unsupported_result")
             return
         self.refresh_clock()
 
     def _operation_failed(self, provider_id: str, category: str) -> None:
-        self.active_operations.discard(provider_id)
+        action = self.active_operations.pop(provider_id, None)
+        if action == "sync":
+            card = self.provider_cards.get(provider_id)
+            if card is not None:
+                card.set_sync_state("inconclusive")
+            self.refresh_clock()
+            return
         state = self.controller.states[provider_id]
         self.controller.update_provider_state(
             replace(

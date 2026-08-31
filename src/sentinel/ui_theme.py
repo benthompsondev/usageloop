@@ -144,6 +144,12 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         background: {tokens.accent_deep}; color: #E8FFF0; border: 1px solid {tokens.accent};
     }}
     QPushButton#primaryButton:hover {{ background: {tokens.accent_hover}; }}
+    QPushButton#secondaryButton {{
+        background: {tokens.surface_raised}; border: 1px solid {tokens.border_strong};
+        border-radius: 8px; color: {tokens.text}; padding: 8px 14px;
+    }}
+    QPushButton#secondaryButton:hover {{ border-color: {tokens.accent}; color: {tokens.accent}; }}
+    QPushButton#secondaryButton:disabled {{ color: {tokens.text_muted}; border-color: {tokens.border}; }}
     QPushButton#linkButton {{
         background: transparent; color: {tokens.info}; border: 1px solid {tokens.border};
     }}

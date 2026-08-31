@@ -10,7 +10,7 @@ emerald action colour, and short text-first state pills. The header says
 sizes and a ring-only silhouette for tiny tray sizes. No installed font is
 needed to render the mark.
 
-The main switch is **Keep my Codex reset clock running**. Dashboard copy keeps
+The main switch is **Keep my 5-hour windows ready**. Dashboard copy keeps
 the safeguards visible without exposing protocol details. Settings owns Codex
 installation, five-hour evidence, weekly allowance, automation, local state,
 Windows startup, diagnostics, and manual updates. About explains the mechanism,
@@ -24,3 +24,7 @@ automation is enabled. A version string alone never pauses automation.
 The update path is intentionally not self-modifying. A user starts the GitHub
 Release check, UsageLoop downloads the exact installer and companion checksum,
 verifies both, asks before launch, starts the normal installer, and exits.
+
+Manual Sync is separate from automation. It takes four bounded, read-only
+app-server observations and refreshes the five-hour and weekly snapshots. It
+never selects a model or starts a Codex turn.

@@ -7,6 +7,10 @@ current five-hour window is genuinely counting down, displays the last-known
 five-hour and weekly usage, and can start the next window after rollover with
 one minimal guarded Codex request.
 
+It does not grant extra quota or change the limits on your plan. It starts the
+normal next clock early so more of that five-hour period can pass before you
+need Codex again.
+
 UsageLoop is an independent open-source project. It is not affiliated with,
 endorsed by, or sponsored by OpenAI.
 
@@ -20,6 +24,10 @@ endorsed by, or sponsored by OpenAI.
 
 The countdown moves locally. It does not poll Codex to make the UI look live.
 Usage percentages are snapshots from the last real observation.
+
+**Sync usage** is the exception you control. Pressing it takes four read-only
+Codex observations over about 30 seconds, then refreshes the five-hour and
+weekly snapshots. It never selects a model or starts a Codex turn.
 
 ## How it works
 
@@ -62,7 +70,11 @@ is off, UsageLoop performs no provider-triggering work.
 
 ## Install and run
 
-There is no public release yet. To build the current alpha on Windows:
+Download the current per-user installer from
+[GitHub Releases](https://github.com/benthompsondev/codex-window-sentinel/releases/latest).
+The installer does not need administrator rights or change the global PATH.
+
+To build it yourself on Windows:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\setup.ps1
@@ -78,20 +90,20 @@ dist\UsageLoop-Setup.exe
 dist\UsageLoop-Setup.exe.sha256
 ```
 
-The installer is per-user and does not change the global PATH.
-
 ## Desktop flow
 
 1. Open UsageLoop and confirm Codex is detected.
 2. Review the cached five-hour and weekly state.
-3. Turn on **Keep my Codex reset clock running**.
+3. Turn on **Keep my 5-hour windows ready**.
 4. On a true first run, choose **Start my first window now**. This explicit
    action is guarded by the same evidence and weekly checks.
 5. Leave UsageLoop in the tray. The local countdown continues without Codex
    traffic between observations.
 
-Settings contains startup, health, technical diagnostics, and manual updates.
-Update checks contact GitHub only after a button click and never affect quota.
+Use **Sync usage** when the dashboard looks stale or Codex changes a limit
+unexpectedly. Settings contains startup, health, technical diagnostics, and
+manual updates. Update checks contact GitHub only after a button click and
+never affect quota.
 
 ## CLI
 
@@ -142,4 +154,4 @@ reservations.
 ```
 
 See [PROJECT_SPEC.md](PROJECT_SPEC.md) for the behavioral contract and
-[docs/RELEASING.md](docs/RELEASING.md) for the future release checklist.
+[docs/RELEASING.md](docs/RELEASING.md) for the release checklist.

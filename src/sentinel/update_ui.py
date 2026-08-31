@@ -16,7 +16,13 @@ from PySide6.QtWidgets import (
 )
 
 from .product import PRODUCT
-from .updates import GitHubReleaseUpdater, ReleaseInfo, UpdateError, VerifiedInstaller
+from .updates import (
+    GitHubReleaseUpdater,
+    ReleaseInfo,
+    UpdateCheckResult,
+    UpdateError,
+    VerifiedInstaller,
+)
 
 
 class UpdateSignals(QObject):
@@ -146,7 +152,18 @@ class UpdatePanel(QFrame):
 
     def _operation_completed(self, action: str, result: object) -> None:
         if action == "check":
-            if result is None:
+            if not isinstance(result, UpdateCheckResult):
+                self._operation_failed(action, "GitHub returned an unsupported release result.")
+                return
+            if result.status == "no_release":
+                self.release = None
+                self._set_state(
+                    "no_release",
+                    "No public release is available yet. Your installed app was not changed.",
+                )
+                self.action_button.setText("Check again")
+                return
+            if result.status == "latest":
                 self.release = None
                 self._set_state(
                     "latest",
@@ -155,16 +172,17 @@ class UpdatePanel(QFrame):
                 )
                 self.action_button.setText("Check again")
                 return
-            if not isinstance(result, ReleaseInfo):
+            if result.status != "update_available" or not isinstance(result.release, ReleaseInfo):
                 self._operation_failed(action, "GitHub returned an unsupported release result.")
                 return
-            self.release = result
+            release = result.release
+            self.release = release
             self._set_state(
-                "available", f"Version {result.version} is available.", status="success"
+                "available", f"Version {release.version} is available.", status="success"
             )
-            if result.notes:
+            if release.notes:
                 self.notes_label.setText(
-                    "What changed\n" + "\n".join(f"• {note}" for note in result.notes)
+                    "What changed\n" + "\n".join(f"• {note}" for note in release.notes)
                 )
                 self.notes_label.setVisible(True)
             self.action_button.setText("Download installer")

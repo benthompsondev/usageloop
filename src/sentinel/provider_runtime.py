@@ -85,6 +85,66 @@ class CodexOperationRunner:
             if session is not None:
                 session.close()
 
+    def sync(self, runtime_identity: str) -> ProviderOperationResult:
+        """Refresh quota evidence without discovering models or starting a turn."""
+        session = self._session_factory()
+        try:
+            observations: list[QuotaSnapshot] = []
+            for index in range(4):
+                observed_at = self._clock()
+                raw = session.client.read_rate_limits()
+                session.client.drain_rate_limit_notifications()
+                observations.append(normalize_rate_limits(raw, observed_at))
+                if index < 3:
+                    self._sleep(10.0)
+            classification = classify(observations)
+            for snapshot in observations:
+                self.history.record_observation(
+                    snapshot, classification, session.codex_version
+                )
+            latest = observations[-1]
+            selected = select_five_hour(latest).window
+            weekly = select_weekly(latest)
+            conclusive = classification.state in {
+                "ANCHORED",
+                "UNANCHORED",
+                "EXHAUSTED",
+            }
+            status = {
+                "ANCHORED": "Ready",
+                "UNANCHORED": "Waiting",
+                "EXHAUSTED": "Needs attention",
+            }.get(classification.state, "Needs attention")
+            detail = {
+                "ANCHORED": "Codex usage was updated from a fixed reset clock.",
+                "UNANCHORED": "Codex usage was updated; no fixed reset clock is active.",
+                "EXHAUSTED": "Codex reports that the five-hour window is exhausted.",
+            }.get(classification.state, "Codex usage could not be confirmed safely.")
+            state = ProviderViewState(
+                provider_id="codex",
+                display_name="Codex",
+                installed=True,
+                automation_supported=True,
+                status=status,
+                detail=detail,
+                runtime_identity=runtime_identity,
+                reset_at=selected.resets_at if selected else None,
+                last_verified_at=(
+                    latest.observed_at if classification.state == "ANCHORED" else None
+                ),
+                used_percent=selected.used_percent if selected else None,
+                usage_checked_at=latest.observed_at,
+                weekly_used_percent=weekly.used_percent if weekly else None,
+                weekly_reset_at=weekly.resets_at if weekly else None,
+            )
+            return ProviderOperationResult(
+                "SYNC_UPDATED" if conclusive else "SYNC_INCONCLUSIVE",
+                state,
+                False,
+            )
+        finally:
+            session.close()
+
     def run(self, mode: str, *, runtime_identity: str) -> ProviderOperationResult:
         if mode not in {"bootstrap", "rollover"}:
             raise ValueError("Unsupported Codex operation mode.")

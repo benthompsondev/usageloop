@@ -34,6 +34,7 @@ class FakeClient:
         self.read_calls = 0
         self.turn_calls = 0
         self.thread_calls = 0
+        self.model_calls = 0
 
     def read_rate_limits(self):
         value = self.payloads[min(self.read_calls, len(self.payloads) - 1)]
@@ -44,6 +45,7 @@ class FakeClient:
         return []
 
     def list_models(self):
+        self.model_calls += 1
         if not self.model:
             return []
         return [{
@@ -78,6 +80,61 @@ class FakeSession:
 
 
 class CodexOperationRunnerTests(unittest.TestCase):
+    def test_manual_sync_reads_four_samples_without_model_or_turn_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            times = iter((100.0, 110.0, 120.0, 130.0))
+            client = FakeClient([payload(18_000, used=12)] * 4)
+            runner = CodexOperationRunner(
+                SafeHistory(Path(directory) / "history.jsonl"),
+                session_factory=lambda: FakeSession(client),
+                clock=lambda: next(times),
+                sleep=lambda _seconds: None,
+            )
+
+            result = runner.sync("runtime:1")
+
+            self.assertEqual("SYNC_UPDATED", result.outcome)
+            self.assertEqual("Ready", result.state.status)
+            self.assertEqual(12, result.state.used_percent)
+            self.assertEqual(18_000, result.state.reset_at)
+            self.assertEqual(20, result.state.weekly_used_percent)
+            self.assertEqual(900_000, result.state.weekly_reset_at)
+            self.assertEqual(4, client.read_calls)
+            self.assertEqual(0, client.model_calls)
+            self.assertEqual(0, client.thread_calls)
+            self.assertEqual(0, client.turn_calls)
+            self.assertFalse(result.request_possibly_sent)
+
+    def test_manual_sync_reports_ambiguous_payload_without_claiming_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            malformed = {
+                "rateLimitsByLimitId": {
+                    "codex": {
+                        "limitId": "codex",
+                        "primary": {
+                            "usedPercent": 0,
+                            "windowDurationMins": 300,
+                        },
+                    }
+                }
+            }
+            times = iter((100.0, 110.0, 120.0, 130.0))
+            client = FakeClient([malformed] * 4)
+            runner = CodexOperationRunner(
+                SafeHistory(Path(directory) / "history.jsonl"),
+                session_factory=lambda: FakeSession(client),
+                clock=lambda: next(times),
+                sleep=lambda _seconds: None,
+            )
+
+            result = runner.sync("runtime:1")
+
+            self.assertEqual("SYNC_INCONCLUSIVE", result.outcome)
+            self.assertEqual("Needs attention", result.state.status)
+            self.assertIsNone(result.state.last_verified_at)
+            self.assertEqual(0, client.model_calls)
+            self.assertEqual(0, client.turn_calls)
+
     def test_compatibility_probe_is_read_only_and_accepts_required_capabilities(self):
         with tempfile.TemporaryDirectory() as directory:
             client = FakeClient([payload(18_000)] * 4)

@@ -7,6 +7,7 @@ import unittest
 
 from sentinel.updates import (
     GitHubReleaseUpdater,
+    UpdateCheckResult,
     UpdateError,
     VerifiedInstaller,
     is_newer_version,
@@ -90,9 +91,10 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
             return FakeResponse(json.dumps(release_payload()).encode("utf-8"))
 
         updater = GitHubReleaseUpdater(product=replace(PRODUCT, version="0.4.0"), opener=opener)
-        release = updater.check()
+        result = updater.check()
 
-        self.assertEqual("0.5.0", release.version)
+        self.assertEqual("update_available", result.status)
+        self.assertEqual("0.5.0", result.release.version)
         self.assertEqual(1, len(calls))
         self.assertIn("api.github.com/repos/benthompsondev/codex-window-sentinel", calls[0][0])
 
@@ -175,7 +177,17 @@ class ReleaseLookupFailureTests(unittest.TestCase):
         from urllib.error import HTTPError
 
         error = HTTPError("https://api.github.com", 404, "Not Found", {}, None)
-        self.assertIsNone(self._updater(error).check())
+        result = self._updater(error).check()
+        self.assertEqual(UpdateCheckResult("no_release"), result)
+
+    def test_current_release_is_distinct_from_repository_without_a_release(self) -> None:
+        payload = release_payload(version=PRODUCT.version)
+
+        def opener(_request, _timeout):
+            return FakeResponse(json.dumps(payload).encode("utf-8"))
+
+        result = GitHubReleaseUpdater(opener=opener).check()
+        self.assertEqual(UpdateCheckResult("latest"), result)
 
     def test_other_http_errors_say_github_replied(self) -> None:
         from urllib.error import HTTPError

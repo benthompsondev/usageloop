@@ -47,8 +47,8 @@ def present_provider_state(
     if state.weekly_reset_at is not None:
         weekly += f"  ·  {_reset_copy(state.weekly_reset_at, now=now)}"
     action = (
-        f"Last action  {state.last_action}"
-        if state.last_action else "Last action  No automatic window start recorded"
+        f"Last automatic action  {state.last_action}"
+        if state.last_action else "Last automatic action  No window start recorded"
     )
     if not state.installed:
         return ProviderPresentation(
@@ -59,9 +59,9 @@ def present_provider_state(
 
     reset = _reset_copy(state.reset_at, now=now)
     if state.last_verified_at is not None:
-        verified = f"Last verified {_friendly_time(state.last_verified_at, now=now)}"
+        verified = f"Last synced {_friendly_time(state.last_verified_at, now=now)}"
     elif state.usage_checked_at is not None:
-        verified = f"Last read {_friendly_time(state.usage_checked_at, now=now)}"
+        verified = f"Last synced {_friendly_time(state.usage_checked_at, now=now)}"
     else:
         verified = "Not checked yet"
 
@@ -73,7 +73,7 @@ def present_provider_state(
         )
     if state.status == "Starting":
         return ProviderPresentation(
-            "STARTING WINDOW", "info", "Starting the next reset clock", reset,
+            "STARTING NEXT WINDOW", "info", "Starting the next reset clock", reset,
             "One minimal Codex request is in progress. It will not be retried automatically.",
             verified, usage, weekly, action,
         )
@@ -139,7 +139,7 @@ class ProviderCard(QFrame):
         layout.setSpacing(8)
 
         header = QHBoxLayout()
-        self.name_label = QLabel("Codex reset clock")
+        self.name_label = QLabel("5-hour reset")
         self.name_label.setObjectName("providerName")
         self.status_label = StatusPill()
         header.addWidget(self.name_label)
@@ -180,6 +180,14 @@ class ProviderCard(QFrame):
         self.action_label.setProperty("muted", True)
         self.action_label.setWordWrap(True)
         layout.addWidget(self.action_label)
+        sync_row = QHBoxLayout()
+        self.sync_button = QPushButton("Sync usage")
+        self.sync_button.setObjectName("secondaryButton")
+        self.sync_status = QLabel("")
+        self.sync_status.setProperty("muted", True)
+        sync_row.addWidget(self.sync_button, 0)
+        sync_row.addWidget(self.sync_status, 1)
+        layout.addLayout(sync_row)
         self.action_button = QPushButton("Start my first window now")
         self.action_button.setObjectName("primaryButton")
         self.action_button.setVisible(False)
@@ -204,6 +212,17 @@ class ProviderCard(QFrame):
         self.action_label.setText(presented.action)
         self.usage_bar.setValue(int(state.used_percent or 0))
         self.weekly_bar.setValue(int(state.weekly_used_percent or 0))
+
+    def set_sync_state(self, state: str) -> None:
+        messages = {
+            "idle": "",
+            "syncing": "Syncing…",
+            "updated": "Updated just now",
+            "inconclusive": "Couldn’t confirm Codex usage",
+            "unavailable": "Codex not available",
+        }
+        self.sync_status.setText(messages[state])
+        self.sync_button.setEnabled(state != "syncing")
 
 
 def _metric_bar(name: str) -> QProgressBar:

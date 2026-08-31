@@ -14,6 +14,7 @@ from .desktop import DesktopShell, MainWindow
 from .legacy_cleanup import remove_retired_claude_integration
 from .product import PRODUCT
 from .providers import CodexProvider
+from .single_instance import SingleInstanceGuard
 from .startup import StartupManager
 
 
@@ -29,6 +30,9 @@ def create_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = create_parser().parse_args(argv)
+    instance_guard = SingleInstanceGuard(PRODUCT.single_instance_name)
+    if not instance_guard.acquire():
+        return 0
     application = QApplication.instance() or QApplication(sys.argv[:1])
     application.setApplicationName(PRODUCT.display_name)
     application.setApplicationVersion(PRODUCT.version)
@@ -50,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     application.setQuitOnLastWindowClosed(not tray_available)
     application._sentinel_window = window  # type: ignore[attr-defined]
     application._sentinel_shell = shell  # type: ignore[attr-defined]
+    application._sentinel_instance_guard = instance_guard  # type: ignore[attr-defined]
     if not args.background or not tray_available:
         window.show()
     return application.exec()

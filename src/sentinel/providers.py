@@ -128,6 +128,7 @@ class CodexProvider:
             usage_checked_at=latest.observed_at,
             weekly_used_percent=weekly.used_percent if weekly else None,
             weekly_reset_at=weekly.resets_at if weekly else None,
+            last_action=_latest_trigger_action(self.history),
         )
 
     def probe(self) -> CompatibilityResult:
@@ -146,6 +147,32 @@ class CodexProvider:
             state=replace(result.state, runtime_version=state.runtime_version),
         )
 
+    def sync_usage(self, *, current_state: ProviderViewState | None = None):
+        detected = current_state if current_state is not None else self.detect()
+        identity = detected.runtime_identity or "unavailable"
+        result = self._operation_runner().sync(identity)
+        if result.outcome == "SYNC_INCONCLUSIVE" and current_state is not None:
+            synced_state = replace(
+                current_state,
+                status="Needs attention",
+                detail=result.state.detail,
+                runtime_identity=identity,
+                runtime_version=detected.runtime_version,
+                automation_supported=detected.automation_supported,
+            )
+        else:
+            synced_state = replace(
+                result.state,
+                runtime_version=detected.runtime_version,
+                automation_supported=detected.automation_supported,
+                last_action=(
+                    current_state.last_action
+                    if current_state is not None
+                    else detected.last_action
+                ),
+            )
+        return replace(result, state=synced_state)
+
     def _operation_runner(self):
         if self._runner is None:
             from .provider_runtime import CodexOperationRunner
@@ -160,6 +187,20 @@ def file_runtime_identity(executable: Path) -> str:
     except OSError:
         return "unavailable"
     return f"file:{stat.st_size}:{stat.st_mtime_ns}"
+
+
+def _latest_trigger_action(history: SafeHistory) -> str | None:
+    attempts = history.trigger_attempts()
+    if not attempts:
+        return None
+    return {
+        "reserved": "Preparing the next window",
+        "launch_attempted": "Starting the next window",
+        "request_possibly_sent": "Start outcome unclear; no retry",
+        "verified": "Started and verified the next window",
+        "failed_recoverable": "Start stopped before a request was sent",
+        "failed_guarded": "Start not verified; no retry",
+    }.get(attempts[-1].state)
 
 
 def windows_file_version(executable: Path) -> str | None:

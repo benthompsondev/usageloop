@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow, DesktopShell, present_provider_state
+from sentinel.provider_runtime import ProviderOperationResult
 
 
 class FakeProvider:
@@ -20,6 +21,7 @@ class FakeProvider:
         self.state = state
         self.probe_calls = 0
         self.action_calls = 0
+        self.sync_calls = 0
 
     def detect(self):
         return self.state
@@ -29,6 +31,24 @@ class FakeProvider:
 
     def run_action(self, mode, *, current_state=None):
         self.action_calls += 1
+
+    def sync_usage(self, *, current_state=None):
+        self.sync_calls += 1
+        synced = ProviderViewState(
+            "codex", "Codex", True, True, "Ready", "Synced.",
+            runtime_identity="runtime:1", reset_at=18_000,
+            last_verified_at=130, used_percent=12, usage_checked_at=130,
+            weekly_used_percent=20, weekly_reset_at=900_000,
+        )
+        return ProviderOperationResult("SYNC_UPDATED", synced, False)
+
+
+class FakeThreadPool:
+    def __init__(self):
+        self.workers = []
+
+    def start(self, worker):
+        self.workers.append(worker)
 
 
 class FakeStartup:
@@ -97,7 +117,7 @@ class DesktopTests(unittest.TestCase):
         window, _provider = self.make_window(
             ProviderViewState.waiting("codex", "Codex", installed=True)
         )
-        self.assertEqual("Keep my Codex reset clock running", window.automation_toggle.text())
+        self.assertEqual("Keep my 5-hour windows ready", window.automation_toggle.text())
         # A freshly detected provider has never been checked, so it must not
         # borrow the language of a window that is actually counting down.
         self.assertEqual(
@@ -169,6 +189,58 @@ class DesktopTests(unittest.TestCase):
         self.assertIn("Anchor verified", card.action_label.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
+
+    def test_manual_sync_is_available_when_automation_is_off_and_never_triggers(self):
+        state = ProviderViewState(
+            "codex", "Codex", True, True, "Ready", "Stale.",
+            runtime_identity="runtime:1", reset_at=9_000,
+            last_verified_at=20, used_percent=80, usage_checked_at=20,
+            weekly_used_percent=90, weekly_reset_at=800_000,
+        )
+        window, provider = self.make_window(state)
+        pool = FakeThreadPool()
+        window.thread_pool = pool
+
+        window.start_usage_sync("codex")
+        pool.workers[0].run()
+        self.app.processEvents()
+
+        self.assertEqual(1, provider.sync_calls)
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(12, window.controller.states["codex"].used_percent)
+        self.assertEqual(20, window.controller.states["codex"].weekly_used_percent)
+        self.assertIn("Updated just now", window.provider_cards["codex"].sync_status.text())
+
+    def test_repeated_sync_presses_cannot_overlap_sampling(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        )
+        window, provider = self.make_window(state)
+        pool = FakeThreadPool()
+        window.thread_pool = pool
+
+        window.start_usage_sync("codex")
+        window.start_usage_sync("codex")
+
+        self.assertEqual(1, len(pool.workers))
+        self.assertEqual("Syncing…", window.provider_cards["codex"].sync_status.text())
+        self.assertFalse(window.provider_cards["codex"].sync_button.isEnabled())
+        self.assertEqual(0, provider.sync_calls)
+
+    def test_sync_is_unavailable_when_codex_is_missing(self):
+        state = ProviderViewState.waiting("codex", "Codex", installed=False)
+        window, provider = self.make_window(state)
+        pool = FakeThreadPool()
+        window.thread_pool = pool
+
+        window.start_usage_sync("codex")
+
+        self.assertEqual([], pool.workers)
+        self.assertEqual(0, provider.sync_calls)
+        self.assertEqual(
+            "Codex not available", window.provider_cards["codex"].sync_status.text()
+        )
 
     def test_stale_verified_data_is_labelled_without_provider_work(self):
         state = ProviderViewState.waiting(
@@ -310,7 +382,21 @@ class FirstRunStateMappingTests(unittest.TestCase):
         presented = present_provider_state(
             self.provider(status="Starting"), now=100, automation_enabled=False
         )
-        self.assertEqual("STARTING WINDOW", presented.status)
+        self.assertEqual("STARTING NEXT WINDOW", presented.status)
+
+    def test_consumer_copy_explains_quota_and_sync_without_internal_terms(self):
+        presented = present_provider_state(
+            self.provider(
+                status="Ready",
+                reset_at=1_700_001_000,
+                last_verified_at=1_700_000_090,
+                last_action="Started and verified the next window",
+            ),
+            now=1_700_000_100,
+            automation_enabled=True,
+        )
+        self.assertTrue(presented.verified.startswith("Last synced "))
+        self.assertIn("Last automatic action", presented.action)
 
     def test_missing_provider_is_unchanged(self):
         presented = present_provider_state(

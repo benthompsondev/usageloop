@@ -83,6 +83,20 @@ class AppStateTests(unittest.TestCase):
         )
         self.assertEqual("WAIT", decision.action)
 
+    def test_missed_boundary_after_sleep_is_evaluated_as_rollover(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(1_000, verified_at=900)
+
+        decision = automation_decision(
+            True,
+            state,
+            now=1_600,
+            compatible_runtime_identity="native:same",
+        )
+
+        self.assertEqual("ROLLOVER", decision.action)
+
     def test_needs_attention_state_never_retries_automatically(self):
         state = ProviderViewState(
             provider_id="codex",
