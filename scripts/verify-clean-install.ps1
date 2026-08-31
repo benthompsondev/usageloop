@@ -78,6 +78,7 @@ if ($PreviousInstaller) {
     Copy-Item -LiteralPath $builtExe -Destination $legacyExe -Force
 }
 
+New-Item -Path $runKey -Force | Out-Null
 New-ItemProperty -LiteralPath $runKey -Name UsageLoop -Value ('"{0}" --background' -f $legacyExe) -PropertyType String -Force | Out-Null
 
 $setup = Start-Process -FilePath $installer -ArgumentList @(
