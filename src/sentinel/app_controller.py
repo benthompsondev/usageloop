@@ -16,6 +16,10 @@ from .providers import CompatibilityResult
 from .schedule import SCHEDULE_MODES
 
 
+RECOVERY_INITIAL_SECONDS = 60
+RECOVERY_MAX_SECONDS = 15 * 60
+
+
 class DetectingProvider(Protocol):
     provider_id: str
 
@@ -74,15 +78,33 @@ class ApplicationController:
                         or state.usage_checked_at > previous.usage_checked_at
                         or (
                             state.usage_checked_at == previous.usage_checked_at
-                            and state.quota_state == "EXHAUSTED"
-                            and previous.quota_state is None
+                            and (
+                                (
+                                    state.quota_state == "EXHAUSTED"
+                                    and previous.quota_state is None
+                                )
+                                or (
+                                    previous.status == "Needs attention"
+                                    and state.status != "Needs attention"
+                                )
+                            )
                         )
                     )
                 ):
+                    same_evidence = _provider_evidence(state) == _provider_evidence(previous)
                     state = replace(
                         state,
                         last_action=previous.last_action,
                         automation_blocked_until=previous.automation_blocked_until,
+                        recovery_signature=(
+                            previous.recovery_signature if same_evidence else None
+                        ),
+                        recovery_attempts=(
+                            previous.recovery_attempts if same_evidence else 0
+                        ),
+                        recovery_not_before=(
+                            previous.recovery_not_before if same_evidence else None
+                        ),
                     )
                 elif previous.retry_after_restart:
                     state = replace(
@@ -189,15 +211,33 @@ class ApplicationController:
                     or detected.usage_checked_at > current.usage_checked_at
                     or (
                         detected.usage_checked_at == current.usage_checked_at
-                        and detected.quota_state == "EXHAUSTED"
-                        and current.quota_state is None
+                        and (
+                            (
+                                detected.quota_state == "EXHAUSTED"
+                                and current.quota_state is None
+                            )
+                            or (
+                                current.status == "Needs attention"
+                                and detected.status != "Needs attention"
+                            )
+                        )
                     )
                 )
             ):
+                same_evidence = _provider_evidence(detected) == _provider_evidence(current)
                 self.states[provider_id] = replace(
                     detected,
                     automation_blocked_until=current.automation_blocked_until,
                     last_action=current.last_action,
+                    recovery_signature=(
+                        current.recovery_signature if same_evidence else None
+                    ),
+                    recovery_attempts=(
+                        current.recovery_attempts if same_evidence else 0
+                    ),
+                    recovery_not_before=(
+                        current.recovery_not_before if same_evidence else None
+                    ),
                 )
                 changed = True
         if changed:
@@ -232,5 +272,67 @@ class ApplicationController:
         self.states[state.provider_id] = state
         self._save()
 
+    def apply_operation_result(
+        self,
+        outcome: str,
+        state: ProviderViewState,
+        *,
+        now: float,
+    ) -> ProviderViewState:
+        """Persist a chain result with a bounded read-only recovery cadence."""
+        from .provider_runtime import chain_outcome_policy
+
+        policy = chain_outcome_policy(outcome)
+        if not policy.read_only_recovery:
+            applied = replace(
+                state,
+                recovery_signature=None,
+                recovery_attempts=0,
+                recovery_not_before=None,
+            )
+        else:
+            signature = _recovery_signature(outcome, state)
+            previous = self.states.get(state.provider_id)
+            attempts = (
+                previous.recovery_attempts + 1
+                if previous is not None
+                and previous.recovery_signature == signature
+                else 1
+            )
+            delay = min(
+                RECOVERY_MAX_SECONDS,
+                RECOVERY_INITIAL_SECONDS * (2 ** (attempts - 1)),
+            )
+            applied = replace(
+                state,
+                recovery_signature=signature,
+                recovery_attempts=attempts,
+                recovery_not_before=float(now) + delay,
+            )
+        self.update_provider_state(applied)
+        return applied
+
     def _save(self) -> None:
         self.store.save(self.settings, self.states)
+
+
+def _recovery_signature(outcome: str, state: ProviderViewState) -> str:
+    values = (
+        outcome,
+        state.quota_state,
+        state.reset_at,
+        state.used_percent,
+        state.weekly_used_percent,
+        state.weekly_reset_at,
+    )
+    return "|".join("" if value is None else str(value) for value in values)
+
+
+def _provider_evidence(state: ProviderViewState) -> tuple[object, ...]:
+    return (
+        state.quota_state,
+        state.reset_at,
+        state.used_percent,
+        state.weekly_used_percent,
+        state.weekly_reset_at,
+    )

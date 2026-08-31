@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, tzinfo
 
 
-RESET_BUFFER_SECONDS = 15
+RESET_BUFFER_SECONDS = 60
 CONTINUOUS = "continuous"
 DAILY = "daily"
 SCHEDULE_MODES = frozenset({CONTINUOUS, DAILY})

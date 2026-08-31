@@ -183,6 +183,52 @@ class ApplicationControllerTests(unittest.TestCase):
             self.assertEqual(200, recovered.last_verified_at)
             self.assertEqual(15, recovered.used_percent)
 
+    def test_materially_new_local_evidence_clears_recovery_backoff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            provider = FakeProvider(
+                ProviderViewState(
+                    "codex",
+                    "Codex",
+                    True,
+                    True,
+                    "Ready",
+                    "New fixed reset.",
+                    runtime_identity="runtime:1",
+                    reset_at=2_000,
+                    last_verified_at=200,
+                    used_percent=1,
+                    usage_checked_at=200,
+                    quota_state="ANCHORED",
+                )
+            )
+            controller = ApplicationController(
+                [provider], AppStateStore(Path(directory) / "state.json")
+            )
+            controller.start()
+            controller.states["codex"] = ProviderViewState(
+                "codex",
+                "Codex",
+                True,
+                True,
+                "Waiting",
+                "Old recovery state.",
+                runtime_identity="runtime:1",
+                reset_at=1_000,
+                used_percent=0,
+                usage_checked_at=100,
+                quota_state="UNANCHORED",
+                recovery_signature="old",
+                recovery_attempts=4,
+                recovery_not_before=1_900,
+            )
+
+            controller.refresh_local_states()
+
+            recovered = controller.states["codex"]
+            self.assertEqual("Ready", recovered.status)
+            self.assertEqual(0, recovered.recovery_attempts)
+            self.assertIsNone(recovered.recovery_not_before)
+
     def test_restart_migrates_legacy_exhausted_cache_back_to_recoverable_waiting(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AppStateStore(Path(directory) / "state.json")
@@ -225,7 +271,53 @@ class ApplicationControllerTests(unittest.TestCase):
 
             self.assertEqual("Waiting", controller.states["codex"].status)
             self.assertEqual("EXHAUSTED", controller.states["codex"].quota_state)
-            self.assertEqual("ROLLOVER", controller.decisions(now=1_015)["codex"].action)
+            self.assertEqual("WAIT", controller.decisions(now=1_059)["codex"].action)
+            self.assertEqual("ROLLOVER", controller.decisions(now=1_060)["codex"].action)
+
+    def test_equal_timestamp_recoverable_detection_unstrands_released_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            stranded = ProviderViewState(
+                "codex",
+                "Codex",
+                True,
+                True,
+                "Needs attention",
+                "Codex did not launch, so this opportunity remains recoverable.",
+                runtime_identity="runtime:1",
+                reset_at=1_000,
+                usage_checked_at=900,
+                quota_state="UNANCHORED",
+                last_action="Trigger Not Sent",
+            )
+            store.save(
+                AppSettings(
+                    True,
+                    False,
+                    True,
+                    {"codex": "runtime:1"},
+                    {"codex": "runtime:1"},
+                ),
+                {"codex": stranded},
+            )
+            detected = ProviderViewState(
+                "codex",
+                "Codex",
+                True,
+                True,
+                "Waiting",
+                "The last check did not prove a fixed reset.",
+                runtime_identity="runtime:1",
+                reset_at=1_000,
+                usage_checked_at=900,
+                quota_state="UNANCHORED",
+            )
+
+            controller = ApplicationController([FakeProvider(detected)], store)
+            controller.start()
+
+            self.assertEqual("Waiting", controller.states["codex"].status)
+            self.assertEqual("ROLLOVER", controller.decisions(now=1_060)["codex"].action)
 
 
 if __name__ == "__main__":

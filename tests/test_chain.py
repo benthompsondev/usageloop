@@ -32,7 +32,7 @@ def anchored(start=BOUNDARY + 20, *, used=1, weekly_used=10):
     ]
 
 
-def unanchored(start=BOUNDARY + 20, *, used=0, weekly_used=10):
+def unanchored(start=BOUNDARY + 60, *, used=0, weekly_used=10):
     return [
         snapshot(start + offset, start + offset + 18_000, used=used, weekly_used=weekly_used)
         for offset in (0, 10, 20, 30)
@@ -463,10 +463,19 @@ class ChainCoordinatorTests(unittest.TestCase):
 
     def test_reset_buffer_blocks_an_early_attempt(self):
         trigger = FakeTrigger()
-        policy = ChainPolicy(reset_buffer_seconds=60)
-        result = self.coordinator(trigger, policy).run(unanchored(), lambda: anchored())
+        result = self.coordinator(trigger).run(
+            unanchored(BOUNDARY + 29), lambda: anchored()
+        )
         self.assertEqual("RESET_BUFFER", result.status)
         self.assertEqual(0, trigger.calls)
+
+    def test_default_buffer_allows_one_attempt_at_sixty_seconds(self):
+        trigger = FakeTrigger()
+        result = self.coordinator(trigger).run(
+            unanchored(BOUNDARY + 60), lambda: anchored()
+        )
+        self.assertEqual("ANCHOR_VERIFIED", result.status)
+        self.assertEqual(1, trigger.calls)
 
 
 class BootstrapCoordinatorTests(unittest.TestCase):

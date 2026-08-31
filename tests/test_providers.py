@@ -12,6 +12,92 @@ from sentinel.provider_runtime import ProviderOperationResult
 
 
 class ProviderAdapterTests(unittest.TestCase):
+    def test_inconclusive_manual_sync_preserves_trusted_state_without_stranding(self):
+        class Runner:
+            def sync(self, runtime_identity):
+                return ProviderOperationResult(
+                    "SYNC_INCONCLUSIVE",
+                    ProviderViewState(
+                        "codex",
+                        "Codex",
+                        True,
+                        True,
+                        "Needs attention",
+                        "The read-only sync was inconclusive.",
+                        runtime_identity=runtime_identity,
+                    ),
+                    False,
+                )
+
+        current = ProviderViewState(
+            "codex",
+            "Codex",
+            True,
+            True,
+            "Waiting",
+            "Recovering after rollover.",
+            runtime_identity="runtime:1",
+            reset_at=1_000,
+            used_percent=10,
+            usage_checked_at=900,
+            weekly_used_percent=20,
+            weekly_reset_at=20_000,
+            quota_state="UNANCHORED",
+        )
+        provider = CodexProvider(operation_runner=Runner())
+
+        result = provider.sync_usage(current_state=current)
+
+        self.assertEqual("SYNC_INCONCLUSIVE", result.outcome)
+        self.assertEqual("Waiting", result.state.status)
+        self.assertEqual(1_000, result.state.reset_at)
+        self.assertEqual(10, result.state.used_percent)
+        self.assertEqual(20, result.state.weekly_used_percent)
+
+    def test_recoverable_rollover_keeps_the_authoritative_old_reset(self) -> None:
+        class Runner:
+            def run(self, mode, *, runtime_identity):
+                return ProviderOperationResult(
+                    "TRIGGER_NOT_SENT",
+                    ProviderViewState(
+                        "codex",
+                        "Codex",
+                        True,
+                        True,
+                        "Waiting",
+                        "No request was sent.",
+                        runtime_identity=runtime_identity,
+                        reset_at=20_000,
+                        usage_checked_at=140,
+                        quota_state="UNANCHORED",
+                    ),
+                    False,
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            current = ProviderViewState(
+                "codex",
+                "Codex",
+                True,
+                True,
+                "Waiting",
+                "The previous verified reset passed.",
+                runtime_identity="runtime:1",
+                reset_at=1_000,
+                last_verified_at=900,
+            )
+            provider = CodexProvider(
+                history=SafeHistory(Path(directory) / "history.jsonl"),
+                executable_finder=lambda: Path(__file__),
+                identity_reader=lambda _path: "runtime:1",
+                operation_runner=Runner(),
+            )
+
+            result = provider.run_action("rollover", current_state=current)
+
+            self.assertEqual(1_000, result.state.reset_at)
+            self.assertEqual(900, result.state.last_verified_at)
+
     def test_manual_sync_can_recover_even_when_saved_history_is_corrupt(self) -> None:
         class SyncRunner:
             def sync(self, runtime_identity):

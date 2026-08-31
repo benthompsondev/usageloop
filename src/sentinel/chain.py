@@ -9,6 +9,7 @@ import uuid
 from .classifier import Classification, classify
 from .history import SafeHistory, TriggerAttempt
 from .quota import QuotaSnapshot, QuotaWindow, select_five_hour, select_weekly
+from .schedule import RESET_BUFFER_SECONDS
 from .trigger import Trigger, TriggerDescription, TriggerRunResult
 
 
@@ -17,7 +18,7 @@ WEEKLY_PROTECTION_PERCENT = 99
 
 @dataclass(frozen=True)
 class ChainPolicy:
-    reset_buffer_seconds: float = 15.0
+    reset_buffer_seconds: float = RESET_BUFFER_SECONDS
     weekly_protection_percent: int = WEEKLY_PROTECTION_PERCENT
     bootstrap_cooldown_seconds: float = 18_000.0
     reservation_recovery_seconds: float = 120.0

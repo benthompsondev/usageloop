@@ -147,9 +147,23 @@ class CodexProvider:
         state = self.detect()
         identity = state.runtime_identity or "unavailable"
         result = self._operation_runner().run(mode, runtime_identity=identity)
+        result_state = result.state
+        if (
+            result.outcome not in {"ALREADY_ANCHORED", "ANCHOR_VERIFIED"}
+            and current_state is not None
+            and current_state.reset_at is not None
+        ):
+            # Sliding UNANCHORED resets are evidence for the classifier, not a
+            # new authoritative countdown. Keep showing the last verified
+            # boundary until post-trigger observations prove a replacement.
+            result_state = replace(
+                result_state,
+                reset_at=current_state.reset_at,
+                last_verified_at=current_state.last_verified_at,
+            )
         return replace(
             result,
-            state=replace(result.state, runtime_version=state.runtime_version),
+            state=replace(result_state, runtime_version=state.runtime_version),
         )
 
     def sync_usage(self, *, current_state: ProviderViewState | None = None):
@@ -159,7 +173,6 @@ class CodexProvider:
         if result.outcome == "SYNC_INCONCLUSIVE" and current_state is not None:
             synced_state = replace(
                 current_state,
-                status="Needs attention",
                 detail=result.state.detail,
                 runtime_identity=identity,
                 runtime_version=detected.runtime_version,

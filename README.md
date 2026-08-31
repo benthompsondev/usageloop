@@ -52,7 +52,7 @@ classifies several observations instead of trusting one timestamp.
 When automation is enabled, a rollover start is allowed only after:
 
 - four strong observations show the five-hour window is unanchored;
-- the known reset boundary and 15-second buffer have passed;
+- the known reset boundary and 60-second safety buffer have passed;
 - the official weekly Codex window is present and below 99% used;
 - no attempt has already been reserved for that opportunity;
 - the current Codex capabilities pass a lightweight compatibility probe.

@@ -1,3 +1,7 @@
+param(
+    [string]$PreviousInstaller
+)
+
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -18,6 +22,7 @@ $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $appId = $product.app_id.Trim('{}')
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{$appId}_is1"
 $shortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$($product.display_name)\$($product.display_name).lnk"
+$legacyStartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$($product.legacy_install_folder)"
 
 foreach ($required in @($installer, $builtExe)) {
     if (-not (Test-Path -LiteralPath $required)) {
@@ -27,7 +32,8 @@ foreach ($required in @($installer, $builtExe)) {
 
 New-Item -ItemType Directory -Path $legacyDir -Force | Out-Null
 New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
-Copy-Item -LiteralPath $builtExe -Destination $legacyExe -Force
+New-Item -ItemType Directory -Path $legacyStartMenu -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $legacyStartMenu 'Window Sentinel.lnk') -Value 'legacy fixture'
 
 @'
 {
@@ -47,18 +53,32 @@ Copy-Item -LiteralPath $builtExe -Destination $legacyExe -Force
 '@ | Set-Content -LiteralPath $stateFile -Encoding utf8
 '{"event":"error","timestamp":"2026-01-01T00:00:00Z","sentinel_version":"0.9.1","category":"clean_install_fixture"}' |
     Set-Content -LiteralPath $historyFile -Encoding ascii
-New-ItemProperty -LiteralPath $runKey -Name UsageLoop -Value ('"{0}" --background' -f $legacyExe) -PropertyType String -Force | Out-Null
 New-Item -Path $uninstallKey -Force | Out-Null
 New-ItemProperty -LiteralPath $uninstallKey -Name DisplayName -Value 'UsageLoop 0.9.1' -PropertyType String -Force | Out-Null
 New-ItemProperty -LiteralPath $uninstallKey -Name DisplayVersion -Value '0.9.1' -PropertyType String -Force | Out-Null
 New-ItemProperty -LiteralPath $uninstallKey -Name InstallLocation -Value $legacyDir -PropertyType String -Force | Out-Null
+New-ItemProperty -LiteralPath $uninstallKey -Name 'Inno Setup: App Path' -Value $legacyDir -PropertyType String -Force | Out-Null
 
-$env:QT_QPA_PLATFORM = 'offscreen'
-$legacyProcess = Start-Process -FilePath $legacyExe -ArgumentList '--background' -PassThru
-Start-Sleep -Seconds 3
-if ($legacyProcess.HasExited) {
-    throw 'The simulated legacy UsageLoop process did not stay running.'
+if ($PreviousInstaller) {
+    if (-not (Test-Path -LiteralPath $PreviousInstaller)) {
+        throw "Previous installer is missing: $PreviousInstaller"
+    }
+    $previous = Start-Process -FilePath $PreviousInstaller -ArgumentList @(
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/NORESTART'
+    ) -Wait -PassThru
+    if ($previous.ExitCode -ne 0) {
+        throw "Previous installer exited with code $($previous.ExitCode)."
+    }
+    if (-not (Test-Path -LiteralPath $legacyExe)) {
+        throw 'The 0.9.1 installer did not reproduce the legacy install location.'
+    }
+} else {
+    Copy-Item -LiteralPath $builtExe -Destination $legacyExe -Force
 }
+
+New-ItemProperty -LiteralPath $runKey -Name UsageLoop -Value ('"{0}" --background' -f $legacyExe) -PropertyType String -Force | Out-Null
 
 $setup = Start-Process -FilePath $installer -ArgumentList @(
     '/VERYSILENT',
@@ -72,6 +92,7 @@ if ($setup.ExitCode -ne 0) {
 
 if (-not (Test-Path -LiteralPath $canonicalExe)) { throw 'Canonical executable was not installed.' }
 if (Test-Path -LiteralPath $legacyDir) { throw 'Legacy install directory was not removed.' }
+if (Test-Path -LiteralPath $legacyStartMenu) { throw 'Legacy Start menu group was not removed.' }
 if (-not (Test-Path -LiteralPath $shortcut)) { throw 'Start menu shortcut was not created.' }
 $installedVersion = (Get-Item -LiteralPath $canonicalExe).VersionInfo.ProductVersion.Trim()
 if ($installedVersion -ne $product.version) { throw "Installed version was $installedVersion, not $($product.version)." }
@@ -85,7 +106,19 @@ $uninstallEntries = @(
 )
 if ($uninstallEntries.Count -ne 1) { throw "Expected one UsageLoop uninstall entry, found $($uninstallEntries.Count)." }
 if ($uninstallEntries[0].DisplayVersion -ne $product.version) { throw "Uninstall metadata did not upgrade to $($product.version)." }
+if ($uninstallEntries[0].InstallLocation.TrimEnd('\') -ne $canonicalDir.TrimEnd('\')) {
+    throw "Uninstall metadata points at the wrong install location: $($uninstallEntries[0].InstallLocation)"
+}
+$uninstallTarget = [regex]::Match($uninstallEntries[0].UninstallString, '^"([^"]+)"').Groups[1].Value
+if (-not $uninstallTarget -or -not (Test-Path -LiteralPath $uninstallTarget)) {
+    throw "Uninstall target is missing: $($uninstallEntries[0].UninstallString)"
+}
+$startupAfterSetup = (Get-ItemProperty -LiteralPath $runKey -Name UsageLoop).UsageLoop
+if ($startupAfterSetup -ne ('"{0}" --background' -f $canonicalExe)) {
+    throw "Installer did not migrate startup to the canonical executable: $startupAfterSetup"
+}
 
+$env:QT_QPA_PLATFORM = 'offscreen'
 $first = Start-Process -FilePath $canonicalExe -ArgumentList '--background' -PassThru
 Start-Sleep -Seconds 3
 if ($first.HasExited) { throw 'Installed UsageLoop did not stay running.' }
@@ -121,6 +154,7 @@ $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
 if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)." }
 if (Test-Path -LiteralPath $canonicalDir) { throw 'Canonical install directory remained after uninstall.' }
 if (Test-Path -LiteralPath $shortcut) { throw 'Start menu shortcut remained after uninstall.' }
+if (Test-Path -LiteralPath $legacyStartMenu) { throw 'Legacy Start menu group remained after uninstall.' }
 if ((Get-ItemProperty -LiteralPath $runKey -Name UsageLoop -ErrorAction SilentlyContinue).UsageLoop) {
     throw 'UsageLoop startup registration remained after uninstall.'
 }

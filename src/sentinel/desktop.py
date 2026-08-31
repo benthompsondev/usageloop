@@ -778,7 +778,12 @@ class MainWindow(QMainWindow):
         if isinstance(result, CompatibilityResult):
             self.controller.apply_compatibility(provider_id, result)
         elif isinstance(result, ProviderOperationResult):
-            self.controller.update_provider_state(result.state)
+            if action == "sync":
+                self.controller.update_provider_state(result.state)
+            else:
+                self.controller.apply_operation_result(
+                    result.outcome, result.state, now=time.time()
+                )
             if action == "sync":
                 self.provider_cards[provider_id].set_sync_state(
                     "updated" if result.outcome == "SYNC_UPDATED" else "inconclusive"

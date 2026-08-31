@@ -45,7 +45,7 @@ local app-server observation
 
 - Four observations spanning at least 30 seconds are required for a
   quota-consuming desktop decision.
-- A rollover uses the previously verified absolute reset plus a 15-second
+- A rollover uses the previously verified absolute reset plus a 60-second
   buffer. Bootstrap is explicit and uses a one-full-window cooldown.
 - The official approximately seven-day Codex window must be unique and below
   99% used.

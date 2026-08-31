@@ -30,7 +30,7 @@ class ScheduleTests(unittest.TestCase):
     def test_reset_exactly_at_daily_time_uses_same_day_after_safety_buffer(self):
         boundary = timestamp(2026, 8, 31, 4, 0)
         self.assertEqual(
-            boundary + 15,
+            boundary + 60,
             next_daily_start_after(boundary, 4, 0, timezone=TORONTO),
         )
 
@@ -48,6 +48,22 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(timestamp(2026, 8, 31, 4, 0), due)
         self.assertTrue(summary.due)
         self.assertEqual(due, summary.next_action_at)
+
+    def test_continuous_is_not_due_until_the_full_safety_minute(self):
+        boundary = timestamp(2026, 8, 31, 3, 32)
+        at_reset = schedule_summary(
+            "continuous", boundary_reset_at=boundary, now=boundary
+        )
+        at_59 = schedule_summary(
+            "continuous", boundary_reset_at=boundary, now=boundary + 59
+        )
+        at_60 = schedule_summary(
+            "continuous", boundary_reset_at=boundary, now=boundary + 60
+        )
+        self.assertFalse(at_reset.due)
+        self.assertFalse(at_59.due)
+        self.assertTrue(at_60.due)
+        self.assertEqual(boundary + 60, at_60.next_action_at)
 
     def test_dst_spring_gap_normalizes_to_first_real_local_time(self):
         boundary = timestamp(2027, 3, 14, 0, 30)

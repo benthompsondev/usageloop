@@ -47,6 +47,10 @@ class AppStateTests(unittest.TestCase):
                 last_action="Verified window",
                 used_percent=4,
                 usage_checked_at=1_999_990_000,
+                outcome_category="RECOVERABLE",
+                recovery_signature="NOT_ELIGIBLE|UNKNOWN|2000000000|4||",
+                recovery_attempts=2,
+                recovery_not_before=1_999_990_120,
             )
             store.save(settings, {"codex": state})
             loaded = store.load()
@@ -275,13 +279,13 @@ class AppStateTests(unittest.TestCase):
         before = automation_decision(
             True,
             state,
-            now=1_014,
+            now=1_059,
             compatible_runtime_identity="native:same",
         )
         after = automation_decision(
             True,
             state,
-            now=1_015,
+            now=1_060,
             compatible_runtime_identity="native:same",
         )
 

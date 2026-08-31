@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from .product import PRODUCT
-from .schedule import CONTINUOUS, DAILY, SCHEDULE_MODES, schedule_summary
+from .schedule import (
+    CONTINUOUS,
+    DAILY,
+    RESET_BUFFER_SECONDS,
+    SCHEDULE_MODES,
+    schedule_summary,
+)
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,10 @@ class ProviderViewState:
     automation_blocked_until: float | None = None
     retry_after_restart: bool = False
     quota_state: str | None = None
+    outcome_category: str | None = None
+    recovery_signature: str | None = None
+    recovery_attempts: int = 0
+    recovery_not_before: float | None = None
 
     @classmethod
     def waiting(
@@ -108,6 +118,8 @@ def automation_decision(
         return AutomationDecision("NONE", "Provider automation is unavailable.")
     if state.status == "Needs attention":
         return AutomationDecision("NONE", "Provider needs explicit attention.")
+    if state.recovery_not_before is not None and now < state.recovery_not_before:
+        return AutomationDecision("WAIT", "Read-only recovery is backing off.")
     if state.automation_blocked_until is not None and now < state.automation_blocked_until:
         return AutomationDecision("WAIT", "A guarded provider action is already recorded.")
     if state.runtime_identity != compatible_runtime_identity:
@@ -133,7 +145,7 @@ def automation_decision(
                 "ROLLOVER", "The selected daily start is due after the verified reset."
             )
         return AutomationDecision("ROLLOVER", "The verified reset boundary has passed.")
-    if schedule_mode == DAILY and now >= state.reset_at + 15:
+    if schedule_mode == DAILY and now >= state.reset_at + RESET_BUFFER_SECONDS:
         return AutomationDecision("WAIT", "Waiting for the selected daily start time.")
     return AutomationDecision("WAIT", "The countdown is maintained locally.")
 
@@ -155,6 +167,8 @@ _OPTIONAL_TEXT_FIELDS = (
     "runtime_version",
     "last_action",
     "quota_state",
+    "outcome_category",
+    "recovery_signature",
 )
 _BOOL_FIELDS = ("installed", "automation_supported", "retry_after_restart")
 _INT_FIELDS = ("reset_at", "weekly_reset_at")
@@ -164,6 +178,7 @@ _FLOAT_FIELDS = (
     "usage_checked_at",
     "weekly_used_percent",
     "automation_blocked_until",
+    "recovery_not_before",
 )
 
 
@@ -189,6 +204,12 @@ def _coerce_provider_fields(value: dict[str, Any]) -> dict[str, Any]:
             cleaned[key] = int(raw) if _is_finite_number(raw) else None
         elif key in _FLOAT_FIELDS:
             cleaned[key] = float(raw) if _is_finite_number(raw) else None
+        elif key == "recovery_attempts":
+            cleaned[key] = (
+                int(raw)
+                if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0
+                else 0
+            )
         else:
             raise ValueError(f"unknown provider field {key}")
     return cleaned

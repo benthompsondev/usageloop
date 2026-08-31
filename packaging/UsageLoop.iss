@@ -2,7 +2,7 @@
   #define AppName "UsageLoop"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.1"
 #endif
 #ifndef AppExeName
   #define AppExeName "UsageLoop.exe"
@@ -52,7 +52,6 @@ Source: "..\dist\{#DistFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recurs
 
 [InstallDelete]
 Type: files; Name: "{app}\UsageLoopStatus.exe"
-Type: filesandordirs; Name: "{localappdata}\Programs\{#LegacyInstallFolder}"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
@@ -62,3 +61,40 @@ Filename: "{app}\{#AppExeName}"; Description: "Open {#AppName}"; Flags: nowait p
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  StartupCommand: String;
+begin
+  if CurStep <> ssPostInstall then
+    Exit;
+
+  { Preserve the user's existing startup choice while repairing its executable. }
+  if RegQueryStringValue(
+    HKCU,
+    'Software\Microsoft\Windows\CurrentVersion\Run',
+    '{#AppName}',
+    StartupCommand
+  ) then
+    RegWriteStringValue(
+      HKCU,
+      'Software\Microsoft\Windows\CurrentVersion\Run',
+      '{#AppName}',
+      '"' + ExpandConstant('{app}\{#AppExeName}') + '" --background'
+    );
+
+  { Delete legacy files only after the new install and uninstall metadata exist. }
+  DelTree(
+    ExpandConstant('{localappdata}\Programs\{#LegacyInstallFolder}'),
+    True,
+    True,
+    True
+  );
+  DelTree(
+    ExpandConstant('{userprograms}\{#LegacyInstallFolder}'),
+    True,
+    True,
+    True
+  );
+end;

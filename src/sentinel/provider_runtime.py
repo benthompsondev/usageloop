@@ -30,6 +30,56 @@ class ProviderOperationResult:
     request_possibly_sent: bool
 
 
+@dataclass(frozen=True)
+class ChainOutcomePolicy:
+    category: str
+    view_status: str
+    read_only_recovery: bool
+    future_trigger_permitted: bool
+    user_attention: bool
+
+
+_READY_OUTCOMES = {"ALREADY_ANCHORED", "ANCHOR_VERIFIED"}
+_RECOVERABLE_OUTCOMES = {
+    "EVIDENCE_TOO_WEAK",
+    "ROLLOVER_BOUNDARY_UNKNOWN",
+    "TRIGGER_NOT_SENT",
+    "RESET_BUFFER",
+    "NOT_ELIGIBLE",
+}
+_PROTECTED_OUTCOMES = {
+    "WEEKLY_UNAVAILABLE",
+    "WEEKLY_EXHAUSTED",
+    "BOOTSTRAP_USAGE_UNSUITABLE",
+}
+_GUARDED_OUTCOMES = {
+    "ATTEMPT_ALREADY_RECORDED",
+    "BOOTSTRAP_COOLDOWN",
+    "VERIFICATION_UNAVAILABLE",
+    "ANCHOR_NOT_VERIFIED",
+}
+
+
+def chain_outcome_policy(outcome: str) -> ChainOutcomePolicy:
+    """Describe what the desktop may do after one bounded chain operation.
+
+    The history reservation remains the authority on duplicate turns. This
+    policy only controls presentation and whether later read-only recovery is
+    allowed; it never bypasses the chain coordinator's evidence gates.
+    """
+    if outcome in _READY_OUTCOMES:
+        return ChainOutcomePolicy("READY", "Ready", False, False, False)
+    if outcome in _RECOVERABLE_OUTCOMES:
+        return ChainOutcomePolicy("RECOVERABLE", "Waiting", True, True, False)
+    if outcome in _PROTECTED_OUTCOMES:
+        return ChainOutcomePolicy("PROTECTED", "Protected", True, True, False)
+    if outcome in _GUARDED_OUTCOMES:
+        return ChainOutcomePolicy("GUARDED", "Guarded", True, False, False)
+    return ChainOutcomePolicy(
+        "USER_ATTENTION", "Needs attention", False, False, True
+    )
+
+
 class CodexOperationRunner:
     def __init__(
         self,
@@ -207,23 +257,25 @@ class CodexOperationRunner:
         latest = observations[-1] if observations else None
         selected = select_five_hour(latest).window if latest is not None else None
         weekly = select_weekly(latest) if latest is not None else None
-        ready = outcome in {"ALREADY_ANCHORED", "ANCHOR_VERIFIED"}
-        waiting = outcome in {"RESET_BUFFER", "NOT_ELIGIBLE"} and classification_state != "UNKNOWN"
+        policy = chain_outcome_policy(outcome)
         return ProviderViewState(
             provider_id="codex",
             display_name="Codex",
             installed=True,
             automation_supported=True,
-            status="Ready" if ready else ("Waiting" if waiting else "Needs attention"),
+            status=policy.view_status,
             detail=reason,
             runtime_identity=runtime_identity,
             runtime_version=None,
             reset_at=selected.resets_at if selected else None,
-            last_verified_at=(latest.observed_at if ready and latest else None),
+            last_verified_at=(
+                latest.observed_at if policy.category == "READY" and latest else None
+            ),
             last_action=outcome.replace("_", " ").title(),
             used_percent=selected.used_percent if selected else None,
             usage_checked_at=latest.observed_at if latest else None,
             weekly_used_percent=weekly.used_percent if weekly else None,
             weekly_reset_at=weekly.resets_at if weekly else None,
             quota_state=classification_state,
+            outcome_category=policy.category,
         )

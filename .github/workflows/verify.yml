@@ -39,5 +39,10 @@ jobs:
           choco install innosetup --no-progress -y
       - name: Build Windows package
         run: .\scripts\build-windows.ps1
-      - name: Verify clean install and uninstall
-        run: .\scripts\verify-clean-install.ps1
+      - name: Download the published 0.9.1 installer
+        run: |
+          Invoke-WebRequest `
+            -Uri 'https://github.com/benthompsondev/usageloop/releases/download/v0.9.1/UsageLoop-Setup.exe' `
+            -OutFile "$env:RUNNER_TEMP\UsageLoop-Setup-0.9.1.exe"
+      - name: Verify 0.9.1 upgrade and uninstall
+        run: .\scripts\verify-clean-install.ps1 -PreviousInstaller "$env:RUNNER_TEMP\UsageLoop-Setup-0.9.1.exe"

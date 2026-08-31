@@ -72,6 +72,13 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("DefaultDirName={localappdata}\\Programs\\{#AppName}", installer)
         self.assertIn("UsePreviousAppDir=no", installer)
         self.assertIn("{#LegacyInstallFolder}", installer)
+        self.assertIn("CurStepChanged", installer)
+        self.assertIn("RegWriteStringValue", installer)
+        self.assertIn("{userprograms}\\{#LegacyInstallFolder}", installer)
+        self.assertNotIn(
+            'Type: filesandordirs; Name: "{localappdata}\\Programs\\{#LegacyInstallFolder}"',
+            installer,
+        )
         self.assertNotIn("app-state.json", installer)
         self.assertNotIn("[UninstallDelete]", installer)
         self.assertNotIn("uninsdeletekey", installer.lower())

@@ -298,6 +298,7 @@ def technical_summary(
                 f"  Version: {version}",
                 f"  Compatibility: {compatibility}",
                 f"  Raw state: {state.status}",
+                f"  Outcome category: {state.outcome_category or 'not recorded'}",
                 f"  Detail: {state.detail}",
             ]
         )
