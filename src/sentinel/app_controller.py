@@ -30,6 +30,20 @@ class ApplicationController:
 
     def start(self) -> None:
         self.settings = self.store.load()
+        active_provider_ids = set(self.providers)
+        self.settings = replace(
+            self.settings,
+            compatible_runtime_identities={
+                key: value
+                for key, value in (self.settings.compatible_runtime_identities or {}).items()
+                if key in active_provider_ids
+            },
+            checked_runtime_identities={
+                key: value
+                for key, value in (self.settings.checked_runtime_identities or {}).items()
+                if key in active_provider_ids
+            },
+        )
         cached = self.store.load_provider_cache()
         checked = self.settings.checked_runtime_identities or {}
         compatible = self.settings.compatible_runtime_identities or {}

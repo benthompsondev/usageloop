@@ -4,22 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import ctypes
-import os
 from pathlib import Path
-import shutil
 import time
 from typing import Callable
 
 from .app_state import ProviderViewState
 from .classifier import classify
 from .history import SafeHistory
-from .quota import select_five_hour
+from .quota import select_five_hour, select_weekly
 from .transport import find_codex_executable
 
-
-#: A statusLine reading newer than this is preferred over Desktop history,
-#: because it carries a reported reset rather than a derived one.
-_STATUSLINE_PREFERRED_AGE = 45 * 60
 
 ExecutableFinder = Callable[[], Path | None]
 IdentityReader = Callable[[Path], str]
@@ -106,6 +100,7 @@ class CodexProvider:
         classification = classify(snapshots)
         latest = snapshots[-1]
         selected = select_five_hour(latest).window
+        weekly = select_weekly(latest)
         if selected is None:
             return state
         status = {
@@ -131,6 +126,8 @@ class CodexProvider:
             last_verified_at=latest.observed_at if classification.state == "ANCHORED" else None,
             used_percent=selected.used_percent,
             usage_checked_at=latest.observed_at,
+            weekly_used_percent=weekly.used_percent if weekly else None,
+            weekly_reset_at=weekly.resets_at if weekly else None,
         )
 
     def probe(self) -> CompatibilityResult:
@@ -155,295 +152,6 @@ class CodexProvider:
 
             self._runner = CodexOperationRunner(self.history)
         return self._runner
-
-
-class ClaudeProvider:
-    provider_id = "claude"
-    display_name = "Claude Code"
-
-    def __init__(
-        self,
-        *,
-        executable_finder: ExecutableFinder | None = None,
-        identity_reader: IdentityReader | None = None,
-        version_reader: VersionReader | None = None,
-        operation_runner: object | None = None,
-        status_store: object | None = None,
-        status_integration: object | None = None,
-        desktop_observer: Callable[[float], object] | None = None,
-        now: Callable[[], float] = time.time,
-    ):
-        self._find = executable_finder or find_claude_executable
-        self._identity = identity_reader or file_runtime_identity
-        self._version = version_reader or windows_file_version
-        self._runner = operation_runner
-        self._status_store = status_store
-        self._status_integration = status_integration
-        self._desktop_observer = desktop_observer
-        self._now = now
-
-    def detect(self) -> ProviderViewState:
-        executable = self._find()
-        if executable is None:
-            return ProviderViewState(
-                self.provider_id,
-                self.display_name,
-                False,
-                False,
-                "Needs attention",
-                "Claude Code was not found on this PC.",
-            )
-        state = ProviderViewState(
-            self.provider_id,
-            self.display_name,
-            True,
-            True,
-            "Waiting",
-            "Detected. Compatibility will be checked when automation is enabled.",
-            self._identity(executable),
-            self._version(executable),
-        )
-        self._statusline_integration().upgrade_owned_registration()
-        status = self._quota_status_store().load()
-        now = self._now()
-        if status is None or now - status.observed_at > _STATUSLINE_PREFERRED_AGE:
-            desktop = self._desktop_observation(now)
-            if desktop is not None:
-                return desktop
-        if status is None:
-            return state
-        now = self._now()
-        ready = status.last_five_hour_reset_at is not None and status.last_five_hour_reset_at > now
-        trigger_verified = False
-        if ready and status.last_five_hour_reset_at is not None:
-            try:
-                trigger_verified = self._operation_runner().verify_observed_reset(
-                    status.last_five_hour_reset_at,
-                    observed_at=status.observed_at,
-                )
-            except Exception:
-                return replace(
-                    state,
-                    status="Needs attention",
-                    detail="Claude attempt history could not be verified safely.",
-                    reset_at=status.last_five_hour_reset_at,
-                    used_percent=status.five_hour_used_percent,
-                    usage_checked_at=status.observed_at,
-                    weekly_used_percent=status.weekly_used_percent,
-                    weekly_reset_at=status.weekly_reset_at,
-                )
-        return replace(
-            state,
-            status="Ready" if ready else "Waiting",
-            detail=(
-                "The last observed Claude five-hour window is ready."
-                if ready
-                else "Claude status shows no active five-hour countdown."
-            ),
-            reset_at=status.last_five_hour_reset_at,
-            last_verified_at=status.observed_at if ready else None,
-            used_percent=status.five_hour_used_percent,
-            usage_checked_at=status.observed_at,
-            weekly_used_percent=status.weekly_used_percent,
-            weekly_reset_at=status.weekly_reset_at,
-            last_action="Initialization verified" if trigger_verified else None,
-        )
-
-    def _desktop_observation(self, now: float) -> ProviderViewState | None:
-        """Read Claude Desktop's own usage samples when statusLine never fires.
-
-        Desktop Code does not invoke the statusLine helper, so for Desktop users
-        this is the only local machine-readable evidence available. The reset it
-        yields is derived rather than reported, so it is surfaced for display and
-        deliberately carries no weekly reset timestamp. That keeps the existing
-        weekly guard blocking any Claude action, which is the honest outcome
-        while Desktop initialization remains unproven.
-        """
-        from . import claude_desktop
-
-        observer = self._desktop_observer or (lambda moment: claude_desktop.observe(now=moment))
-        try:
-            window = observer(now)
-        except Exception:
-            return None
-        if window is None:
-            return None
-        executable = self._find()
-        base = ProviderViewState(
-            self.provider_id,
-            self.display_name,
-            True,
-            True,
-            "Waiting",
-            "",
-            self._identity(executable) if executable else None,
-            self._version(executable) if executable else None,
-            # Desktop reports a usage percentage but no weekly reset timestamp,
-            # so the mandatory weekly guard can never be satisfied from it. This
-            # evidence is observation-only: holding the decision for a full
-            # window keeps the dashboard truthful without a retry loop that
-            # would send nothing anyway. A statusLine reading, when one exists,
-            # takes priority and carries no such hold.
-            automation_blocked_until=(
-                max(window.observed_at, window.estimated_reset_at or 0)
-                + claude_desktop.FIVE_HOURS_SECONDS
-            ),
-        )
-        if window.stale:
-            return replace(
-                base,
-                status="Waiting",
-                detail="Claude Desktop has not recorded usage recently, so this reading is old.",
-                used_percent=window.five_hour_percent,
-                usage_checked_at=window.observed_at,
-            )
-        if not window.active:
-            return replace(
-                base,
-                status="Waiting",
-                detail="Claude Desktop reports no five-hour window running right now.",
-                used_percent=window.five_hour_percent,
-                usage_checked_at=window.observed_at,
-            )
-        return replace(
-            base,
-            status="Ready",
-            detail=(
-                "Read from Claude Desktop's own usage history. The reset time is "
-                "estimated from when usage restarted, not reported by Claude."
-            ),
-            reset_at=window.estimated_reset_at,
-            # Deliberately not last_verified_at: a derived boundary is not a
-            # verified one, and nothing downstream should treat it as proof.
-            used_percent=window.five_hour_percent,
-            usage_checked_at=window.observed_at,
-            weekly_used_percent=window.seven_day_percent,
-            weekly_reset_at=None,
-        )
-
-    def probe(self) -> CompatibilityResult:
-        executable = self._find()
-        if executable is None:
-            return CompatibilityResult(
-                False,
-                "Needs attention",
-                "Claude Code was not found, so automation is paused.",
-                "unavailable",
-            )
-        identity = self._identity(executable)
-        result = self._operation_runner().probe(identity, executable)
-        if not result.compatible:
-            return result
-        registration = self._statusline_integration().ensure_registered()
-        if registration.compatible:
-            return result
-        return CompatibilityResult(
-            False,
-            "Needs attention",
-            registration.detail,
-            identity,
-        )
-
-    def run_action(
-        self, mode: str, *, current_state: ProviderViewState | None = None
-    ):
-        from .provider_runtime import ProviderOperationResult
-
-        executable = self._find()
-        if executable is None:
-            state = current_state or self.detect()
-            return ProviderOperationResult("CLAUDE_NOT_FOUND", state, False)
-        state = current_state or self.detect()
-        current_identity = self._identity(executable)
-        if state.runtime_identity != current_identity:
-            return ProviderOperationResult(
-                "CLAUDE_RUNTIME_CHANGED",
-                replace(
-                    state,
-                    automation_supported=False,
-                    status="Needs attention",
-                    detail="Claude changed after its compatibility check, so initialization was paused.",
-                    runtime_identity=current_identity,
-                ),
-                False,
-            )
-        result = self._operation_runner().run(
-            mode,
-            executable=executable,
-            runtime_identity=current_identity,
-            state=state,
-        )
-        return ProviderOperationResult(result.outcome, result.state, result.effect_possible)
-
-    def _operation_runner(self):
-        if self._runner is None:
-            from .claude_runtime import ClaudeOperationRunner
-
-            self._runner = ClaudeOperationRunner()
-        return self._runner
-
-    def _quota_status_store(self):
-        if self._status_store is None:
-            from .claude_status import ClaudeStatusStore
-
-            self._status_store = ClaudeStatusStore()
-        return self._status_store
-
-    def _statusline_integration(self):
-        if self._status_integration is None:
-            from .claude_status import ClaudeStatusLineIntegration
-
-            self._status_integration = ClaudeStatusLineIntegration()
-        return self._status_integration
-
-
-def desktop_claude_executables() -> tuple[Path, ...]:
-    """Claude Code binaries bundled inside the Claude Desktop app, newest first.
-
-    Desktop ships and updates its own copy under
-    ``%APPDATA%/Claude/claude-code/<version>/``. It is a different install from
-    the terminal CLI and, on this machine, the one that is actually signed in.
-    """
-    base = os.environ.get("APPDATA")
-    root = Path(base) if base else Path.home() / "AppData" / "Roaming"
-    versions = root / "Claude" / "claude-code"
-    try:
-        candidates = [
-            child / "claude.exe"
-            for child in versions.iterdir()
-            if child.is_dir() and (child / "claude.exe").is_file()
-        ]
-    except OSError:
-        return ()
-    candidates.sort(key=lambda path: _version_key(path.parent.name), reverse=True)
-    return tuple(candidates)
-
-
-def _version_key(name: str) -> tuple[int, ...]:
-    parts = []
-    for chunk in name.split("."):
-        parts.append(int(chunk) if chunk.isdigit() else 0)
-    return tuple(parts)
-
-
-def find_claude_executable() -> Path | None:
-    """Prefer the Desktop-bundled Claude Code over the standalone terminal CLI.
-
-    Both can exist side by side with different versions and, importantly,
-    different sign-in state. Desktop keeps its own token cache, so a logged-out
-    terminal CLI says nothing about whether Desktop is working.
-    """
-    for candidate in desktop_claude_executables():
-        return candidate
-    home = Path.home()
-    for candidate in (
-        home / ".local" / "bin" / "claude.exe",
-        home / "AppData" / "Local" / "Programs" / "Claude" / "claude.exe",
-    ):
-        if candidate.is_file():
-            return candidate
-    resolved = shutil.which("claude.exe") or shutil.which("claude")
-    return Path(resolved) if resolved else None
 
 
 def file_runtime_identity(executable: Path) -> str:

@@ -129,6 +129,8 @@ class CodexOperationRunnerTests(unittest.TestCase):
             self.assertEqual("ALREADY_ANCHORED", result.outcome)
             self.assertEqual("Ready", result.state.status)
             self.assertEqual(18_000, result.state.reset_at)
+            self.assertEqual(20, result.state.weekly_used_percent)
+            self.assertEqual(900_000, result.state.weekly_reset_at)
             self.assertEqual(0, client.turn_calls)
 
 

@@ -158,10 +158,10 @@ class SummaryTests(unittest.TestCase):
         )
 
     def test_every_expected_row_is_present(self):
-        rows = self.rows(states={"codex": state(), "claude": state(provider_id="claude", display_name="Claude Code")})
+        rows = self.rows(states={"codex": state()})
         labels = [row.label for row in rows]
         self.assertEqual(
-            ["Codex", "Claude Code", "Automation", "Local data", "Windows startup"],
+            ["Codex installed", "5-hour window", "Weekly allowance", "Automation", "Local state", "Windows startup"],
             labels,
         )
 
@@ -183,7 +183,7 @@ class SummaryTests(unittest.TestCase):
     def test_all_good_requires_automation_on_and_a_ready_provider(self):
         rows = self.rows(
             automation=True,
-            states={"codex": state(reset_at=int(NOW + 9000), last_verified_at=NOW)},
+            states={"codex": state(status="Ready", reset_at=int(NOW + 9000), last_verified_at=NOW, weekly_used_percent=10)},
         )
         summary = overall_summary(rows, automation_enabled=True)
         self.assertEqual("All good", summary.status)
@@ -202,31 +202,11 @@ class SummaryTests(unittest.TestCase):
         summary = overall_summary(rows, automation_enabled=True)
         self.assertEqual("Setup OK", summary.status)
 
-    def test_one_ready_provider_does_not_hide_an_unchecked_provider(self):
-        rows = self.rows(
-            automation=True,
-            states={
-                "codex": state(
-                    reset_at=int(NOW + 9000),
-                    last_verified_at=NOW,
-                    usage_checked_at=NOW,
-                ),
-                "claude": state(
-                    provider_id="claude",
-                    display_name="Claude Code",
-                    runtime_identity="claude:1",
-                ),
-            },
-        )
-        summary = overall_summary(rows, automation_enabled=True)
-        self.assertEqual("Partly ready", summary.status)
-        self.assertEqual("info", summary.tone)
-
     def test_automation_row_states_the_off_guarantee(self):
         rows = self.rows(automation=False)
         automation = next(row for row in rows if row.label == "Automation")
         self.assertEqual("Off", automation.status)
-        self.assertIn("Nothing is sent", automation.detail)
+        self.assertIn("No Codex request is sent", automation.detail)
 
 
 class TechnicalSummaryTests(unittest.TestCase):
@@ -262,21 +242,12 @@ class TechnicalSummaryTests(unittest.TestCase):
             self.assertNotIn(banned, text)
         self.assertNotIn("prompt:", text)
 
-    def test_summary_explains_both_providers_for_troubleshooting(self):
+    def test_summary_explains_codex_mechanism_for_troubleshooting(self):
         text = self.summary()
-        self.assertIn("Provider support", text)
-        self.assertIn("Codex: verified", text)
-        self.assertIn("Claude Code: preview", text)
-
-    def test_summary_records_the_two_claude_hosts_and_their_channels(self):
-        """The Desktop/terminal split is the thing a bug report needs to say."""
-        text = self.summary()
-        self.assertIn("terminal CLI", text)
-        self.assertIn("Claude Desktop", text)
-        self.assertIn("plan-usage history", text)
-        self.assertIn("estimate", text)
-        self.assertIn("weekly guard cannot pass", text)
-        self.assertIn("unproven", text)
+        self.assertIn("Codex support", text)
+        self.assertIn("account/rateLimits/read", text)
+        self.assertIn("thread/start + turn/start", text)
+        self.assertNotIn("Claude", text)
 
 
 if __name__ == "__main__":

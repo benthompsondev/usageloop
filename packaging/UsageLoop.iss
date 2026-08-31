@@ -22,10 +22,6 @@
 #ifndef DistFolder
   #define DistFolder "UsageLoop"
 #endif
-#ifndef StatusHelperName
-  #define StatusHelperName "UsageLoopStatus.exe"
-#endif
-
 [Setup]
 AppId={#AppId}
 AppName={#AppName}
@@ -50,14 +46,14 @@ RestartApplications=no
 [Files]
 Source: "..\dist\{#DistFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+Type: files; Name: "{app}\UsageLoopStatus.exe"
+
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent
-
-[UninstallRun]
-Filename: "{app}\{#StatusHelperName}"; Parameters: "--unregister"; RunOnceId: "RemoveUsageLoopClaudeStatusLine"; Flags: runhidden
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey

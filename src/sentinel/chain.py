@@ -8,7 +8,7 @@ import uuid
 
 from .classifier import Classification, classify
 from .history import SafeHistory, TriggerAttempt
-from .quota import QuotaSnapshot, QuotaWindow, select_five_hour
+from .quota import QuotaSnapshot, QuotaWindow, select_five_hour, select_weekly
 from .trigger import Trigger, TriggerDescription, TriggerRunResult
 
 
@@ -470,10 +470,4 @@ def _bootstrap_usage_suitable(observations: Sequence[QuotaSnapshot]) -> bool:
 
 
 def _select_weekly(snapshot: QuotaSnapshot) -> QuotaWindow | None:
-    candidates = [
-        window
-        for window in snapshot.windows
-        if window.duration_minutes is not None and 9000 <= window.duration_minutes <= 11100
-    ]
-    official = [window for window in candidates if window.limit_id == "codex"]
-    return official[0] if len(official) == 1 else None
+    return select_weekly(snapshot)

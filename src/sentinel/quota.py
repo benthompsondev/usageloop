@@ -97,6 +97,22 @@ def select_five_hour(snapshot: QuotaSnapshot) -> FiveHourSelection:
     )
 
 
+def select_weekly(snapshot: QuotaSnapshot) -> QuotaWindow | None:
+    """Return the sole official approximately seven-day Codex window.
+
+    The dashboard and the trigger safety gate use the same conservative rule:
+    an absent, duplicated, or differently identified bucket is not guessed at.
+    """
+    candidates = [
+        window
+        for window in snapshot.windows
+        if window.duration_minutes is not None
+        and 9000 <= window.duration_minutes <= 11100
+        and window.limit_id == "codex"
+    ]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _safe_limit_id(value: Any) -> str | None:
     if isinstance(value, str) and _SAFE_LIMIT_ID.fullmatch(value):
         return value

@@ -173,8 +173,11 @@ class MainWindow(QMainWindow):
         first.setObjectName("wordmarkPrimary")
         second = QLabel("Loop")
         second.setObjectName("wordmarkAccent")
+        for_codex = QLabel("  for Codex")
+        for_codex.setObjectName("wordmarkQualifier")
         wordmark.addWidget(first)
         wordmark.addWidget(second)
+        wordmark.addWidget(for_codex)
         wordmark.addStretch()
         self.tagline_label = ElidingLabel(PRODUCT.tagline)
         self.tagline_label.setObjectName("appPurpose")
@@ -207,7 +210,7 @@ class MainWindow(QMainWindow):
         self.trust_chip.setObjectName("trustChip")
         self.trust_chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.trust_chip.setToolTip(
-            "Every check runs on this PC. Codex and Claude Code keep their own sign-in."
+            "Every check runs on this PC. Codex keeps its own sign-in."
         )
         controls_layout.addSpacing(6)
         controls_layout.addWidget(self.trust_chip)
@@ -303,9 +306,8 @@ class MainWindow(QMainWindow):
 
     def _build_dashboard(self) -> QWidget:
         page, root = self._page(
-            "Your coding windows",
-            f"{PRODUCT.display_name} watches your Codex and Claude Code five-hour windows and can "
-            "start a fresh one for you the moment the old one runs out.",
+            "Your Codex reset clock",
+            "See whether the five-hour clock is running, when it resets, and whether weekly allowance is safe.",
         )
         primary = QFrame()
         primary.setObjectName("primaryControl")
@@ -316,12 +318,12 @@ class MainWindow(QMainWindow):
         primary_copy.setSpacing(4)
         eyebrow = QLabel("MAIN SWITCH")
         eyebrow.setObjectName("eyebrow")
-        self.automation_toggle = QCheckBox("Keep my 5-hour windows ready")
+        self.automation_toggle = QCheckBox("Keep my Codex reset clock running")
         self.automation_toggle.setObjectName("automationToggle")
         self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
         explanation = QLabel(
-            "While this is off, nothing is ever sent to a provider. Turn it on and "
-            f"{PRODUCT.display_name} uses the smallest possible request, and only after every safety check passes."
+            "Off means zero Codex-triggering activity. On uses one minimal request after rollover, "
+            "then verifies the new reset before reporting success."
         )
         explanation.setProperty("muted", True)
         explanation.setWordWrap(True)
@@ -360,10 +362,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(22, 15, 22, 15)
         layout.setSpacing(26)
         points = (
-            ("Everything stays local", "Checks and countdowns run here. Nothing is uploaded."),
-            ("No passwords or tokens", "Codex and Claude Code keep their own sign-in."),
-            ("Counting down is free", "Timers are free. Only starting a window uses your plan."),
-            ("One small action, once", "We send the smallest request, once, and never retry it."),
+            ("Codex stays signed in", "UsageLoop uses the local Codex app-server and never reads credentials."),
+            ("Countdowns are free", "The reset clock moves locally with no prompt polling or provider traffic."),
+            ("Weekly limit protected", "Weekly allowance is checked before any window-start request."),
+            ("Ambiguous means stop", "A request with an unclear outcome is guarded and never retried automatically."),
         )
         for title, body in points:
             column = QVBoxLayout()
@@ -394,7 +396,7 @@ class MainWindow(QMainWindow):
     ) -> QWidget:
         page, root = self._page(
             "Settings",
-            "Startup, updates, and the technical detail that stays out of your way on the dashboard.",
+            "Codex readiness, local safeguards, startup, and updates.",
         )
 
         startup_card, startup_layout = make_surface_card(
@@ -423,8 +425,8 @@ class MainWindow(QMainWindow):
         root.addWidget(startup_card)
 
         health_card, health_layout = make_surface_card(
-            "How things look right now",
-            "A quick check of what is installed, what is running, and what is saved on this PC.",
+            "Codex and local status",
+            "Installation, five-hour evidence, weekly safety, automation, and saved local state.",
         )
         self.health_summary = HealthRowWidget()
         self.health_summary.setObjectName("healthSummary")
@@ -471,11 +473,10 @@ class MainWindow(QMainWindow):
         version.setObjectName("secondaryMetric")
         about_layout.addWidget(version)
         description = QLabel(
-            "Your Codex and Claude Code plans work in five-hour windows, and a window only starts "
-            "once you actually use the tool. Leave it alone for an evening and the hours you were "
-            f"entitled to simply never happen.\n\n{PRODUCT.display_name} watches for that and, when "
-            "you switch it on, quietly starts the next window for you. It runs on this PC, it never "
-            "sees your provider sign-in, and it uses the smallest request the provider accepts."
+            "Codex subscription windows start when Codex receives a real request. UsageLoop watches "
+            "the official local Codex app-server, keeps the countdown on this PC, and can start the "
+            "next five-hour clock after rollover with one minimal guarded request. It reports success "
+            "only after Codex exposes a fixed new reset time."
         )
         description.setProperty("muted", True)
         description.setWordWrap(True)
@@ -497,61 +498,26 @@ class MainWindow(QMainWindow):
         root.addWidget(about)
 
         support, support_layout = make_surface_card(
-            "Provider support",
-            "The two providers are at different stages, and the app does not pretend otherwise.",
+            "Codex support",
+            "The app-server observation and guarded start path have both been proven on a real subscription account.",
         )
-        for name, badge, tone, sentence in (
-            (
-                "Codex",
-                "VERIFIED",
-                "success",
-                "Tested on a real account. Starting a window works.",
-            ),
-            (
-                "Claude Code",
-                "PREVIEW",
-                "warning",
-                "Usage is read from Claude Desktop. Starting a window is not proven yet.",
-            ),
-        ):
-            row = QFrame()
-            row.setObjectName("healthRow")
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(14, 11, 14, 11)
-            row_layout.setSpacing(12)
-            text = QVBoxLayout()
-            text.setSpacing(2)
-            title = QLabel(name)
-            title.setObjectName("healthLabel")
-            body = QLabel(sentence)
-            body.setObjectName("healthDetail")
-            body.setWordWrap(True)
-            body.setMinimumWidth(160)
-            body.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            text.addWidget(title)
-            text.addWidget(body)
-            row_layout.addLayout(text, 1)
-            pill = StatusPill()
-            pill.setFixedHeight(24)
-            pill.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            pill.set_status(badge, tone)
-            row_layout.addWidget(pill, 0, Qt.AlignmentFlag.AlignTop)
-            support_layout.addWidget(row)
-        support_note = QLabel(
-            "Settings has the full technical detail for both providers under Technical details."
+        support_status = QLabel(
+            "UsageLoop is an independent open-source project. It is not affiliated with, endorsed by, "
+            "or sponsored by OpenAI. Codex behavior can evolve, so compatibility is checked by capability "
+            "instead of trusting a version string."
         )
-        support_note.setProperty("muted", True)
-        support_note.setWordWrap(True)
-        support_layout.addWidget(support_note)
+        support_status.setProperty("muted", True)
+        support_status.setWordWrap(True)
+        support_layout.addWidget(support_status)
         root.addWidget(support)
 
         privacy, privacy_layout = make_surface_card(
             "Privacy and safety",
-            "Codex and Claude Code keep their own sign-in. This app never reads tokens, credentials, "
-            "conversations, or account identifiers.",
+            "Codex keeps its own sign-in. UsageLoop never reads tokens, credentials, conversations, "
+            "or account identifiers.",
         )
         boundaries = QLabel(
-            "\u2022 Provider automation is off until you switch it on\n"
+            "\u2022 Codex automation is off until you switch it on\n"
             "\u2022 Update checks run only when you press the button, and never touch your plan\n"
             "\u2022 Countdowns are calculated locally and cause no provider traffic\n"
             "\u2022 A request whose outcome is unclear is never retried automatically\n"
@@ -605,8 +571,6 @@ class MainWindow(QMainWindow):
                 self._start_operation(provider_id, "probe")
             elif decision.action == "ROLLOVER":
                 self._start_operation(provider_id, "rollover")
-            elif decision.action == "BOOTSTRAP" and provider_id == "claude":
-                self._start_operation(provider_id, "bootstrap")
 
     def start_bootstrap(self, provider_id: str) -> None:
         if provider_id in self.active_operations or not self.confirm_bootstrap():
@@ -726,10 +690,10 @@ class MainWindow(QMainWindow):
     def _confirm_enable(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Keep your 5-hour windows ready?",
-            f"{PRODUCT.display_name} will use each provider's own signed-in client, and only after its "
-            "safety checks pass. For Claude Code it may add a local status-line helper, and only when you "
-            "have not set one yourself.\n\nStarting a window uses a small amount of your plan. An action "
+            "Keep your Codex reset clock running?",
+            f"{PRODUCT.display_name} will use your signed-in Codex client only after its safety checks "
+            "pass. It checks weekly allowance, sends one minimal request, then verifies the reset.\n\n"
+            "Starting a window uses a small amount of your plan. An action "
             "whose outcome is unclear is never retried.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,

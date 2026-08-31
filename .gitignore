@@ -25,6 +25,7 @@ packaging/version_info.txt
 .coverage
 .pytest_cache/
 .ruff_cache/
+artifacts/
 
 # Sentinel observations are user-local, never repository data
 *.jsonl

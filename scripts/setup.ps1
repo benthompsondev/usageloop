@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Output 'UsageLoop is ready.'
-Write-Output 'Desktop: .\.venv\Scripts\window-sentinel.exe'
+Write-Output 'Desktop: .\.venv\Scripts\usageloop.exe'
 Write-Output 'Run: .\sentinel.ps1 doctor'
 Write-Output 'Then: .\sentinel.ps1 sample'
 Write-Output 'Inspect Phase 2 safely: .\sentinel.ps1 chain --dry-run'

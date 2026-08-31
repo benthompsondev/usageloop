@@ -11,8 +11,9 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from .app_controller import ApplicationController
 from .app_state import AppStateStore
 from .desktop import DesktopShell, MainWindow
+from .legacy_cleanup import remove_retired_claude_integration
 from .product import PRODUCT
-from .providers import ClaudeProvider, CodexProvider
+from .providers import CodexProvider
 from .startup import StartupManager
 
 
@@ -34,7 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     application.setOrganizationName(PRODUCT.publisher)
     application.setStyle("Fusion")
 
-    providers = [CodexProvider(), ClaudeProvider()]
+    remove_retired_claude_integration()
+    providers = [CodexProvider()]
     controller = ApplicationController(providers, AppStateStore())
     controller.start()
     startup = StartupManager(str(Path(sys.executable).resolve()))

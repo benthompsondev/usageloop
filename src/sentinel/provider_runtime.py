@@ -12,7 +12,7 @@ from .classifier import classify
 from .history import SafeHistory
 from .models import select_trigger_model
 from .providers import CompatibilityResult
-from .quota import QuotaSnapshot, normalize_rate_limits, select_five_hour
+from .quota import QuotaSnapshot, normalize_rate_limits, select_five_hour, select_weekly
 from .trigger import AppServerTrigger, TriggerConfig, dedicated_trigger_workspace
 
 
@@ -145,6 +145,7 @@ class CodexOperationRunner:
     ) -> ProviderViewState:
         latest = observations[-1] if observations else None
         selected = select_five_hour(latest).window if latest is not None else None
+        weekly = select_weekly(latest) if latest is not None else None
         ready = outcome in {"ALREADY_ANCHORED", "ANCHOR_VERIFIED"}
         waiting = outcome in {"RESET_BUFFER", "NOT_ELIGIBLE"} and classification_state != "UNKNOWN"
         return ProviderViewState(
@@ -161,4 +162,6 @@ class CodexOperationRunner:
             last_action=outcome.replace("_", " ").title(),
             used_percent=selected.used_percent if selected else None,
             usage_checked_at=latest.observed_at if latest else None,
+            weekly_used_percent=weekly.used_percent if weekly else None,
+            weekly_reset_at=weekly.resets_at if weekly else None,
         )

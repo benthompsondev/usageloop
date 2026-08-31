@@ -20,6 +20,41 @@ class FakeProvider:
 
 
 class ApplicationControllerTests(unittest.TestCase):
+    def test_start_prunes_retired_provider_cache_and_identities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            codex = ProviderViewState.waiting(
+                "codex", "Codex", installed=True, runtime_identity="codex:1"
+            )
+            retired = ProviderViewState.waiting(
+                "claude", "Claude Code", installed=True, runtime_identity="claude:1"
+            )
+            store.save(
+                AppSettings(
+                    True,
+                    True,
+                    True,
+                    {"codex": "codex:1", "claude": "claude:1"},
+                    {"codex": "codex:1", "claude": "claude:1"},
+                ),
+                {"codex": codex, "claude": retired},
+            )
+
+            controller = ApplicationController([FakeProvider(codex)], store)
+            controller.start()
+
+            self.assertEqual({"codex"}, set(controller.states))
+            self.assertEqual(
+                {"codex": "codex:1"},
+                controller.settings.compatible_runtime_identities,
+            )
+            self.assertEqual(
+                {"codex": "codex:1"}, controller.settings.checked_runtime_identities
+            )
+            self.assertTrue(controller.settings.automation_enabled)
+            self.assertTrue(controller.settings.start_with_windows)
+            self.assertEqual({"codex"}, set(store.load_provider_cache()))
+
     def test_startup_with_automation_off_only_detects_providers(self):
         with tempfile.TemporaryDirectory() as directory:
             provider = FakeProvider(ProviderViewState.waiting(
@@ -86,99 +121,6 @@ class ApplicationControllerTests(unittest.TestCase):
             restarted.start()
             self.assertFalse(restarted.states["codex"].automation_supported)
             self.assertEqual("Needs attention", restarted.states["codex"].status)
-
-    def test_definite_local_failure_can_retry_only_after_restart(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = AppStateStore(Path(directory) / "state.json")
-            failed = ProviderViewState(
-                "claude",
-                "Claude Code",
-                True,
-                True,
-                "Needs attention",
-                "Launch failed.",
-                runtime_identity="runtime:1",
-                used_percent=0,
-                usage_checked_at=90,
-                weekly_used_percent=10,
-                weekly_reset_at=1000,
-                retry_after_restart=True,
-            )
-            store.save(
-                AppSettings(True, False, True, {"claude": "runtime:1"}),
-                {"claude": failed},
-            )
-            provider = FakeProvider(
-                ProviderViewState.waiting(
-                    "claude", "Claude Code", installed=True, runtime_identity="runtime:1"
-                )
-            )
-            controller = ApplicationController([provider], store)
-            controller.start()
-            restored = controller.states["claude"]
-            self.assertEqual("Waiting", restored.status)
-            self.assertFalse(restored.retry_after_restart)
-            self.assertEqual(10, restored.weekly_used_percent)
-            self.assertEqual("BOOTSTRAP", controller.decisions(now=100)["claude"].action)
-
-    def test_newer_local_claude_status_refreshes_without_provider_operation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = AppStateStore(Path(directory) / "state.json")
-            provider = FakeProvider(
-                ProviderViewState(
-                    "claude",
-                    "Claude Code",
-                    True,
-                    True,
-                    "Waiting",
-                    "Fresh local status.",
-                    runtime_identity="runtime:1",
-                    reset_at=1000,
-                    last_verified_at=200,
-                    used_percent=0,
-                    usage_checked_at=200,
-                    weekly_used_percent=10,
-                    weekly_reset_at=9000,
-                )
-            )
-            controller = ApplicationController([provider], store)
-            controller.start()
-            controller.states["claude"] = ProviderViewState(
-                "claude",
-                "Claude Code",
-                True,
-                True,
-                "Waiting",
-                "Old cache.",
-                runtime_identity="runtime:1",
-                usage_checked_at=100,
-            )
-            controller.refresh_local_states()
-            self.assertEqual(1000, controller.states["claude"].reset_at)
-            self.assertEqual(0, provider.operation_calls)
-
-    def test_local_refresh_preserves_compatibility_failure(self):
-        with tempfile.TemporaryDirectory() as directory:
-            provider = FakeProvider(
-                ProviderViewState.waiting(
-                    "claude", "Claude Code", installed=True, runtime_identity="runtime:1"
-                )
-            )
-            controller = ApplicationController(
-                [provider], AppStateStore(Path(directory) / "state.json")
-            )
-            controller.start()
-            controller.states["claude"] = ProviderViewState(
-                "claude",
-                "Claude Code",
-                True,
-                False,
-                "Needs attention",
-                "Capability missing.",
-                runtime_identity="runtime:1",
-            )
-            controller.refresh_local_states()
-            self.assertEqual("Needs attention", controller.states["claude"].status)
 
     def test_newer_verified_evidence_recovers_a_temporary_needs_attention_state(self):
         with tempfile.TemporaryDirectory() as directory:

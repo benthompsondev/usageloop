@@ -121,11 +121,11 @@ class AppDataMigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             legacy = Path(directory) / PRODUCT.legacy_app_data_folder
             legacy.mkdir()
-            (legacy / "claude-attempts.jsonl").write_text("guard", encoding="utf-8")
+            (legacy / "history.jsonl").write_text("guard", encoding="utf-8")
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
                 root = app_data_root()
             self.assertEqual(Path(directory) / PRODUCT.app_data_folder, root)
-            self.assertEqual("guard", (root / "claude-attempts.jsonl").read_text(encoding="utf-8"))
+            self.assertEqual("guard", (root / "history.jsonl").read_text(encoding="utf-8"))
             self.assertFalse(legacy.exists())
 
     def test_existing_new_folder_is_never_overwritten(self) -> None:
@@ -183,7 +183,7 @@ class RecordingProvider:
 
 class AutomationOffTests(unittest.TestCase):
     def test_off_produces_no_provider_triggering_decision(self) -> None:
-        providers = [RecordingProvider("codex"), RecordingProvider("claude")]
+        providers = [RecordingProvider("codex")]
         controller = ApplicationController(providers, store_with({}))
         controller.start()
         controller.set_automation_enabled(False)

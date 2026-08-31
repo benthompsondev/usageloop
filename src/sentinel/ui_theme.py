@@ -194,6 +194,13 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QLabel#footerVersion {{ color: {tokens.text_faint}; font-size: 12px; }}
     QLabel#wordmarkPrimary {{ font-size: 21px; font-weight: 800; color: {tokens.text}; }}
     QLabel#wordmarkAccent {{ font-size: 21px; font-weight: 800; color: {tokens.accent}; }}
+    QLabel#wordmarkQualifier {{ font-size: 12px; font-weight: 650; color: {tokens.text_muted}; }}
+    QLabel#metricLabel {{ color: {tokens.text_soft}; font-size: 12px; font-weight: 650; }}
+    QProgressBar#usageBar, QProgressBar#weeklyBar {{
+        background: {tokens.surface_sunken}; border: 0; border-radius: 3px;
+    }}
+    QProgressBar#usageBar::chunk {{ background: {tokens.accent}; border-radius: 3px; }}
+    QProgressBar#weeklyBar::chunk {{ background: {tokens.info}; border-radius: 3px; }}
     QLabel#trustChip {{
         color: {tokens.accent}; background: {tokens.surface_sunken};
         border: 1px solid {tokens.accent_deep}; border-radius: {tokens.radius_small}px;

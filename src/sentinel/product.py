@@ -13,7 +13,6 @@ class ProductMetadata:
     github_owner: str
     github_repo: str
     executable_name: str
-    claude_status_helper_name: str
     icon_filename: str
     version_resource_filename: str
     installer_filename: str
@@ -50,9 +49,8 @@ class ProductMetadata:
     def packaging_metadata(self) -> dict[str, str]:
         """Every name the Windows build script needs, derived values included.
 
-        `dataclasses.asdict` silently omits properties, which once put the Claude
-        status helper outside the application folder and left it out of the
-        installer entirely. The build script reads this instead.
+        `dataclasses.asdict` silently omits properties. The build script reads
+        this explicit mapping so derived packaging names cannot drift.
         """
         from dataclasses import asdict
 
@@ -67,12 +65,11 @@ class ProductMetadata:
 # The user-facing product name is independent of that slug.
 PRODUCT = ProductMetadata(
     display_name="UsageLoop",
-    tagline="Keep your AI coding windows ready.",
+    tagline="Keep your Codex reset clock running.",
     version="0.7.0",
     github_owner="benthompsondev",
     github_repo="codex-window-sentinel",
     executable_name="UsageLoop.exe",
-    claude_status_helper_name="UsageLoopStatus.exe",
     icon_filename="usageloop.ico",
     version_resource_filename="version_info.txt",
     installer_filename="UsageLoop-Setup.exe",

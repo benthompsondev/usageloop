@@ -111,14 +111,40 @@ def automation_health(settings: AppSettings) -> HealthRow:
             "Automation",
             "On",
             "success",
-            "Windows are kept ready using the smallest request, after every safety check.",
+            "The Codex reset clock is maintained using one minimal guarded request after rollover.",
         )
     return HealthRow(
         "Automation",
         "Off",
         "neutral",
-        "Nothing is sent to any provider while this is off.",
+        "No Codex request is sent while this is off.",
     )
+
+
+def codex_installation_health(state: ProviderViewState) -> HealthRow:
+    if not state.installed:
+        return HealthRow("Codex installed", "Not found", "error", "Install and sign in to Codex before enabling automation.")
+    if state.status == "Needs attention" or not state.automation_supported:
+        return HealthRow("Codex installed", "Check needed", "error", "The current Codex capabilities could not be confirmed safely.")
+    return HealthRow("Codex installed", "Detected", "success", "The local Codex executable is available.")
+
+
+def five_hour_health(state: ProviderViewState, *, now: float) -> HealthRow:
+    if state.reset_at is None:
+        return HealthRow("5-hour window", "Not verified", "neutral", "No fixed five-hour reset has been verified yet.")
+    if state.last_verified_at is not None and now - state.last_verified_at > STALE_AFTER_SECONDS:
+        return HealthRow("5-hour window", "Stale", "warning", "The cached reset evidence is older than usual.")
+    if state.reset_at > now and state.status == "Ready":
+        return HealthRow("5-hour window", "Clock running", "success", f"Last-known usage is {state.used_percent:g}% used." if state.used_percent is not None else "A fixed reset is counting down locally.")
+    return HealthRow("5-hour window", "Waiting", "info", "The previous reset boundary has passed or is not currently anchored.")
+
+
+def weekly_health(state: ProviderViewState) -> HealthRow:
+    if state.weekly_used_percent is None:
+        return HealthRow("Weekly allowance", "Not checked", "neutral", "No unique official weekly Codex window is cached. Automatic starts still fail closed without one.")
+    if state.weekly_used_percent >= 99:
+        return HealthRow("Weekly allowance", "Protected", "error", f"{state.weekly_used_percent:g}% used. UsageLoop will not start a window.")
+    return HealthRow("Weekly allowance", "Safe", "success", f"Last-known usage is {state.weekly_used_percent:g}% used. This is checked before a start.")
 
 
 def local_state_health(
@@ -126,14 +152,14 @@ def local_state_health(
 ) -> HealthRow:
     if not state_file_exists:
         return HealthRow(
-            "Local data",
+            "Local state",
             "Not saved yet",
             "neutral",
             "Nothing has been saved on this PC yet. That is normal on a first run.",
         )
     if newest_observation_at is None:
         return HealthRow(
-            "Local data",
+            "Local state",
             "Healthy",
             "success",
             "Saved on this PC and readable. No provider readings stored yet.",
@@ -141,13 +167,13 @@ def local_state_health(
     age = now - newest_observation_at
     if age > STALE_AFTER_SECONDS:
         return HealthRow(
-            "Local data",
+            "Local state",
             "Stale",
             "warning",
             "Saved and readable, but the newest reading is more than six hours old.",
         )
     return HealthRow(
-        "Local data", "Healthy", "success", "Saved on this PC and up to date."
+        "Local state", "Healthy", "success", "Saved on this PC and up to date."
     )
 
 
@@ -175,16 +201,8 @@ def build_health_rows(
     state_file_exists: bool,
     now: float,
 ) -> tuple[HealthRow, ...]:
-    compatible = settings.compatible_runtime_identities or {}
-    rows = [
-        provider_health(
-            state,
-            automation_enabled=settings.automation_enabled,
-            compatible_identity=compatible.get(provider_id),
-            now=now,
-        )
-        for provider_id, state in states.items()
-    ]
+    state = states.get("codex") or ProviderViewState.waiting("codex", "Codex", installed=False)
+    rows = [codex_installation_health(state), five_hour_health(state, now=now), weekly_health(state)]
     observations = [
         state.usage_checked_at
         for state in states.values()
@@ -232,16 +250,7 @@ def overall_summary(
             "info",
             f"{PRODUCT.display_name} is installed correctly. Turn automation on when you are ready.",
         )
-    if any(row.status == "Not checked" for row in rows) and any(
-        row.status == "Ready" for row in rows
-    ):
-        return HealthRow(
-            "Overall",
-            "Partly ready",
-            "info",
-            "At least one provider is ready, but another has not supplied a window reading yet.",
-        )
-    if not any(row.status == "Ready" for row in rows):
+    if not any(row.status == "Clock running" for row in rows):
         return HealthRow(
             "Overall",
             "Setup OK",
@@ -249,7 +258,7 @@ def overall_summary(
             "Automation is on. Nothing has been verified yet, so there is nothing to report.",
         )
     return HealthRow(
-        "Overall", "All good", "success", "Windows are being kept ready. Nothing needs you."
+        "Overall", "All good", "success", "The Codex reset clock is running. Nothing needs you."
     )
 
 
@@ -268,20 +277,10 @@ def technical_summary(
     lines = [
         f"{PRODUCT.display_name} {app_version}",
         "",
-        "Provider support",
-        "  Codex: verified. A measured live test showed that one small request",
-        "    through the local Codex app-server starts a fresh five-hour window,",
-        "    and that is the path this app uses.",
-        "  Claude Code: preview. Two hosts share the ~/.claude home but not the",
-        "    same observation channel. The terminal CLI renders a status line and",
-        "    invokes the configured helper. Claude Code inside the Claude Desktop",
-        "    app does not, so for Desktop users the helper is never called.",
-        "    Desktop usage is instead read from its own local plan-usage history,",
-        "    which reports a usage percentage but no reset timestamp, so the reset",
-        "    shown for Desktop is derived from when usage restarted and is an",
-        "    estimate. Because that source carries no weekly reset, the mandatory",
-        "    weekly guard cannot pass and no Claude request is sent from it.",
-        "    Whether --init-only starts a window remains unproven.",
+        "Codex support",
+        "  Observation: local app-server account/rateLimits/read",
+        "  Start: ephemeral thread/start + turn/start with read-only sandbox",
+        "  Verification: repeated fixed-reset observations are authoritative",
     ]
     for provider_id, state in states.items():
         version = state.runtime_version or "version unavailable"
@@ -307,7 +306,7 @@ def technical_summary(
             "",
             "Automation",
             f"  Global control: {'enabled' if settings.automation_enabled else 'off'}",
-            "  Provider-triggering activity while off: none",
+            "  Codex-triggering activity while off: none",
         ]
     )
     return "\n".join(lines)

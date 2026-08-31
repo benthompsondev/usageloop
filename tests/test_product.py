@@ -8,9 +8,8 @@ from sentinel.product import PRODUCT
 class ProductMetadataTests(unittest.TestCase):
     def test_public_identity_is_centralized(self) -> None:
         self.assertEqual("UsageLoop", PRODUCT.display_name)
-        self.assertEqual("Keep your AI coding windows ready.", PRODUCT.tagline)
+        self.assertEqual("Keep your Codex reset clock running.", PRODUCT.tagline)
         self.assertEqual("UsageLoop.exe", PRODUCT.executable_name)
-        self.assertEqual("UsageLoopStatus.exe", PRODUCT.claude_status_helper_name)
         self.assertEqual("usageloop.ico", PRODUCT.icon_filename)
         self.assertEqual("UsageLoop", PRODUCT.dist_folder_name)
 
@@ -54,8 +53,9 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("#ifndef AppVersion", installer)
         self.assertIn("/DAppVersion=", build)
         self.assertIn("checksum_filename", build)
-        self.assertIn("claude_status_helper_name", build)
-        self.assertIn("--unregister", installer)
+        self.assertNotIn("claude_status", build.lower())
+        self.assertNotIn("--unregister", installer)
+        self.assertIn("[InstallDelete]", installer)
         self.assertIn("Get-FileHash", build)
         self.assertIn("PRODUCT.icon_filename", pyinstaller)
         self.assertIn("PRODUCT.version_resource_filename", pyinstaller)
@@ -73,11 +73,18 @@ class ProductMetadataTests(unittest.TestCase):
             self.assertNotIn("WindowSentinel", text, relative)
             self.assertNotIn("windowsentinel", text, relative)
 
+    def test_local_setup_and_verification_use_the_current_desktop_entrypoint(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for relative in ("scripts/setup.ps1", "scripts/verify.ps1"):
+            text = (root / relative).read_text(encoding="utf-8")
+            self.assertIn("usageloop.exe", text.lower(), relative)
+            self.assertNotIn("window-sentinel.exe", text.lower(), relative)
+
     def test_installer_placeholders_are_driven_by_the_build_script(self) -> None:
         root = Path(__file__).resolve().parents[1]
         installer = (root / "packaging" / "UsageLoop.iss").read_text(encoding="utf-8")
         build = (root / "scripts" / "build-windows.ps1").read_text(encoding="utf-8")
-        for define in ("AppIconFile", "DistFolder", "StatusHelperName"):
+        for define in ("AppIconFile", "DistFolder"):
             self.assertIn(f"#ifndef {define}", installer)
             self.assertIn(f"/D{define}=", build)
 
@@ -91,9 +98,7 @@ class PackagingMetadataTests(unittest.TestCase):
         data = PRODUCT.packaging_metadata()
         self.assertEqual(PRODUCT.dist_folder_name, data["dist_folder_name"])
         self.assertEqual(PRODUCT.executable_name, data["executable_name"])
-        self.assertEqual(
-            PRODUCT.claude_status_helper_name, data["claude_status_helper_name"]
-        )
+        self.assertNotIn("claude_status_helper_name", data)
 
     def test_every_name_the_build_script_reads_is_exported(self) -> None:
         root = Path(__file__).resolve().parents[1]

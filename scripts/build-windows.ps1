@@ -21,13 +21,6 @@ try {
     & $pyinstaller --noconfirm --clean .\packaging\UsageLoop.spec
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
-    $helperEntry = Join-Path $repoRoot 'packaging\claude_status_entrypoint.py'
-    $helperDist = Join-Path $repoRoot "dist\$($product.dist_folder_name)"
-    $helperName = [IO.Path]::GetFileNameWithoutExtension($product.claude_status_helper_name)
-    $helperWork = Join-Path $repoRoot "build\$helperName"
-    & $pyinstaller --noconfirm --clean --onefile --console --name $helperName --distpath $helperDist --workpath $helperWork --specpath $helperWork --paths (Join-Path $repoRoot 'src') $helperEntry
-    if ($LASTEXITCODE -ne 0) { throw 'Claude statusLine helper build failed.' }
-
     $isccCandidates = @(
         (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 7\ISCC.exe'),
         (Join-Path ${env:ProgramFiles} 'Inno Setup 7\ISCC.exe'),
@@ -38,7 +31,7 @@ try {
         throw 'Inno Setup compiler not found. Install the current per-user Inno Setup compiler first.'
     }
     $installerBaseName = [IO.Path]::GetFileNameWithoutExtension($product.installer_filename)
-    & $iscc "/DAppName=$($product.display_name)" "/DAppIconFile=$($product.icon_filename)" "/DDistFolder=$($product.dist_folder_name)" "/DStatusHelperName=$($product.claude_status_helper_name)" "/DAppVersion=$($product.version)" "/DAppExeName=$($product.executable_name)" "/DAppPublisher=$($product.publisher)" "/DAppId=$($product.app_id)" "/DInstallerBaseName=$installerBaseName" .\packaging\UsageLoop.iss
+    & $iscc "/DAppName=$($product.display_name)" "/DAppIconFile=$($product.icon_filename)" "/DDistFolder=$($product.dist_folder_name)" "/DAppVersion=$($product.version)" "/DAppExeName=$($product.executable_name)" "/DAppPublisher=$($product.publisher)" "/DAppId=$($product.app_id)" "/DInstallerBaseName=$installerBaseName" .\packaging\UsageLoop.iss
     if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
 
     $installerPath = Join-Path $repoRoot "dist\$($product.installer_filename)"
@@ -51,6 +44,5 @@ finally {
 }
 
 Write-Output "Runnable: $repoRoot\dist\$($product.dist_folder_name)\$($product.executable_name)"
-Write-Output "Claude status helper: $repoRoot\dist\$($product.dist_folder_name)\$($product.claude_status_helper_name)"
 Write-Output "Installer: $installerPath"
 Write-Output "Checksum: $checksumPath"

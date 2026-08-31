@@ -106,10 +106,6 @@ def automation_decision(
             return AutomationDecision("NONE", "Provider compatibility needs attention.")
         return AutomationDecision("PROBE", "Provider runtime capabilities must be checked.")
     if state.reset_at is None:
-        if state.provider_id == "claude" and (
-            state.used_percent != 0 or state.usage_checked_at is None
-        ):
-            return AutomationDecision("WAIT", "Waiting for a safe Claude window snapshot.")
         return AutomationDecision("BOOTSTRAP", "No verified window is known yet.")
     if now >= state.reset_at + 15:
         return AutomationDecision("ROLLOVER", "The verified reset boundary has passed.")

@@ -9,13 +9,8 @@ import time
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
+    QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy,
+    QVBoxLayout, QWidget,
 )
 
 from .app_state import ProviderViewState, format_countdown
@@ -33,144 +28,90 @@ class ProviderPresentation:
     detail: str
     verified: str
     usage: str
+    weekly: str
+    action: str
 
 
 def present_provider_state(
     state: ProviderViewState, *, now: float, automation_enabled: bool = False
 ) -> ProviderPresentation:
-    """Map internal provider state onto words a normal person can act on.
-
-    The important rule is that nothing here claims more certainty than the state
-    supports. A provider that has never been checked says so, rather than
-    borrowing the language of a window that is genuinely counting down.
-    """
+    """Map internal Codex evidence onto the five consumer-facing clock states."""
+    usage = (
+        f"5-hour window  {state.used_percent:g}% used"
+        if state.used_percent is not None else "5-hour window  Not checked"
+    )
+    weekly = (
+        f"Weekly allowance  {state.weekly_used_percent:g}% used"
+        if state.weekly_used_percent is not None else "Weekly allowance  Not available"
+    )
+    if state.weekly_reset_at is not None:
+        weekly += f"  ·  {_reset_copy(state.weekly_reset_at, now=now)}"
+    action = (
+        f"Last action  {state.last_action}"
+        if state.last_action else "Last action  No automatic window start recorded"
+    )
     if not state.installed:
         return ProviderPresentation(
-            "NOT DETECTED",
-            "neutral",
-            "Not installed",
-            "No reset information",
-            f"Install {state.display_name} and it will show up here.",
-            "No local status yet",
-            "Usage not checked",
+            "NEEDS ATTENTION", "error", "Codex is not installed", "No reset information",
+            "Install and sign in to Codex, then reopen UsageLoop.", "No local status yet",
+            usage, weekly, action,
         )
 
     reset = _reset_copy(state.reset_at, now=now)
     if state.last_verified_at is not None:
         verified = f"Last verified {_friendly_time(state.last_verified_at, now=now)}"
     elif state.usage_checked_at is not None:
-        # Observed, but from evidence that reports usage without a boundary.
         verified = f"Last read {_friendly_time(state.usage_checked_at, now=now)}"
     else:
         verified = "Not checked yet"
-    usage = (
-        f"Last-known usage {state.used_percent}% \u00b7 {_friendly_time(state.usage_checked_at, now=now)}"
-        if state.used_percent is not None and state.usage_checked_at is not None
-        else "Usage not checked"
-    )
-
-    if state.provider_id == "claude" and not state.automation_supported:
-        return ProviderPresentation(
-            "AUTOMATION PAUSED",
-            "warning",
-            "Compatibility check needed",
-            reset,
-            "Claude automation is paused. Settings has the technical reason.",
-            verified,
-            usage,
-        )
 
     if state.status == "Needs attention":
         return ProviderPresentation(
-            "CHECK NEEDED",
-            "error",
-            "Needs attention",
-            reset,
-            "Settings has the technical reason. Nothing is retried automatically.",
-            verified,
-            usage,
+            "NEEDS ATTENTION", "error", "A safe check needs attention", reset,
+            "Nothing was retried. Diagnostics has the technical reason.",
+            verified, usage, weekly, action,
         )
-
     if state.status == "Starting":
         return ProviderPresentation(
-            "STARTING" if state.provider_id == "claude" else "CHECKING",
-            "info",
-            "Starting next window" if state.provider_id == "claude" else "Checking safely",
-            reset,
-            (
-                "Running one prompt-free Claude initialization."
-                if state.provider_id == "claude"
-                else "Running a bounded provider check."
-            ),
-            verified,
-            usage,
+            "STARTING WINDOW", "info", "Starting the next reset clock", reset,
+            "One minimal Codex request is in progress. It will not be retried automatically.",
+            verified, usage, weekly, action,
         )
-
-    if (
-        state.last_verified_at is not None
-        and now - state.last_verified_at > STALE_AFTER_SECONDS
-    ):
+    if state.last_verified_at is not None and now - state.last_verified_at > STALE_AFTER_SECONDS:
         return ProviderPresentation(
-            "STALE",
-            "warning",
-            format_countdown(state.reset_at, now),
-            reset,
-            "This is cached information. Check Settings before relying on it.",
-            verified,
-            usage,
+            "NEEDS ATTENTION", "warning", format_countdown(state.reset_at, now), reset,
+            "This cached reading is older than usual. Diagnostics has more detail.",
+            verified, usage, weekly, action,
         )
-
     if state.reset_at is None:
-        # Nothing has ever been verified for this provider. Saying "waiting for
-        # reset" here would invent a boundary that was never observed.
-        if automation_enabled:
-            return ProviderPresentation(
-                "NOT CHECKED YET",
-                "info",
-                "Not checked yet",
-                reset,
-                "UsageLoop will check this provider and start a window when it is safe.",
-                verified,
-                usage,
-            )
         return ProviderPresentation(
-            "NOT CHECKED YET",
-            "neutral",
-            "Ready to set up",
-            reset,
-            "Turn on UsageLoop when you want it to begin keeping your coding windows ready.",
-            verified,
-            usage,
+            "WAITING FOR RESET" if automation_enabled else "AUTOMATION OFF",
+            "info" if automation_enabled else "neutral",
+            "No reset clock verified yet", reset,
+            (
+                "UsageLoop will check Codex and start the first window only after every safety gate passes."
+                if automation_enabled
+                else "Turn on UsageLoop when you want it to start and maintain the Codex reset clock."
+            ),
+            verified, usage, weekly, action,
         )
-
     if state.status == "Ready":
-        # A window observed without a reported boundary has a derived reset. The
-        # countdown is still useful, but the card must not present an estimate
-        # with the same confidence as a verified anchor.
-        estimated = state.last_verified_at is None
         return ProviderPresentation(
-            "READY",
-            "success",
-            format_countdown(state.reset_at, now),
-            f"{reset} (estimated)" if estimated else reset,
-            state.detail if estimated and state.detail else "This five-hour window is counting down.",
-            verified,
-            usage,
+            "CLOCK RUNNING" if automation_enabled else "AUTOMATION OFF",
+            "success" if automation_enabled else "neutral",
+            format_countdown(state.reset_at, now), reset,
+            "Codex reports a fixed five-hour reset. The countdown runs locally with no provider traffic.",
+            verified, usage, weekly, action,
         )
-
-    # A boundary is known but the window is not currently running.
     return ProviderPresentation(
-        "WAITING",
-        "neutral",
-        format_countdown(state.reset_at, now),
-        reset,
+        "WAITING FOR RESET" if automation_enabled else "AUTOMATION OFF",
+        "info" if automation_enabled else "neutral", format_countdown(state.reset_at, now), reset,
         (
-            "The last known window has ended. A new one starts when it is safe."
-            if automation_enabled
-            else "The last known window has ended. Turn UsageLoop on to start the next one."
+            "The previous clock ended. UsageLoop will start the next one after the reset buffer and safety checks."
+            if automation_enabled else
+            "The previous clock ended. Turn UsageLoop on to keep the next one ready."
         ),
-        verified,
-        usage,
+        verified, usage, weekly, action,
     )
 
 
@@ -191,23 +132,20 @@ class ProviderCard(QFrame):
     def __init__(self, state: ProviderViewState, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("providerCard")
-        # Cards hug their content. Growing them to fill a tall window just
-        # produced hollow cards, which reads worse than honest empty space.
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(236)
+        self.setMinimumHeight(330)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setContentsMargins(24, 21, 24, 21)
         layout.setSpacing(8)
 
         header = QHBoxLayout()
-        self.name_label = QLabel(state.display_name)
+        self.name_label = QLabel("Codex reset clock")
         self.name_label.setObjectName("providerName")
         self.status_label = StatusPill()
         header.addWidget(self.name_label)
         header.addStretch()
         header.addWidget(self.status_label)
         layout.addLayout(header)
-
         self.countdown_label = QLabel()
         self.countdown_label.setObjectName("countdown")
         layout.addWidget(self.countdown_label)
@@ -218,22 +156,30 @@ class ProviderCard(QFrame):
         self.detail_label.setObjectName("detail")
         self.detail_label.setWordWrap(True)
         layout.addWidget(self.detail_label)
-        layout.addSpacing(4)
-        self.separator = QFrame()
-        self.separator.setObjectName("cardRule")
-        self.separator.setFrameShape(QFrame.Shape.HLine)
-        self.separator.setFixedHeight(1)
-        layout.addWidget(self.separator)
-        layout.addSpacing(2)
+
+        rule = QFrame()
+        rule.setObjectName("cardRule")
+        rule.setFrameShape(QFrame.Shape.HLine)
+        rule.setFixedHeight(1)
+        layout.addSpacing(3)
+        layout.addWidget(rule)
         self.metadata_label = QLabel()
         self.metadata_label.setProperty("muted", True)
-        self.metadata_label.setWordWrap(True)
         layout.addWidget(self.metadata_label)
         self.usage_label = QLabel()
-        self.usage_label.setProperty("muted", True)
+        self.usage_label.setObjectName("metricLabel")
         layout.addWidget(self.usage_label)
-
-        layout.addStretch(1)
+        self.usage_bar = _metric_bar("usageBar")
+        layout.addWidget(self.usage_bar)
+        self.weekly_label = QLabel()
+        self.weekly_label.setObjectName("metricLabel")
+        layout.addWidget(self.weekly_label)
+        self.weekly_bar = _metric_bar("weeklyBar")
+        layout.addWidget(self.weekly_bar)
+        self.action_label = QLabel()
+        self.action_label.setProperty("muted", True)
+        self.action_label.setWordWrap(True)
+        layout.addWidget(self.action_label)
         self.action_button = QPushButton("Start my first window now")
         self.action_button.setObjectName("primaryButton")
         self.action_button.setVisible(False)
@@ -243,9 +189,7 @@ class ProviderCard(QFrame):
     def update_state(
         self, state: ProviderViewState, *, now: float, automation_enabled: bool = False
     ) -> None:
-        presented = present_provider_state(
-            state, now=now, automation_enabled=automation_enabled
-        )
+        presented = present_provider_state(state, now=now, automation_enabled=automation_enabled)
         self.status_label.set_status(presented.status, presented.tone)
         if self.property("tone") != presented.tone:
             self.setProperty("tone", presented.tone)
@@ -256,13 +200,23 @@ class ProviderCard(QFrame):
         self.detail_label.setText(presented.detail)
         self.metadata_label.setText(presented.verified)
         self.usage_label.setText(presented.usage)
+        self.weekly_label.setText(presented.weekly)
+        self.action_label.setText(presented.action)
+        self.usage_bar.setValue(int(state.used_percent or 0))
+        self.weekly_bar.setValue(int(state.weekly_used_percent or 0))
+
+
+def _metric_bar(name: str) -> QProgressBar:
+    bar = QProgressBar()
+    bar.setObjectName(name)
+    bar.setRange(0, 100)
+    bar.setTextVisible(False)
+    bar.setFixedHeight(6)
+    return bar
 
 
 def make_surface_card(
-    title: str,
-    description: str | None = None,
-    *,
-    parent: QWidget | None = None,
+    title: str, description: str | None = None, *, parent: QWidget | None = None
 ) -> tuple[QFrame, QVBoxLayout]:
     card = QFrame(parent)
     card.setObjectName("surfaceCard")
@@ -307,16 +261,6 @@ def _friendly_time(timestamp: float | None, *, now: float) -> str:
 
 
 class ElidingLabel(QLabel):
-    """A label that shortens itself instead of forcing its container wider.
-
-    `QSizePolicy.Ignored` looks like the right tool for "let this shrink", but it
-    is a growing policy: Qt disregards the size hint and hands the widget as much
-    room as it can take. Using it on the header tagline let the brand block
-    expand with the window and push the navigation and trust chip off the right
-    edge. This reports a zero minimum width and elides its own text, so it can
-    never drive the layout.
-    """
-
     def __init__(self, text: str = "", parent: QWidget | None = None):
         super().__init__(parent)
         self._full_text = text
@@ -326,19 +270,14 @@ class ElidingLabel(QLabel):
     def full_text(self) -> str:
         return self._full_text
 
-    def setText(self, text: str) -> None:  # noqa: N802 - Qt naming
+    def setText(self, text: str) -> None:  # noqa: N802
         self._full_text = text
         self._apply_elision()
 
     def sizeHint(self):
-        metrics = QFontMetrics(self.font())
-        return QSize(
-            metrics.horizontalAdvance(self._full_text),
-            super().sizeHint().height(),
-        )
+        return QSize(QFontMetrics(self.font()).horizontalAdvance(self._full_text), super().sizeHint().height())
 
     def minimumSizeHint(self):
-        # Zero width is the point: the header must never grow to fit this.
         return QSize(0, super().minimumSizeHint().height())
 
     def resizeEvent(self, event) -> None:
@@ -346,18 +285,14 @@ class ElidingLabel(QLabel):
         self._apply_elision()
 
     def _apply_elision(self) -> None:
-        metrics = QFontMetrics(self.font())
-        available = max(0, self.width())
-        elided = metrics.elidedText(
-            self._full_text, Qt.TextElideMode.ElideRight, available
+        elided = QFontMetrics(self.font()).elidedText(
+            self._full_text, Qt.TextElideMode.ElideRight, max(0, self.width())
         )
         if elided != super().text():
             super().setText(elided)
 
 
 class HealthRowWidget(QFrame):
-    """One readable line of health: name, badge, and a plain-English reason."""
-
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("healthRow")
@@ -372,9 +307,7 @@ class HealthRowWidget(QFrame):
         self.detail.setObjectName("healthDetail")
         self.detail.setWordWrap(True)
         self.detail.setMinimumWidth(160)
-        self.detail.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
-        )
+        self.detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         text.addWidget(self.label)
         text.addWidget(self.detail)
         layout.addLayout(text, 1)
@@ -390,18 +323,12 @@ class HealthRowWidget(QFrame):
 
 
 class Disclosure(QWidget):
-    """A 'Technical details' expander that starts closed.
-
-    Troubleshooting text is kept in full, but it no longer dominates a page a
-    normal user reads.
-    """
-
     def __init__(self, title: str, parent: QWidget | None = None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        self.toggle = QPushButton(f"\u25b8  {title}")
+        self.toggle = QPushButton(f"▸  {title}")
         self.toggle.setObjectName("disclosureToggle")
         self.toggle.setCheckable(True)
         self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -417,7 +344,7 @@ class Disclosure(QWidget):
 
     def _on_toggled(self, checked: bool) -> None:
         self.body.setVisible(checked)
-        self.toggle.setText(f"{'\u25be' if checked else '\u25b8'}  {self._title}")
+        self.toggle.setText(f"{'▾' if checked else '▸'}  {self._title}")
 
     def add_widget(self, widget: QWidget) -> None:
         self.body_layout.addWidget(widget)

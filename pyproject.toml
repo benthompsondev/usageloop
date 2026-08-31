@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codex-window-sentinel"
 version = "0.7.0"
-description = "Keep your AI coding windows ready with guarded local provider automation"
+description = "Keep your Codex reset clock running with guarded local automation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

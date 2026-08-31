@@ -71,7 +71,7 @@ class UpdatePanel(QFrame):
         layout.addWidget(title)
         copy = QLabel(
             "GitHub is checked only when you press the button. Update traffic is separate "
-            "from Codex and Claude Code and cannot use provider quota."
+            "from Codex and cannot use subscription quota."
         )
         copy.setProperty("muted", True)
         copy.setWordWrap(True)

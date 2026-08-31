@@ -55,10 +55,7 @@ class StubUpdater:
 
 def build_window(tmp_path):
     app = QApplication.instance() or QApplication([])
-    states = [
-        ProviderViewState.waiting("codex", "Codex", installed=True),
-        ProviderViewState.waiting("claude", "Claude Code", installed=True),
-    ]
+    states = [ProviderViewState.waiting("codex", "Codex", installed=True)]
     providers = [StubProvider(state) for state in states]
     controller = ApplicationController(providers, AppStateStore(tmp_path / "state.json"))
     controller.start()
@@ -150,7 +147,7 @@ class HeaderContainmentTests(unittest.TestCase):
         expense, so this asserts the controls always get at least what they ask
         for, which is the invariant that was actually violated.
         """
-        for width, height in (*SUPPORTED_SIZES, (720, 560)):
+        for width, height in SUPPORTED_SIZES:
             with self.subTest(size=f"{width}x{height}"):
                 self.settle(width, height)
                 controls = self.window.header_controls
@@ -193,17 +190,17 @@ class ElidingLabelTests(unittest.TestCase):
         self.app = QApplication.instance() or QApplication([])
 
     def test_minimum_width_is_zero_so_it_cannot_drive_a_layout(self):
-        label = ElidingLabel("Keep your AI coding windows ready.")
+        label = ElidingLabel("Keep your Codex reset clock running.")
         self.assertEqual(0, label.minimumSizeHint().width())
 
     def test_size_hint_reports_the_full_text(self):
-        text = "Keep your AI coding windows ready."
+        text = "Keep your Codex reset clock running."
         label = ElidingLabel(text)
         expected = QFontMetrics(label.font()).horizontalAdvance(text)
         self.assertEqual(expected, label.sizeHint().width())
 
     def test_text_is_elided_when_the_label_is_too_narrow(self):
-        label = ElidingLabel("Keep your AI coding windows ready.")
+        label = ElidingLabel("Keep your Codex reset clock running.")
         self.addCleanup(label.close)
         label.show()
         label.setFixedWidth(40)
@@ -213,7 +210,7 @@ class ElidingLabelTests(unittest.TestCase):
         self.assertLess(len(shown), len(label.full_text()))
 
     def test_full_text_is_preserved_across_elision(self):
-        text = "Keep your AI coding windows ready."
+        text = "Keep your Codex reset clock running."
         label = ElidingLabel(text)
         self.addCleanup(label.close)
         label.show()

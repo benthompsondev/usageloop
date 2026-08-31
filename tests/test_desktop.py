@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QStackedWidget
+from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
@@ -97,11 +97,11 @@ class DesktopTests(unittest.TestCase):
         window, _provider = self.make_window(
             ProviderViewState.waiting("codex", "Codex", installed=True)
         )
-        self.assertEqual("Keep my 5-hour windows ready", window.automation_toggle.text())
+        self.assertEqual("Keep my Codex reset clock running", window.automation_toggle.text())
         # A freshly detected provider has never been checked, so it must not
         # borrow the language of a window that is actually counting down.
         self.assertEqual(
-            "NOT CHECKED YET", window.provider_cards["codex"].status_label.text()
+            "AUTOMATION OFF", window.provider_cards["codex"].status_label.text()
         )
         self.assertLessEqual(window.minimumSizeHint().width(), 1366)
         self.assertLessEqual(window.minimumSizeHint().height(), 768)
@@ -133,75 +133,40 @@ class DesktopTests(unittest.TestCase):
     def test_unavailable_provider_renders_needs_attention(self):
         state = ProviderViewState.waiting("codex", "Codex", installed=False)
         window, _provider = self.make_window(state)
-        self.assertEqual("NOT DETECTED", window.provider_cards["codex"].status_label.text())
+        self.assertEqual("NEEDS ATTENTION", window.provider_cards["codex"].status_label.text())
 
-    def test_claude_consumer_states_are_distinct(self):
+    def test_shipped_window_contains_no_claude_copy(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        visible_copy = " ".join(label.text() for label in window.findChildren(QLabel))
+        self.assertNotIn("Claude", visible_copy)
+
+    def test_codex_card_shows_clock_usage_weekly_safety_and_last_action(self):
         state = ProviderViewState(
-            "claude",
-            "Claude Code",
-            True,
-            False,
-            "Needs attention",
-            "Technical compatibility reason.",
-        )
-        presented = present_provider_state(state, now=100)
-        self.assertEqual("AUTOMATION PAUSED", presented.status)
-        self.assertEqual("Compatibility check needed", presented.headline)
-        self.assertNotIn("Technical", presented.detail)
-
-        waiting = present_provider_state(
-            ProviderViewState("claude", "Claude Code", True, True, "Waiting", "Safe."),
-            now=100,
-        )
-        starting = present_provider_state(
-            ProviderViewState("claude", "Claude Code", True, True, "Starting", "Safe."),
-            now=100,
-        )
-        ready = present_provider_state(
-            ProviderViewState(
-                "claude", "Claude Code", True, True, "Ready", "Safe.", reset_at=1000, last_verified_at=90
-            ),
-            now=100,
-        )
-        self.assertEqual("NOT CHECKED YET", waiting.status)
-        self.assertEqual("Ready to set up", waiting.headline)
-        self.assertEqual("STARTING", starting.status)
-        self.assertEqual("Starting next window", starting.headline)
-        self.assertEqual("READY", ready.status)
-        self.assertEqual("0h 15m", ready.headline)
-
-        actionable = present_provider_state(
-            ProviderViewState("claude", "Claude Code", True, True, "Needs attention", "Launch failed."),
-            now=100,
-        )
-        self.assertEqual("CHECK NEEDED", actionable.status)
-
-    def test_claude_automation_off_launches_no_provider_process(self):
-        state = ProviderViewState(
-            "claude",
-            "Claude Code",
+            "codex",
+            "Codex",
             True,
             True,
-            "Waiting",
-            "Fresh state.",
-            runtime_identity="runtime:1",
-            used_percent=0,
+            "Ready",
+            "Verified.",
+            reset_at=1000,
+            last_verified_at=90,
+            last_action="Anchor verified",
+            used_percent=12,
             usage_checked_at=90,
-            weekly_used_percent=10,
-            weekly_reset_at=1000,
+            weekly_used_percent=34,
+            weekly_reset_at=5000,
         )
         window, provider = self.make_window(state)
-        window.evaluate_automation(now=100)
-        self.assertEqual(0, provider.probe_calls)
-        self.assertEqual(0, provider.action_calls)
-
-    def test_claude_countdown_is_local_only(self):
-        state = ProviderViewState(
-            "claude", "Claude Code", True, True, "Ready", "Ready.", reset_at=1000, last_verified_at=90
-        )
-        window, provider = self.make_window(state)
+        window.controller.set_automation_enabled(True)
         window.refresh_clock(now=100)
-        self.assertEqual("0h 15m", window.provider_cards["claude"].countdown_label.text())
+        card = window.provider_cards["codex"]
+        self.assertEqual("CLOCK RUNNING", card.status_label.text())
+        self.assertEqual("0h 15m", card.countdown_label.text())
+        self.assertIn("12% used", card.usage_label.text())
+        self.assertIn("34% used", card.weekly_label.text())
+        self.assertIn("Anchor verified", card.action_label.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 
@@ -211,7 +176,7 @@ class DesktopTests(unittest.TestCase):
         ).with_reset(30_000, verified_at=100)
         window, provider = self.make_window(state)
         window.refresh_clock(now=25_000)
-        self.assertEqual("STALE", window.provider_cards["codex"].status_label.text())
+        self.assertEqual("NEEDS ATTENTION", window.provider_cards["codex"].status_label.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 
@@ -293,8 +258,8 @@ class FirstRunStateMappingTests(unittest.TestCase):
         presented = present_provider_state(
             self.provider(), now=100, automation_enabled=False
         )
-        self.assertEqual("NOT CHECKED YET", presented.status)
-        self.assertEqual("Ready to set up", presented.headline)
+        self.assertEqual("AUTOMATION OFF", presented.status)
+        self.assertEqual("No reset clock verified yet", presented.headline)
         self.assertIn("Turn on UsageLoop", presented.detail)
         self.assertEqual("neutral", presented.tone)
 
@@ -302,8 +267,8 @@ class FirstRunStateMappingTests(unittest.TestCase):
         presented = present_provider_state(
             self.provider(), now=100, automation_enabled=True
         )
-        self.assertEqual("NOT CHECKED YET", presented.status)
-        self.assertEqual("Not checked yet", presented.headline)
+        self.assertEqual("WAITING FOR RESET", presented.status)
+        self.assertEqual("No reset clock verified yet", presented.headline)
         self.assertEqual("info", presented.tone)
 
     def test_no_first_run_state_claims_a_reset_it_never_saw(self):
@@ -322,7 +287,7 @@ class FirstRunStateMappingTests(unittest.TestCase):
             now=100,
             automation_enabled=True,
         )
-        self.assertEqual("READY", presented.status)
+        self.assertEqual("CLOCK RUNNING", presented.status)
         self.assertEqual("0h 15m", presented.headline)
 
     def test_an_ended_window_is_waiting_not_not_checked(self):
@@ -331,7 +296,7 @@ class FirstRunStateMappingTests(unittest.TestCase):
             now=100,
             automation_enabled=False,
         )
-        self.assertEqual("WAITING", presented.status)
+        self.assertEqual("AUTOMATION OFF", presented.status)
         self.assertEqual("Reset reached", presented.headline)
         self.assertIn("Turn UsageLoop on", presented.detail)
 
@@ -339,19 +304,20 @@ class FirstRunStateMappingTests(unittest.TestCase):
         presented = present_provider_state(
             self.provider(status="Needs attention"), now=100, automation_enabled=False
         )
-        self.assertEqual("CHECK NEEDED", presented.status)
+        self.assertEqual("NEEDS ATTENTION", presented.status)
 
     def test_starting_still_wins_over_first_run_wording(self):
         presented = present_provider_state(
             self.provider(status="Starting"), now=100, automation_enabled=False
         )
-        self.assertEqual("CHECKING", presented.status)
+        self.assertEqual("STARTING WINDOW", presented.status)
 
     def test_missing_provider_is_unchanged(self):
         presented = present_provider_state(
             self.provider(installed=False), now=100, automation_enabled=False
         )
-        self.assertEqual("NOT DETECTED", presented.status)
+        self.assertEqual("NEEDS ATTENTION", presented.status)
+
 
 
 if __name__ == "__main__":

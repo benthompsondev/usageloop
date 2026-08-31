@@ -48,7 +48,7 @@ class RuntimeSession:
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sentinel",
-        description="Observe and safely prepare Codex and Claude subscription windows.",
+        description="Observe and safely prepare Codex subscription windows.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -83,10 +83,6 @@ def create_parser() -> argparse.ArgumentParser:
     )
     bootstrap.add_argument("--dry-run", action="store_true", help="Evaluate eligibility without reserving or sending a request.")
     bootstrap.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-    commands.add_parser(
-        "claude-statusline-record",
-        help="Record allowlisted Claude statusLine quota fields.",
-    )
     return parser
 
 
@@ -352,20 +348,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dry_run=args.dry_run,
                 json_output=args.json,
             )
-        if args.command == "claude-statusline-record":
-            from .claude_status import ClaudeStatusStore, render_statusline
-
-            raw = sys.stdin.read(1_000_001)
-            if len(raw) > 1_000_000:
-                return 2
-            try:
-                payload = json.loads(raw)
-            except json.JSONDecodeError:
-                return 2
-            if not ClaudeStatusStore().record_statusline(payload):
-                return 2
-            print(render_statusline(payload))
-            return 0
         raise AssertionError("unreachable command")
     except KeyboardInterrupt:
         print("Stopped.")

@@ -1,365 +1,145 @@
-# UsageLoop
+# UsageLoop for Codex
 
-**Keep your AI coding windows ready.**
+**Keep your Codex reset clock running.**
 
-UsageLoop is a small Windows app for people who pay for Codex or Claude Code and
-keep losing hours of their plan without noticing.
+UsageLoop is a small Windows app for Codex subscribers. It shows whether the
+current five-hour window is genuinely counting down, displays the last-known
+five-hour and weekly usage, and can start the next window after rollover with
+one minimal guarded Codex request.
 
-Those plans work in five-hour windows, and a window only starts when you actually
-send something. Close the laptop at 6pm, come back at 9pm, and the window you were
-entitled to at 7pm never existed. UsageLoop watches for that and, once you switch
-it on, starts the next one for you with the smallest request the provider accepts.
+UsageLoop is an independent open-source project. It is not affiliated with,
+endorsed by, or sponsored by OpenAI.
 
-![UsageLoop dashboard](docs/screenshots/dashboard.png)
+## What the app shows
 
-It runs entirely on your PC. It never sees your provider password or token,
-because Codex and Claude Code keep their own sign-in and UsageLoop just uses the
-client you already have installed. Nothing reaches a provider until you turn the
-main switch on, and the countdowns themselves cost you nothing.
+- whether the five-hour reset clock is running;
+- the local countdown and absolute reset time;
+- the last-known five-hour usage percentage;
+- the last-known weekly usage and safety state;
+- the last automatic action UsageLoop took.
 
-## Provider status
+The countdown moves locally. It does not poll Codex to make the UI look live.
+Usage percentages are snapshots from the last real observation.
 
-| Provider | State | What actually happens |
-| --- | --- | --- |
-| **Codex** | Verified | I tested this live on a real account: one small request through the local Codex app-server starts a fresh five-hour window. That is the path the app uses. |
-| **Claude Code** | Preview | Claude Code gives you no free way to read your window state, so the app reads the status line Claude Code already writes and runs one prompt-free `--init-only` initialization. I have **not** proven that this actually starts a window, so treat the Claude card as information, not a promise. Either way it is guarded: one attempt, never repeated. |
+## How it works
 
-The repo is still called `codex-window-sentinel`. Renaming it would break update
-checks for anyone who already installed a build, so the slug stays put while the
-product is called UsageLoop.
+UsageLoop launches the installed `codex app-server` locally and completes its
+normal initialization handshake. It reads subscription windows through
+`account/rateLimits/read`, identifies windows by their actual duration, and
+classifies several observations instead of trusting one timestamp.
 
-This is version 0.7.0 and it is still early. It works, it is tested, and I use it,
-but it has not been through a wide beta yet.
+When automation is enabled, a rollover start is allowed only after:
 
-## Boundaries
+- four strong observations show the five-hour window is unanchored;
+- the known reset boundary and 15-second buffer have passed;
+- the official weekly Codex window is present and below 99% used;
+- no attempt has already been reserved for that opportunity;
+- the current Codex capabilities pass a lightweight compatibility probe.
 
-UsageLoop does:
+The start uses one ephemeral `thread/start` plus one `turn/start` through the
+same local app-server. The selected model comes from the current `model/list`
+catalog, with low reasoning when advertised. Success is reported only when
+fresh rate-limit observations show a fixed reset timestamp.
 
-- use `account/rateLimits/read` through a local `codex app-server`;
-- identify windows by reported duration instead of assuming `primary` means five hours;
-- use several observations and conservative timestamp tolerances;
-- submit the one approved trigger as an ephemeral `thread/start` plus a single
-  `turn/start` on that same app-server connection;
-- launch native Codex executables directly and Windows `.cmd` shims through
-  `cmd.exe`, never by passing a shim to `CreateProcessW`;
-- persist reservation, launch, possibly-sent, verified, and recoverable/guarded
-  failure states before deciding whether another request is safe;
-- require post-trigger `ANCHORED` evidence before reporting verified success;
-- rerun a lightweight capability probe when a provider binary changes, and
-  continue only when required behavior remains compatible;
-- advance visible countdowns locally without provider traffic;
-- cache only Claude's allowlisted five-hour and weekly statusLine fields;
-- initialize Claude with exactly one installed-runtime `--init-only` operation,
-  with no prompt or model flags;
-- check GitHub Releases only when the user presses **Check for updates**, then
-  verify the downloaded installer against its published SHA-256 checksum.
+If a request may have been sent, UsageLoop never retries it automatically.
 
-UsageLoop does not:
+## Privacy and security
 
-- read `auth.json`, OAuth tokens, account IDs, email, or conversations;
-- call WHAM or another private ChatGPT endpoint;
-- use `codex exec`, an API key, UI scraping, or reset credits;
-- log trigger input or model/process output;
-- retry with another model;
-- send a Claude prompt, select a Claude model, create scheduled tasks, silently
-  replace its running executable, or opt the user into startup or automation.
+Codex owns authentication and network communication. UsageLoop does not:
 
-## Architecture and Privacy
+- read `auth.json`, tokens, credentials, email, or account identifiers;
+- call private ChatGPT endpoints such as WHAM;
+- scrape the Codex or ChatGPT UI;
+- record prompts, model responses, conversations, or thread contents;
+- send telemetry;
+- require an API key or administrator rights.
 
-```text
-Observation:  UsageLoop -> local codex app-server -> OpenAI
-Trigger:      UsageLoop -> local codex app-server -> OpenAI
-Verification: UsageLoop -> local codex app-server -> OpenAI
-Claude state: Claude statusLine -> allowlisted local cache
-Claude init:  UsageLoop -> installed claude --init-only
-Updates:      UsageLoop -> public GitHub Releases (user initiated only)
-```
+Safe local history contains only timestamps, window duration, usage, reset
+times, classifier evidence, attempt states, and sanitized error categories.
 
-Codex owns authentication and network communication on both paths. UsageLoop
-stores only allowlisted quota evidence and sanitized trigger events in:
+Automation and Windows startup are both off on a new install. While automation
+is off, UsageLoop performs no provider-triggering work.
 
-```text
-%LOCALAPPDATA%\UsageLoop\sentinel.jsonl
-```
+## Install and run
 
-Trigger log records may contain a safe attempt identifier, provider, trigger mode,
-rollover timestamp when applicable, selected model, reasoning level, sanitized
-process outcome, lifecycle state, and observed classifier state. They never
-contain the two-character input, Codex output, credentials, or account data.
-
-Claude status caching stores only observation time, five-hour usage/reset, and
-weekly usage/reset. Session IDs, transcript paths, prompts, output, credentials,
-and account details are discarded before anything is written.
-
-The original interactive trigger timing strategy was adapted from the MIT-licensed
-[CCLimitPing](https://github.com/wavever/CCLimitPing). See
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
-
-## Install and First Run
-
-Normal users run `UsageLoop-Setup.exe`. It installs for the current Windows
-user, needs no administrator rights or separate Python installation, and adds a
-Start Menu shortcut. On first launch:
-
-1. Confirm that Codex and Claude Code are detected as expected.
-2. Turn on **Keep my 5-hour windows ready** only if you want guarded provider
-   automation. Leaving it off means zero provider-triggering activity. If Claude
-   has no custom status line, UsageLoop adds its local status helper to Claude's
-   user settings. It will not replace an existing custom status line.
-3. If Codex has no historical anchored reset, choose **Start my first window
-   now** and approve the explicit one-request bootstrap explanation.
-4. Optionally enable **Start UsageLoop with Windows** in **Settings**.
-
-Closing the window keeps it in the system tray. Use **Quit UsageLoop** in
-the tray menu to exit completely.
-
-The main window has three places:
-
-- **Dashboard** shows the global control and the two provider cards.
-- **Settings** holds startup, diagnostics, and the manual update check.
-- **About** explains the safety boundary and links back to this repository.
-
-## Source Requirements and Setup
-
-- Windows 10 or Windows 11.
-- Python 3.11 or newer for source development. The packaged app includes its
-  runtime; Python 3.12 is preferred but not required.
-- A current installed Codex CLI/app signed into the intended ChatGPT subscription.
-- A current installed Claude Code CLI signed into the intended subscription for
-  Claude status and initialization.
-
-From this repository in PowerShell:
+There is no public release yet. To build the current alpha on Windows:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\setup.ps1
-```
-
-Setup creates only `.venv` inside the repository and installs UsageLoop there.
-It does not need administrator rights, change the global PATH, or install an
-OpenAI API key.
-
-Open the desktop app from source with:
-
-```powershell
-.\.venv\Scripts\usageloop.exe
-```
-
-Build the runnable app and per-user installer with:
-
-```powershell
+pwsh -NoProfile -File .\scripts\verify.ps1
 pwsh -NoProfile -File .\scripts\build-windows.ps1
 ```
 
-The CLI remains available for diagnostics and controlled provider testing.
-
-## Updates
-
-Update checking never runs at launch, on a timer, or in the background. When a
-user presses **Check for updates**, UsageLoop reads the latest public GitHub
-Release. A usable Windows release must carry both exact files:
+The build creates:
 
 ```text
-UsageLoop-Setup.exe
-UsageLoop-Setup.exe.sha256
+dist\UsageLoop\UsageLoop.exe
+dist\UsageLoop-Setup.exe
+dist\UsageLoop-Setup.exe.sha256
 ```
 
-UsageLoop downloads the installer to the user's temporary folder, checks its
-SHA-256 hash, asks before opening it, then checks the hash again immediately
-before launch. It exits cleanly after the normal per-user installer starts
-instead of replacing its own running files.
-This source push does not create a GitHub Release. See
-[`docs/RELEASING.md`](docs/RELEASING.md) for the later release checklist.
+The installer is per-user and does not change the global PATH.
 
-## CLI Commands
+## Desktop flow
+
+1. Open UsageLoop and confirm Codex is detected.
+2. Review the cached five-hour and weekly state.
+3. Turn on **Keep my Codex reset clock running**.
+4. On a true first run, choose **Start my first window now**. This explicit
+   action is guarded by the same evidence and weekly checks.
+5. Leave UsageLoop in the tray. The local countdown continues without Codex
+   traffic between observations.
+
+Settings contains startup, health, technical diagnostics, and manual updates.
+Update checks contact GitHub only after a button click and never affect quota.
+
+## CLI
+
+The observer and guarded engine are also available from PowerShell:
 
 ```powershell
 .\sentinel.ps1 doctor
-.\sentinel.ps1 status
 .\sentinel.ps1 status --json
 .\sentinel.ps1 sample
 .\sentinel.ps1 watch
 .\sentinel.ps1 chain --dry-run
-.\sentinel.ps1 chain
-.\sentinel.ps1 chain --json
 .\sentinel.ps1 bootstrap --dry-run
-.\sentinel.ps1 bootstrap --confirm
 ```
 
-- `doctor` verifies native Codex discovery, version, app-server handshake,
-  subscription rate-limit availability, and the model a trigger would resolve. It
-  never sends a model request.
-- `status` adds one read-only observation and classifies recent safe history.
-- `sample` takes four reads at 10-second intervals by default.
-- `watch` polls every 30 seconds and reconnects after app-server failures.
-- `chain --dry-run` applies every eligibility gate and reports the exact
-  mechanism, model, reasoning level, input length, and retry bound without
-  sending a request.
-- `chain` takes four observations over 30 seconds, matching the normal high
-  confidence sample path. Only high-confidence `UNANCHORED` evidence can reach
-  the trigger. It then takes the same strength of verification observations.
-- `bootstrap --dry-run` checks first-window eligibility without a reservation or
-  request. `bootstrap --confirm` is the explicit opt-in that may send one request.
-  It additionally requires every five-hour observation to report zero percent
-  used and applies a full 18,000-second cooldown after any possibly sent request.
+`doctor`, `status`, and `sample` are read-only. A real bootstrap requires
+`bootstrap --confirm`. The desktop app uses the same core.
 
-UsageLoop does not persist a model name. Immediately before every trigger it
-reads `model/list` from the installed runtime and selects the visible default
-model whose `upgrade` pointer is null. If the catalog has no unique current
-default, UsageLoop refuses to guess based on list ordering. It uses `low`
-reasoning when the model advertises it, then falls back to the model's advertised
-default. A model carrying an `upgrade` pointer has been superseded and is the
-exact condition that produces a deprecation interstitial, so it is never selected.
-If no model qualifies, UsageLoop refuses to trigger rather than guess. The input
-is the two-character message `ok`.
+## Classifier states
 
-## Trigger Safety Gates
+- `ANCHORED`: reset timestamp stays fixed while remaining time decreases.
+- `UNANCHORED`: reset timestamp advances with wall time and stays about five
+  hours away.
+- `ABSENT`: no approximately five-hour window is exposed.
+- `EXHAUSTED`: the relevant window explicitly reports a blocked state.
+- `UNKNOWN`: evidence is insufficient, malformed, contradictory, or ambiguous.
 
-Before any request, both trigger paths require high-confidence `UNANCHORED`
-evidence from four observations spanning at least 30 seconds and a unique weekly
-window below 99% used and not blocked.
+False `UNKNOWN` is preferred over false certainty. Rate-limit semantics are
+evolving implementation behavior and must be measured, not assumed.
 
-`chain` additionally requires:
+## Local data and removal
 
-1. Safe history contains a recent prior `ANCHORED` reset timestamp that is now past.
-2. At least 15 seconds have passed since that reset.
-3. No possibly sent request is already recorded for that reset boundary.
-
-`bootstrap --confirm` instead requires explicit opt-in, zero percent five-hour
-usage across the evidence set, and no possibly sent bootstrap request during the
-previous full five-hour window. It does not invent a historical rollover.
-
-The trigger thread is created with `ephemeral: true`, `sandbox: read-only`,
-`approvalPolicy: never`, `config: {"mcp_servers": {}}`, and a `cwd` of UsageLoop's
-dedicated `%LOCALAPPDATA%\UsageLoop\trigger-workspace` directory, so the
-request cannot load MCP servers, write files, request approvals, or persist a
-thread. The workspace must be an empty real directory; UsageLoop will not use a
-link, junction, or directory containing local instructions or other files.
-UsageLoop opts out of `experimentalApi` and sends no parameter that
-requires it. There is no directory-trust prompt on this path because the
-app-server has no such concept.
-
-UsageLoop serializes the duplicate check and reservation across local processes,
-and writes both the reservation and `launch_attempted` before releasing that
-lock. Bootstrap and rollover attempts block each other within the same window.
-Malformed or unreadable attempt history fails closed instead of appearing empty.
-A rejection that Codex
-emits before dispatching the request, which the JSON-RPC codes -32600, -32601,
-and -32602 identify, becomes `failed_recoverable` and does not burn the
-opportunity. Once `turn/start` has been transmitted by any other path, UsageLoop
-always performs read-only verification and blocks another request even when the
-lifecycle outcome is ambiguous. A fresh bare reservation is treated as active
-for two minutes, then becomes recoverable after a restart.
-
-The bounded `turn/completed`, error, or timeout outcome is diagnostic only. A
-completed turn is not success. The quota observer remains the sole authority for
-anchoring.
-
-## Claude Safety Gates
-
-Claude uses its own provider module and attempt ledger. It does not reuse the
-Codex classifier, app-server transport, model selection, or trigger history.
-
-When automation is on, UsageLoop checks the installed Claude artifact for the
-exact `--init-only` capability. A version change reruns that check. A missing or
-ambiguous capability pauses only Claude automation.
-
-Before one initialization, UsageLoop requires a cached statusLine observation no
-older than six hours, a known weekly reset, weekly usage below 99%, and either a
-known five-hour reset that passed its 15-second buffer or a fresh zero-percent
-state with no historical boundary. UsageLoop reserves the attempt before process
-launch. The command contains only the discovered executable and `--init-only`.
-
-A definite local launch or parser failure remains recoverable and cannot loop in
-the running app. A timeout, unexpected nonzero exit, successful exit, or crash
-after launch is treated as possibly effectful and blocks another attempt for one
-full window. Process completion is not proof of anchoring. Only a later
-allowlisted statusLine reset can make the card **Ready**.
-
-## Controlled Live Rollover Test
-
-First run `sample` while the current window is anchored so its reset boundary is
-in safe history. After the displayed reset time has passed by at least 20
-seconds, run exactly:
+State is stored under `%LOCALAPPDATA%\UsageLoop`. The installer removes its
+per-user startup entry and installed files. To remove all remaining local data
+after uninstalling:
 
 ```powershell
-.\sentinel.ps1 chain
+Remove-Item -LiteralPath "$env:LOCALAPPDATA\UsageLoop" -Recurse -Force
 ```
 
-Run `chain --dry-run` at any time to inspect the decision without quota use. If
-the real window is already anchored, `chain` reports `ALREADY_ANCHORED` and sends
-nothing. Do not manufacture a rollover for testing.
+Only run that command if you want to discard saved reset evidence and trigger
+reservations.
 
-For the single controlled first-window proof on an untouched account, first
-confirm that the intended Codex account is active, then run exactly:
+## Development
 
 ```powershell
-.\sentinel.ps1 bootstrap --confirm
+.\.venv\Scripts\python.exe -m unittest discover -s tests -q
+.\.venv\Scripts\python.exe -m compileall -q src tests
 ```
 
-Do not repeat it if UsageLoop reports that a request was possibly sent, even when
-anchoring could not be verified.
-
-## Classifier Semantics
-
-- `ANCHORED`: at least three valid observations span 15 seconds and the absolute
-  reset timestamp stays fixed within two seconds.
-- `UNANCHORED`: the reset timestamp advances with wall time while its distance
-  stays near one full reported window.
-- `ABSENT`: no window near 300 minutes is exposed.
-- `EXHAUSTED`: the selected bucket explicitly reports blocking or 100% use.
-- `UNKNOWN`: evidence is insufficient, malformed, ambiguous, contradictory, or
-  crosses a reset.
-
-False `UNKNOWN` is preferred over a false anchored or unanchored result.
-
-## Verify
-
-Automated verification is deterministic and sends no model request:
-
-```powershell
-pwsh -NoProfile -File .\scripts\verify.ps1
-```
-
-Live read-only checks are explicit:
-
-```powershell
-.\sentinel.ps1 doctor
-.\sentinel.ps1 sample
-.\sentinel.ps1 chain --dry-run
-```
-
-## Troubleshooting
-
-- `codex_not_found`: install/update Codex or ensure its native executable is available.
-- `authentication_unavailable`: sign into Codex with the intended ChatGPT subscription.
-- `model_unavailable`: `model/list` failed or every visible model is superseded.
-- `thread_start_rejected` or `turn_start_rejected`: Codex refused the request
-  before dispatching it, so the opportunity stays recoverable.
-- `WEEKLY_UNAVAILABLE` or `WEEKLY_EXHAUSTED`: UsageLoop refuses to consume quota.
-- `ROLLOVER_BOUNDARY_UNKNOWN`: run `sample` during an anchored window, then retry
-  only after that recorded reset.
-- `ATTEMPT_ALREADY_RECORDED`: UsageLoop will not spend a second request for that rollover.
-- `BOOTSTRAP_COOLDOWN`: a bootstrap request may already have been sent within one full window.
-- `TRIGGER_NOT_SENT`: process creation definitely did not occur; the opportunity is recoverable.
-- `VERIFICATION_UNAVAILABLE`: a request may have been sent, so UsageLoop blocked a retry.
-- `ANCHOR_NOT_VERIFIED`: the request path ran, but evidence did not prove a fixed reset.
-- `UNKNOWN`: collect a fresh `sample` and treat the state as undetermined.
-
-Codex subscription rate-limit semantics and app-server payloads are evolving,
-undocumented implementation behavior. Measure them rather than assuming a field
-position, reset timestamp, model, or trigger path will remain valid.
-
-## Remove Completely
-
-Use Windows **Installed apps** to uninstall UsageLoop. The uninstaller
-removes its per-user startup registration, installed files, and the Claude
-status-line entry only when it still exactly matches UsageLoop's helper. It does
-not touch a replacement or custom status line. UsageLoop never changes the global
-PATH or creates a scheduled task. To remove its safe local history and
-preferences as well, delete:
-
-```powershell
-Remove-Item -LiteralPath "$env:LOCALAPPDATA\UsageLoop" -Recurse
-```
-
-For a source checkout, delete the project folder after quitting the app.
+See [PROJECT_SPEC.md](PROJECT_SPEC.md) for the behavioral contract and
+[docs/RELEASING.md](docs/RELEASING.md) for the future release checklist.

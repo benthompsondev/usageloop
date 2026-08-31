@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $repoRoot '.venv\Scripts\python.exe'
 $sentinel = Join-Path $repoRoot '.venv\Scripts\sentinel.exe'
-$desktop = Join-Path $repoRoot '.venv\Scripts\window-sentinel.exe'
+$desktop = Join-Path $repoRoot '.venv\Scripts\usageloop.exe'
 
 if (-not (Test-Path -LiteralPath $python) -or -not (Test-Path -LiteralPath $sentinel)) {
     throw 'Run scripts\setup.ps1 before verification.'
