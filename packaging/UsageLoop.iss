@@ -2,13 +2,13 @@
   #define AppName "UsageLoop"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.1"
+  #define AppVersion "1.0.2"
 #endif
 #ifndef AppExeName
   #define AppExeName "UsageLoop.exe"
 #endif
 #ifndef AppPublisher
-  #define AppPublisher "Ben Thompson"
+  #define AppPublisher "UsageLoop"
 #endif
 #ifndef AppId
   #define AppId "{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}"
@@ -33,6 +33,7 @@ AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\{#AppName}
 UsePreviousAppDir=no
 DefaultGroupName={#AppName}
+UsePreviousGroup=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -40,7 +41,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
 OutputBaseFilename={#InstallerBaseName}
 SetupIconFile={#AppIconFile}
-UninstallDisplayIcon={app}\{#AppExeName}
+UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName},0
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -54,7 +56,7 @@ Source: "..\dist\{#DistFolder}\*"; DestDir: "{app}"; Flags: ignoreversion recurs
 Type: files; Name: "{app}\UsageLoopStatus.exe"
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{userprograms}\{#AppName}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; IconIndex: 0
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Open {#AppName}"; Flags: nowait postinstall skipifsilent

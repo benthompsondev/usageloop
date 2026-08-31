@@ -76,7 +76,7 @@ class ProductMetadata:
 PRODUCT = ProductMetadata(
     display_name="UsageLoop",
     tagline="Keep your Codex reset clock running.",
-    version="1.0.1",
+    version="1.0.2",
     github_owner="benthompsondev",
     github_repo="usageloop",
     executable_name="UsageLoop.exe",
@@ -89,6 +89,6 @@ PRODUCT = ProductMetadata(
     # provider guards, so it is migrated rather than abandoned.
     legacy_app_data_folder="CodexWindowSentinel",
     legacy_install_folder="Window Sentinel",
-    publisher="Ben Thompson",
+    publisher="UsageLoop",
     app_id="{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}",
 )

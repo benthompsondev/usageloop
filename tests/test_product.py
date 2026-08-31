@@ -8,6 +8,7 @@ from sentinel.product import PRODUCT
 class ProductMetadataTests(unittest.TestCase):
     def test_public_identity_is_centralized(self) -> None:
         self.assertEqual("UsageLoop", PRODUCT.display_name)
+        self.assertEqual("UsageLoop", PRODUCT.publisher)
         self.assertEqual("Keep your Codex reset clock running.", PRODUCT.tagline)
         self.assertEqual("UsageLoop.exe", PRODUCT.executable_name)
         self.assertEqual("usageloop.ico", PRODUCT.icon_filename)
@@ -71,6 +72,7 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertEqual("{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}", PRODUCT.app_id)
         self.assertIn("DefaultDirName={localappdata}\\Programs\\{#AppName}", installer)
         self.assertIn("UsePreviousAppDir=no", installer)
+        self.assertIn("UsePreviousGroup=no", installer)
         self.assertIn("{#LegacyInstallFolder}", installer)
         self.assertIn("CurStepChanged", installer)
         self.assertIn("RegWriteStringValue", installer)
@@ -82,6 +84,24 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertNotIn("app-state.json", installer)
         self.assertNotIn("[UninstallDelete]", installer)
         self.assertNotIn("uninsdeletekey", installer.lower())
+
+    def test_installer_uses_stable_windows_shell_identity(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        installer = (root / "packaging" / "UsageLoop.iss").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("UninstallDisplayName={#AppName}", installer)
+        self.assertIn(
+            "UninstallDisplayIcon={app}\\{#AppExeName},0",
+            installer,
+        )
+        self.assertIn(
+            'Name: "{userprograms}\\{#AppName}\\{#AppName}"',
+            installer,
+        )
+        self.assertIn('IconFilename: "{app}\\{#AppExeName}"', installer)
+        self.assertNotIn('Name: "{group}\\{#AppName}"', installer)
 
     def test_packaging_paths_are_not_hardcoded_to_the_old_name(self) -> None:
         """The rebrand must not leave a stale path that silently breaks a build."""

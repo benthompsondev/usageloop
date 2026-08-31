@@ -25,7 +25,7 @@ jobs:
       - name: Compile
         run: python -m compileall -q src tests
 
-  clean-windows-package:
+  build-windows-package:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,10 +39,56 @@ jobs:
           choco install innosetup --no-progress -y
       - name: Build Windows package
         run: .\scripts\build-windows.ps1
-      - name: Download the published 0.9.1 installer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: |
+            dist/UsageLoop-Setup.exe
+            dist/UsageLoop-Setup.exe.sha256
+          if-no-files-found: error
+
+  windows-install-acceptance:
+    needs: build-windows-package
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [fresh, "0.9.1", "1.0.0", "1.0.1", legacy-chain]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package metadata only
+        run: python -m pip install --editable . --no-deps
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-package
+          path: dist
+      - name: Download required published installers
         run: |
-          Invoke-WebRequest `
-            -Uri 'https://github.com/benthompsondev/usageloop/releases/download/v0.9.1/UsageLoop-Setup.exe' `
-            -OutFile "$env:RUNNER_TEMP\UsageLoop-Setup-0.9.1.exe"
-      - name: Verify 0.9.1 upgrade and uninstall
-        run: .\scripts\verify-clean-install.ps1 -PreviousInstaller "$env:RUNNER_TEMP\UsageLoop-Setup-0.9.1.exe"
+          $versions = switch ('${{ matrix.scenario }}') {
+            '0.9.1' { @('0.9.1') }
+            '1.0.0' { @('1.0.0') }
+            '1.0.1' { @('1.0.1') }
+            'legacy-chain' { @('0.9.1', '1.0.0', '1.0.1') }
+            default { @() }
+          }
+          foreach ($version in $versions) {
+            Invoke-WebRequest `
+              -Uri "https://github.com/benthompsondev/usageloop/releases/download/v$version/UsageLoop-Setup.exe" `
+              -OutFile "$env:RUNNER_TEMP\UsageLoop-Setup-$version.exe"
+          }
+      - name: Verify Windows installation integration
+        run: |
+          $versions = switch ('${{ matrix.scenario }}') {
+            '0.9.1' { @('0.9.1') }
+            '1.0.0' { @('1.0.0') }
+            '1.0.1' { @('1.0.1') }
+            'legacy-chain' { @('0.9.1', '1.0.0', '1.0.1') }
+            default { @() }
+          }
+          $installers = @($versions | ForEach-Object { "$env:RUNNER_TEMP\UsageLoop-Setup-$_.exe" })
+          .\scripts\verify-clean-install.ps1 `
+            -Scenario '${{ matrix.scenario }}' `
+            -PreviousInstallers $installers
