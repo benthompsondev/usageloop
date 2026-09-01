@@ -4,13 +4,15 @@
 
 **Keep your Codex 5-hour reset clock moving while you’re away.**
 
-UsageLoop is a local-first Windows app that shows whether your Codex reset clock
-is running and can start the normal next window while you’re away.
+UsageLoop is a local-first Windows app, with a Linux beta available for testing.
+It shows whether your Codex reset clock is running and can start the normal next
+window while you’re away.
 UsageLoop does not add quota or bypass limits. It starts the normal next window
 you were going to receive anyway.
 
-**[Download UsageLoop for Windows](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
-· [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
+**[Download for Windows — Stable](https://github.com/benthompsondev/usageloop/releases/download/v1.0.8/UsageLoop-Setup.exe)**
+· **[Download for Linux — Beta](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1)**
+· [Windows release notes](https://github.com/benthompsondev/usageloop/releases/tag/v1.0.8)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
@@ -27,15 +29,17 @@ you were going to receive anyway.
 
 ## Install
 
+### Windows
+
 You need:
 
 - an x64-compatible Windows PC;
 - the Codex desktop app or Codex CLI installed and already signed in.
 
-Download the current per-user installer:
+Download the stable v1.0.8 per-user installer:
 
-- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)
-- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256)
+- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/download/v1.0.8/UsageLoop-Setup.exe)
+- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.0.8/UsageLoop-Setup.exe.sha256)
 
 The installer does not need administrator rights or change the global PATH.
 
@@ -57,6 +61,28 @@ $actual -eq $expected
 The result must be `True`. After checking the source and checksum, Windows
 normally exposes **More info → Run anyway** on systems that permit unsigned
 apps.
+
+### Linux Beta
+
+The first Linux build is an x86_64 preview, not a stable Linux release. It
+requires the signed-in Codex CLI to be available as `codex` on `PATH`.
+
+Download both files:
+
+- [UsageLoop-Linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.1.0-beta.1/UsageLoop-Linux-x86_64.tar.gz)
+- [UsageLoop-Linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.1.0-beta.1/UsageLoop-Linux-x86_64.tar.gz.sha256)
+
+Then verify, extract, and launch it:
+
+```bash
+sha256sum -c UsageLoop-Linux-x86_64.tar.gz.sha256
+tar -xzf UsageLoop-Linux-x86_64.tar.gz
+./UsageLoop-Linux-x86_64/UsageLoop/UsageLoop
+```
+
+Automatic updates are not available in this beta. Tray behavior may vary by
+desktop environment; UsageLoop keeps its main window open when a tray is not
+available.
 
 ## What UsageLoop does
 
