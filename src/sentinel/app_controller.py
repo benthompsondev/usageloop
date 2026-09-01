@@ -360,7 +360,10 @@ class ApplicationController:
     def _save(self) -> bool:
         try:
             self.store.save(self.settings, self.states)
-        except OSError:
+        # OSError covers the filesystem path. RuntimeError covers an explicit
+        # storage-backend failure without hiding programming errors such as
+        # AttributeError, AssertionError, or NameError.
+        except (OSError, RuntimeError):
             self.persistence_error = "state_write_failed"
             self._record_persistence_error()
             return False
@@ -372,7 +375,7 @@ class ApplicationController:
             try:
                 self.error_history.record_error("state_write_failed")
                 return
-            except OSError:
+            except Exception:
                 pass
         try:
             if sys.stderr is not None:

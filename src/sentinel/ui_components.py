@@ -273,10 +273,12 @@ class ScheduleCard(QFrame):
         header = QHBoxLayout()
         name = QLabel("Automation")
         name.setObjectName("providerName")
-        self.status_label = StatusPill()
+        self.automation_toggle = ToggleSwitch()
+        self.automation_toggle.setAccessibleName("Keep my 5-hour windows ready")
+        self.automation_toggle.setToolTip("Turn UsageLoop automation on or off")
         header.addWidget(name)
         header.addStretch()
-        header.addWidget(self.status_label)
+        header.addWidget(self.automation_toggle)
         layout.addLayout(header)
 
         self.mode_label = QLabel()
@@ -326,11 +328,9 @@ class ScheduleCard(QFrame):
             )
 
         if not enabled:
-            self.status_label.set_status("OFF", "neutral")
             self.next_label.setText("No automatic requests while automation is off")
             return
 
-        self.status_label.set_status("ON", "success")
         if state.reset_at is None:
             self.next_label.setText("First window starts only when you ask")
             return

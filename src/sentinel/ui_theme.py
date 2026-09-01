@@ -94,9 +94,13 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         background: {tokens.surface_raised}; border: 1px solid {tokens.border_strong};
     }}
     QLabel#overallIcon {{
-        background: #22D3A11C; color: {tokens.accent}; border: 1px solid #22D3A14A;
-        border-radius: 19px; font-size: 19px; font-weight: 800;
+        background: transparent; border: 0;
+        font-size: 20px; font-weight: 800;
     }}
+    QLabel#overallIcon[tone="success"] {{ color: {tokens.accent}; }}
+    QLabel#overallIcon[tone="info"] {{ color: {tokens.accent}; }}
+    QLabel#overallIcon[tone="warning"] {{ color: {tokens.warning}; }}
+    QLabel#overallIcon[tone="error"] {{ color: {tokens.error}; }}
     QLabel#overallTitle {{ font-size: 18px; font-weight: 760; color: {tokens.text}; }}
     QLabel#eyebrow {{
         color: {tokens.accent}; font-size: 11px; font-weight: 800;

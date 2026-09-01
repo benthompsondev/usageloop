@@ -85,6 +85,105 @@ class FakeInstallerUpdater:
 
 
 class DesktopTests(unittest.TestCase):
+    def test_dashboard_toggle_persists_on_and_off_and_updates_settings(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(2_000_000_000, verified_at=100)
+        window, provider = self.make_window(state)
+        window.thread_pool = FakeThreadPool()
+
+        window.dashboard_automation_toggle.setChecked(True)
+
+        self.assertTrue(window.controller.settings.automation_enabled)
+        self.assertTrue(window.automation_toggle.isChecked())
+        self.assertTrue(window.dashboard_automation_toggle.isChecked())
+        self.assertNotIn(
+            "No automatic requests", window.schedule_card.next_label.text()
+        )
+        restarted = window.controller.store.load()
+        self.assertTrue(restarted.automation_enabled)
+
+        window.dashboard_automation_toggle.setChecked(False)
+
+        self.assertFalse(window.controller.settings.automation_enabled)
+        self.assertFalse(window.automation_toggle.isChecked())
+        self.assertFalse(window.dashboard_automation_toggle.isChecked())
+        self.assertFalse(window.controller.store.load().automation_enabled)
+        self.assertEqual(0, provider.action_calls)
+
+    def test_settings_toggle_updates_dashboard_toggle(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+
+        window.automation_toggle.setChecked(True)
+        self.assertTrue(window.dashboard_automation_toggle.isChecked())
+
+        window.automation_toggle.setChecked(False)
+        self.assertFalse(window.dashboard_automation_toggle.isChecked())
+
+    def test_dashboard_toggle_preserves_daily_and_continuous_schedule_modes(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(2_000_000_000, verified_at=100)
+        for mode in ("daily", "continuous"):
+            with self.subTest(mode=mode):
+                window, _provider = self.make_window(state)
+                window.thread_pool = FakeThreadPool()
+                window.controller.set_schedule_mode(mode)
+                window.refresh_clock(now=1_000)
+
+                window.dashboard_automation_toggle.setChecked(True)
+
+                self.assertEqual(mode, window.controller.settings.schedule_mode)
+                self.assertEqual(mode, window.controller.store.load().schedule_mode)
+                window.close()
+
+    def test_failed_dashboard_save_rolls_both_toggles_back_and_pauses(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        window.thread_pool = FakeThreadPool()
+
+        with patch.object(
+            window.controller.store,
+            "save",
+            side_effect=RuntimeError("unexpected state backend failure"),
+        ), patch.object(QMessageBox, "warning") as warning:
+            window.dashboard_automation_toggle.setChecked(True)
+
+        self.assertFalse(window.controller.settings.automation_enabled)
+        self.assertFalse(window.dashboard_automation_toggle.isChecked())
+        self.assertFalse(window.automation_toggle.isChecked())
+        self.assertEqual("state_write_failed", window.controller.persistence_error)
+        self.assertEqual("WAIT", window.controller.decisions(now=100)["codex"].action)
+        self.assertEqual([], window.thread_pool.workers)
+        self.assertEqual(0, provider.action_calls)
+        warning.assert_called_once()
+
+    def test_overall_status_glyph_is_compact_noninteractive_and_stateful(self):
+        state = ProviderViewState.waiting("codex", "Codex", installed=True)
+        window, _provider = self.make_window(state)
+
+        self.assertIsInstance(window.overall_icon, QLabel)
+        self.assertLessEqual(window.overall_icon.width(), 32)
+        self.assertLessEqual(window.overall_icon.height(), 32)
+        self.assertEqual(Qt.FocusPolicy.NoFocus, window.overall_icon.focusPolicy())
+        self.assertEqual("info", window.overall_icon.property("tone"))
+        self.assertEqual("○", window.overall_icon.text())
+
+        window.controller.update_provider_state(
+            state.with_reset(20_000, verified_at=100)
+        )
+        window.refresh_clock(now=1_000)
+        self.assertEqual("success", window.overall_icon.property("tone"))
+        self.assertEqual("✓", window.overall_icon.text())
+
+        window.controller.persistence_error = "state_write_failed"
+        window.refresh_clock(now=1_000)
+        self.assertEqual("warning", window.overall_icon.property("tone"))
+        self.assertEqual("!", window.overall_icon.text())
+
     def test_failed_setting_save_reverts_visible_toggle_and_shows_attention(self):
         window, provider = self.make_window(
             ProviderViewState.waiting("codex", "Codex", installed=True)

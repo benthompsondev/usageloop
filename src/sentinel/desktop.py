@@ -133,6 +133,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(app_root)
 
         self.automation_toggle.toggled.connect(self._automation_toggled)
+        self.dashboard_automation_toggle.toggled.connect(
+            self._automation_toggled
+        )
         self.startup_toggle.toggled.connect(self._startup_toggled)
         self.schedule_mode.currentIndexChanged.connect(self._schedule_mode_changed)
         self.daily_time.timeChanged.connect(self._daily_time_changed)
@@ -335,7 +338,8 @@ class MainWindow(QMainWindow):
         self.overall_icon = QLabel("✓")
         self.overall_icon.setObjectName("overallIcon")
         self.overall_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.overall_icon.setFixedSize(38, 38)
+        self.overall_icon.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.overall_icon.setFixedSize(30, 30)
         overall_layout.addWidget(self.overall_icon)
         overall_copy = QVBoxLayout()
         overall_copy.setSpacing(3)
@@ -365,6 +369,7 @@ class MainWindow(QMainWindow):
             self.provider_cards[provider_id] = card
             provider_row.addWidget(card, 1)
         self.schedule_card = ScheduleCard()
+        self.dashboard_automation_toggle = self.schedule_card.automation_toggle
         self.schedule_card.manage_button.clicked.connect(lambda: self.show_page(1))
         self.last_action_label = self.schedule_card.last_action_label
         provider_row.addWidget(self.schedule_card, 1)
@@ -675,6 +680,7 @@ class MainWindow(QMainWindow):
     def refresh_clock(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
         enabled = self.controller.settings.automation_enabled
+        self._sync_automation_toggles(enabled)
         self.automation_state_label.set_status(
             "ON" if enabled else "OFF", "success" if enabled else "neutral"
         )
@@ -701,31 +707,31 @@ class MainWindow(QMainWindow):
                 self.controller.settings, codex, now=current
             )
             if self.controller.persistence_error is not None:
-                self.overall_icon.setText("!")
+                self._set_overall_icon("!", "warning")
                 self.overall_title.setText("UsageLoop needs attention")
                 self.overall_detail.setText(
                     "A local setting could not be saved, so automatic starts are paused. See Technical details."
                 )
             elif not codex.installed:
-                self.overall_icon.setText("!")
+                self._set_overall_icon("!", "warning")
                 self.overall_title.setText("Codex needs attention")
                 self.overall_detail.setText(
                     "Install and sign in to Codex before UsageLoop can observe a reset clock."
                 )
             elif codex.status == "Needs attention":
-                self.overall_icon.setText("!")
+                self._set_overall_icon("!", "warning")
                 self.overall_title.setText("UsageLoop stopped safely")
                 self.overall_detail.setText(
                     "No request was retried. Open Technical details for the reason."
                 )
             elif codex.reset_at is not None and codex.reset_at > current:
-                self.overall_icon.setText("✓")
+                self._set_overall_icon("✓", "success")
                 self.overall_title.setText("Everything is set")
                 self.overall_detail.setText(
                     "The countdown runs locally. UsageLoop will follow your schedule when this window ends."
                 )
             else:
-                self.overall_icon.setText("○")
+                self._set_overall_icon("○", "info")
                 self.overall_title.setText("Waiting for a verified Codex window")
                 self.overall_detail.setText(
                     "Sync usage to read the current state. Starting a first window always needs your approval."
@@ -858,22 +864,33 @@ class MainWindow(QMainWindow):
 
     def _automation_toggled(self, enabled: bool) -> None:
         if enabled and not self.confirm_enable():
-            self.automation_toggle.blockSignals(True)
-            self.automation_toggle.setChecked(False)
-            self.automation_toggle.blockSignals(False)
+            self._sync_automation_toggles(False)
             return
         if not self.controller.set_automation_enabled(enabled):
-            self.automation_toggle.blockSignals(True)
-            self.automation_toggle.setChecked(
+            self._sync_automation_toggles(
                 self.controller.settings.automation_enabled
             )
-            self.automation_toggle.blockSignals(False)
             self._show_persistence_warning()
             self.refresh_clock()
             return
         self.refresh_clock()
         if enabled:
             self.evaluate_automation()
+
+    def _sync_automation_toggles(self, enabled: bool) -> None:
+        for toggle in (
+            self.automation_toggle,
+            self.dashboard_automation_toggle,
+        ):
+            toggle.blockSignals(True)
+            toggle.setChecked(enabled)
+            toggle.blockSignals(False)
+
+    def _set_overall_icon(self, glyph: str, tone: str) -> None:
+        self.overall_icon.setText(glyph)
+        self.overall_icon.setProperty("tone", tone)
+        self.overall_icon.style().unpolish(self.overall_icon)
+        self.overall_icon.style().polish(self.overall_icon)
 
     def _startup_toggled(self, enabled: bool) -> None:
         previous = self.controller.settings.start_with_windows

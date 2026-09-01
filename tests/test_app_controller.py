@@ -22,10 +22,29 @@ class FakeProvider:
 
 
 class ApplicationControllerTests(unittest.TestCase):
+    def test_non_os_state_write_failure_does_not_crash_startup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "app-state.json")
+            durable = AppSettings(automation_enabled=True)
+            store.save(durable, {})
+            provider = FakeProvider(
+                ProviderViewState.waiting("codex", "Codex", installed=True)
+            )
+            controller = ApplicationController([provider], store)
+
+            with patch.object(
+                store, "save", side_effect=RuntimeError("backend write failed")
+            ):
+                controller.start()
+
+            self.assertTrue(controller.settings.automation_enabled)
+            self.assertEqual("state_write_failed", controller.persistence_error)
+            self.assertEqual("WAIT", controller.decisions(now=100)["codex"].action)
+
     def test_history_failure_falls_back_without_retrying_the_state_store(self):
         class UnavailableHistory:
             def record_error(self, category):
-                raise OSError("history unavailable")
+                raise RuntimeError("history unavailable")
 
         with tempfile.TemporaryDirectory() as directory:
             store = AppStateStore(Path(directory) / "app-state.json")
