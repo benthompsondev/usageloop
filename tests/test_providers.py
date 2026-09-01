@@ -3,8 +3,9 @@ import tempfile
 import unittest
 from unittest import mock
 
+from sentinel.app_controller import ApplicationController
 from sentinel.history import SafeHistory
-from sentinel.app_state import ProviderViewState
+from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.classifier import Classification, classify
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 from sentinel.providers import CodexProvider, CompatibilityResult
@@ -231,16 +232,28 @@ class ProviderAdapterTests(unittest.TestCase):
             self.assertEqual("1.2.3", state.runtime_version)
             probe.assert_not_called()
 
-    def test_codex_unavailable_and_corrupt_history_degrade_without_crashing(self):
+    def test_desktop_start_degrades_non_utf8_history_to_no_recent_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "codex.exe"
+            executable.write_bytes(b"native")
             history_path = Path(directory) / "history.jsonl"
-            history_path.write_text("{broken", encoding="utf-8")
+            history_path.write_bytes(b'{"event":"observation"}\xff\n')
             provider = CodexProvider(
-                history=SafeHistory(history_path), executable_finder=lambda: None
+                history=SafeHistory(history_path),
+                executable_finder=lambda: executable,
+                identity_reader=lambda _path: "codex-file:1",
+                version_reader=lambda _path: "test-version",
             )
-            state = provider.detect()
-            self.assertFalse(state.installed)
-            self.assertEqual("Needs attention", state.status)
+            controller = ApplicationController(
+                [provider], AppStateStore(Path(directory) / "app-state.json")
+            )
+
+            controller.start()
+
+            self.assertFalse(controller.settings.automation_enabled)
+            self.assertTrue(controller.states["codex"].installed)
+            self.assertEqual("Waiting", controller.states["codex"].status)
+            self.assertIsNone(controller.states["codex"].reset_at)
 
     def test_codex_card_uses_last_verified_history_without_provider_traffic(self):
         with tempfile.TemporaryDirectory() as directory:

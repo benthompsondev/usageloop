@@ -22,6 +22,51 @@ class FakeProvider:
 
 
 class ApplicationControllerTests(unittest.TestCase):
+    def test_non_utf8_app_state_starts_with_automation_off_and_no_provider_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "app-state.json"
+            path.write_bytes(b'{"settings":{"automation_enabled":true}}\xff')
+            provider = FakeProvider(
+                ProviderViewState.waiting("codex", "Codex", installed=True)
+            )
+            controller = ApplicationController([provider], AppStateStore(path))
+
+            controller.start()
+
+            self.assertFalse(controller.settings.automation_enabled)
+            self.assertEqual(0, provider.operation_calls)
+            self.assertEqual("NONE", controller.decisions(now=100)["codex"].action)
+
+    def test_daily_start_time_requires_exact_integer_components(self):
+        invalid_values = (
+            (True, 0),
+            (1.5, 0),
+            ("4", 0),
+            (None, 0),
+            (4, True),
+            (4, 0.5),
+            (4, "30"),
+            (4, None),
+            (-1, 0),
+            (24, 0),
+            (4, -1),
+            (4, 60),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            controller = ApplicationController(
+                [], AppStateStore(Path(directory) / "app-state.json")
+            )
+            controller.start()
+
+            self.assertTrue(controller.set_daily_start_time(0, 0))
+            self.assertTrue(controller.set_daily_start_time(23, 59))
+            for hour, minute in invalid_values:
+                with self.subTest(hour=hour, minute=minute):
+                    with self.assertRaises(ValueError):
+                        controller.set_daily_start_time(hour, minute)
+            self.assertEqual(23, controller.settings.daily_start_hour)
+            self.assertEqual(59, controller.settings.daily_start_minute)
+
     def test_non_os_state_write_failure_does_not_crash_startup(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AppStateStore(Path(directory) / "app-state.json")

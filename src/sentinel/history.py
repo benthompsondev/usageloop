@@ -318,7 +318,7 @@ class SafeHistory:
     def trigger_attempt_count(self, boundary_reset_at: int) -> int:
         return sum(
             1
-            for row in self._read_rows()
+            for row in self._read_rows(strict=True)
             if row.get("event") == "trigger_attempt"
             and row.get("boundary_reset_at") == int(boundary_reset_at)
         )
@@ -330,7 +330,7 @@ class SafeHistory:
         max_age_seconds: float | None = None,
     ) -> int | None:
         candidates: list[int] = []
-        for row in self._read_rows():
+        for row in self._read_rows(strict=True):
             if row.get("event") != "observation" or row.get("classification") != "ANCHORED":
                 continue
             observed_at = row.get("observed_at")
@@ -365,18 +365,11 @@ class SafeHistory:
         max_age_seconds: float = 21600,
         limit: int = 4,
     ) -> list[QuotaSnapshot]:
-        if not self.path.is_file():
-            return []
         snapshots: list[QuotaSnapshot] = []
-        try:
-            lines = self.path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return []
-        for line in lines:
+        for row in self._read_rows():
             try:
-                row = json.loads(line)
                 snapshot = _snapshot_from_row(row)
-            except (json.JSONDecodeError, TypeError, ValueError):
+            except (TypeError, ValueError):
                 continue
             if snapshot is None or snapshot.observed_at < now - max_age_seconds:
                 continue
@@ -395,6 +388,10 @@ class SafeHistory:
             return []
         try:
             lines = self.path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError as exc:
+            if strict:
+                raise HistoryIntegrityError() from exc
+            return []
         except OSError as exc:
             if strict:
                 raise HistoryUnavailableError() from exc

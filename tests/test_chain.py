@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sentinel.chain import ChainCoordinator, ChainPolicy
 from sentinel.classifier import Classification
-from sentinel.history import SafeHistory
+from sentinel.history import HistoryIntegrityError, SafeHistory
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 from sentinel.trigger import TriggerDescription, TriggerRunResult
 
@@ -274,6 +274,16 @@ class ChainCoordinatorTests(unittest.TestCase):
         trigger = FakeTrigger()
         result = self.coordinator(trigger).run(unanchored(weekly_used=100), lambda: anchored())
         self.assertEqual("WEEKLY_EXHAUSTED", result.status)
+        self.assertEqual(0, trigger.calls)
+
+    def test_unreadable_history_cannot_create_a_duplicate_trigger_opportunity(self):
+        trigger = FakeTrigger()
+        with self.history.path.open("ab") as stream:
+            stream.write(b"\xff\n")
+
+        with self.assertRaises(HistoryIntegrityError):
+            self.coordinator(trigger).run(unanchored(), lambda: anchored())
+
         self.assertEqual(0, trigger.calls)
 
     def test_unrelated_weekly_bucket_does_not_satisfy_codex_protection(self):

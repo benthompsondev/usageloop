@@ -21,6 +21,22 @@ class AppStateTests(unittest.TestCase):
             path.write_text("{broken", encoding="utf-8")
             self.assertFalse(store.load().automation_enabled)
 
+    def test_non_utf8_state_bytes_fail_safe_without_trusting_cached_state(self):
+        corrupt_payloads = {
+            "single invalid byte": b"\xff",
+            "utf16 bom": b"\xff\xfe{\x00}\x00",
+            "truncated multibyte utf8": b'{"settings":{} }\xe2\x82',
+            "invalid byte in json": b'{"settings":{"automation_enabled":true\xff}}',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "app-state.json"
+            store = AppStateStore(path)
+            for label, payload in corrupt_payloads.items():
+                with self.subTest(label=label):
+                    path.write_bytes(payload)
+                    self.assertEqual(AppSettings(), store.load())
+                    self.assertEqual({}, store.load_provider_cache())
+
     def test_safe_settings_and_provider_cache_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "app-state.json"

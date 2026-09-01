@@ -221,6 +221,17 @@ def _is_finite_number(value: Any) -> bool:
     return value == value and value not in (float("inf"), float("-inf"))
 
 
+def is_valid_daily_start_time(hour: Any, minute: Any) -> bool:
+    return (
+        isinstance(hour, int)
+        and not isinstance(hour, bool)
+        and 0 <= hour <= 23
+        and isinstance(minute, int)
+        and not isinstance(minute, bool)
+        and 0 <= minute <= 59
+    )
+
+
 class AppStateStore:
     def __init__(self, path: Path | None = None):
         self.path = path or default_app_state_path()
@@ -246,11 +257,9 @@ class AppStateStore:
         if schedule_mode not in SCHEDULE_MODES:
             schedule_mode = CONTINUOUS
         daily_hour = settings.get("daily_start_hour")
-        if isinstance(daily_hour, bool) or not isinstance(daily_hour, int) or not 0 <= daily_hour <= 23:
-            daily_hour = 4
         daily_minute = settings.get("daily_start_minute")
-        if isinstance(daily_minute, bool) or not isinstance(daily_minute, int) or not 0 <= daily_minute <= 59:
-            daily_minute = 0
+        if not is_valid_daily_start_time(daily_hour, daily_minute):
+            daily_hour, daily_minute = 4, 0
         return AppSettings(
             automation_enabled=settings.get("automation_enabled") is True,
             start_with_windows=settings.get("start_with_windows") is True,
@@ -299,7 +308,7 @@ class AppStateStore:
     def _read(self) -> dict[str, Any]:
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return {}
         return payload if isinstance(payload, dict) else {}
 

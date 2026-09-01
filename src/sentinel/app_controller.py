@@ -12,6 +12,7 @@ from .app_state import (
     AutomationDecision,
     ProviderViewState,
     automation_decision,
+    is_valid_daily_start_time,
 )
 from .providers import CompatibilityResult
 from .schedule import SCHEDULE_MODES
@@ -173,13 +174,13 @@ class ApplicationController:
         return self._save_settings(replace(self.settings, schedule_mode=mode))
 
     def set_daily_start_time(self, hour: int, minute: int) -> bool:
-        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
-            raise ValueError("daily start time is outside the supported range")
+        if not is_valid_daily_start_time(hour, minute):
+            raise ValueError("daily start time requires integer hour and minute values")
         return self._save_settings(
             replace(
                 self.settings,
-                daily_start_hour=int(hour),
-                daily_start_minute=int(minute),
+                daily_start_hour=hour,
+                daily_start_minute=minute,
             )
         )
 

@@ -31,9 +31,9 @@ pwsh -NoProfile -File .\scripts\build-windows.ps1
 - Never read credentials, private endpoints, prompts, responses, or accounts.
 - Never add TUI parsing or ConPTY. See `docs/TUI_TRIGGER_POSTMORTEM.md`.
 
-The one-time migration in `legacy_cleanup.py` may remove only exact obsolete
-UsageLoop-owned integration entries and files. Unknown user configuration fails
-closed and stays untouched.
+The one-time state-folder migration lives in `app_state.app_data_root()`. Exact
+obsolete install and Start menu cleanup lives in `packaging/UsageLoop.iss`.
+Unknown user configuration fails closed and stays untouched.
 
 Ask before changing protocol methods, dependencies, persistence, security
 boundaries, publishing, or deployment. A push requires explicit authorization.

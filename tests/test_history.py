@@ -7,7 +7,7 @@ from unittest import mock
 from pathlib import Path
 
 from sentinel.classifier import Classification
-from sentinel.history import SafeHistory
+from sentinel.history import HistoryIntegrityError, SafeHistory
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 
 
@@ -17,6 +17,29 @@ def _acquire_history_guard(path, acquired):
 
 
 class SafeHistoryTests(unittest.TestCase):
+    def test_non_strict_evidence_read_degrades_on_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel.jsonl"
+            path.write_bytes(b'{"event":"observation"}\xff\n')
+
+            self.assertEqual([], SafeHistory(path).load_recent(now=1_000))
+
+    def test_strict_attempt_read_rejects_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel.jsonl"
+            path.write_bytes(b'{"event":"trigger_state"}\xff\n')
+
+            with self.assertRaises(HistoryIntegrityError):
+                SafeHistory(path).trigger_attempts()
+
+    def test_strict_boundary_read_rejects_invalid_utf8(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel.jsonl"
+            path.write_bytes(b'{"event":"observation"}\xff\n')
+
+            with self.assertRaises(HistoryIntegrityError):
+                SafeHistory(path).latest_anchored_reset_before(1_000)
+
     def test_truncated_trigger_state_is_not_treated_as_empty_history(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sentinel.jsonl"

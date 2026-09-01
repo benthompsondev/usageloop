@@ -171,6 +171,8 @@ class InstanceCoordinator:
         self.channel = channel
 
     def claim(self, *, background: bool) -> bool:
+        # The Windows mutex owns scheduler authority. ActivationChannel only
+        # communicates with and restores the process that already owns it.
         if self.guard.acquire():
             # Failure to expose activation IPC must never allow a second
             # scheduler. The mutex remains authoritative and the primary runs.

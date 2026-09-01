@@ -1,6 +1,7 @@
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import json
 import subprocess
 import sys
 import time
@@ -111,6 +112,56 @@ class ActivationChannelTests(unittest.TestCase):
 
         self.assertEqual(0, worker.returncode, stderr)
         self.assertEqual("True", stdout.strip())
+        self.assertEqual(["activate"], activations)
+
+    def test_second_process_activates_primary_without_claiming_scheduler(self) -> None:
+        name = f"Local\\UsageLoop-coordinator-test-{uuid.uuid4().hex}"
+        primary_guard = SingleInstanceGuard(name)
+        primary_channel = ActivationChannel(name)
+        self.addCleanup(primary_guard.close)
+        self.addCleanup(primary_channel.close)
+        activations: list[str] = []
+        primary_channel.activation_requested.connect(
+            lambda: activations.append("activate")
+        )
+        self.assertTrue(
+            InstanceCoordinator(primary_guard, primary_channel).claim(background=False)
+        )
+
+        child = (
+            "import json, os; "
+            "os.environ['QT_QPA_PLATFORM']='offscreen'; "
+            "from PySide6.QtWidgets import QApplication; "
+            "from sentinel.single_instance import "
+            "ActivationChannel, InstanceCoordinator, SingleInstanceGuard; "
+            "app=QApplication([]); "
+            f"guard=SingleInstanceGuard({name!r}); "
+            f"channel=ActivationChannel({name!r}); "
+            "claimed=InstanceCoordinator(guard, channel).claim(background=False); "
+            "print(json.dumps({'scheduler_claimed': claimed})); "
+            "guard.close(); channel.close()"
+        )
+        worker = subprocess.Popen(
+            [sys.executable, "-c", child],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + 3
+            while (
+                worker.poll() is None or not activations
+            ) and time.monotonic() < deadline:
+                self.app.processEvents()
+                time.sleep(0.01)
+            stdout, stderr = worker.communicate(timeout=1)
+        finally:
+            if worker.poll() is None:
+                worker.kill()
+                worker.wait(timeout=1)
+
+        self.assertEqual(0, worker.returncode, stderr)
+        self.assertEqual({"scheduler_claimed": False}, json.loads(stdout))
         self.assertEqual(["activate"], activations)
 
     def test_activation_requires_primary_acknowledgement(self) -> None:
