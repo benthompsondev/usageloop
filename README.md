@@ -1,42 +1,81 @@
 # UsageLoop
 
+[![Latest release](https://img.shields.io/github/v/release/benthompsondev/usageloop?sort=semver)](https://github.com/benthompsondev/usageloop/releases/latest) [![Windows verification](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml/badge.svg)](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Keep your Codex 5-hour reset clock moving while you’re away.**
 
-Your Codex 5-hour window only starts when you actually use Codex. UsageLoop can
-start the next one for you while you’re away, so its reset clock is already
-counting down when you come back.
-
-Your current window ends at 1:00 AM. UsageLoop starts the next one at 4:00 AM.
-When you sit down at 7:00 AM, that reset clock has already been running for
-three hours, so your next full reset arrives around 9:00 AM instead of noon.
-
+UsageLoop is a local-first Windows app that shows whether your Codex reset clock
+is running and can start the normal next window while you’re away.
 UsageLoop does not add quota or bypass limits. It starts the normal next window
 you were going to receive anyway.
 
-![UsageLoop dashboard](docs/screenshots/dashboard.png)
+**[Download UsageLoop for Windows](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
+· [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
+· [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
-- Native Windows app with a quiet system tray mode
-- Free and open source
-- No API key, telemetry, or cloud account
-- Never reads Codex credentials or conversations
+![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
+
+- Native x64-compatible Windows app with a quiet system tray mode
+- Free and open source under the MIT license
+- No API key, telemetry, cloud account, or administrator rights
+- Never reads Codex credentials, prompts, responses, or conversations
 - Automation and Windows startup are off by default
 
-UsageLoop is an independent open-source project. It is not affiliated with,
-endorsed by, or sponsored by OpenAI.
+[Install](#install) · [See what it does](#what-usageloop-does) ·
+[Review privacy and trust](#privacy-and-trust) · [Understand how it works](#how-it-works)
+· [Get help](#get-help-and-share-feedback)
 
-UsageLoop helping you? Consider starring the repository. It helps others
-discover the project and is the simplest way to show that it’s useful.
+## Install
 
-## What the app shows
+You need:
+
+- an x64-compatible Windows PC;
+- the Codex desktop app or Codex CLI installed and already signed in.
+
+Download the current per-user installer:
+
+- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)
+- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256)
+
+The installer does not need administrator rights or change the global PATH.
+
+> [!IMPORTANT]
+> The current installer is not code-signed. Windows Defender SmartScreen may
+> show **Windows protected your PC** or **Unknown publisher**. Download it only
+> from this repository's Releases page and verify the SHA-256 checksum before
+> continuing. If your organization blocks unsigned apps, do not bypass that
+> policy.
+
+To verify the two downloaded files in PowerShell:
+
+```powershell
+$expected = (Get-Content .\UsageLoop-Setup.exe.sha256).Split()[0]
+$actual = (Get-FileHash .\UsageLoop-Setup.exe -Algorithm SHA256).Hash.ToLower()
+$actual -eq $expected
+```
+
+The result must be `True`. After checking the source and checksum, Windows
+normally exposes **More info → Run anyway** on systems that permit unsigned
+apps.
+
+## What UsageLoop does
+
+Your Codex five-hour window starts when you actually use Codex. If the current
+window ends while you're away, the next reset clock normally waits until you
+come back and use Codex again.
+
+UsageLoop can start that next window for you with one minimal request. Your
+current window ends at 1:00 AM. UsageLoop starts the next one at 4:00 AM. When
+you sit down at 7:00 AM, that reset clock has already been running for three
+hours, so your next full reset arrives around 9:00 AM instead of noon.
+
+The dashboard shows:
 
 - whether the five-hour reset clock is running;
 - the local countdown and absolute reset time;
 - the last-known five-hour usage percentage;
 - the last-known weekly usage and safety state;
-- the last automatic action UsageLoop took.
-
-The countdown moves locally. It does not poll Codex to make the UI look live.
-Usage percentages are snapshots from the last real observation.
+- the next scheduled action and the last automatic action UsageLoop took.
 
 Automation has two local schedule choices:
 
@@ -44,24 +83,71 @@ Automation has two local schedule choices:
   and safety buffer.
 - **At a set time each day** waits until your chosen local time after a window
   ends.
-  If the PC is asleep at that time, UsageLoop catches up once after wake or
-  restart. If a Codex window is still active at that time, it waits for the next
-  day's selected time rather than starting early.
 
-Daylight-saving changes use the Windows local clock. A missing spring-forward
-time moves to the corresponding first real time; a repeated fall-back time uses
-the first occurrence consistently.
+If the PC is asleep at the selected time, UsageLoop catches up once after wake
+or restart. If a Codex window is still active, it waits for the next day's
+selected time rather than starting early. Daylight-saving changes use the
+Windows local clock.
+
+The countdown moves locally. It does not poll Codex to make the UI look live.
+Usage percentages are snapshots from the last real observation.
 
 **Sync usage** is the exception you control. Pressing it takes four read-only
 Codex observations over about 30 seconds, then refreshes the five-hour and
 weekly snapshots. It never selects a model or starts a Codex turn.
 
+## First run
+
+1. Open UsageLoop and confirm Codex is detected.
+2. Review the cached five-hour and weekly state.
+3. In Settings, choose **As soon as the current one resets** or **At a set time
+   each day**, then turn on **Keep my 5-hour windows ready**.
+4. On a true first run, choose **Start my first window now**. This explicit
+   action uses the same evidence and weekly checks as an automatic start.
+5. Leave UsageLoop in the tray. Automation and Windows startup stay off until
+   you enable them.
+
+Windows startup runs UsageLoop in your signed-in desktop session. If the PC
+sleeps, the app catches up after wake. If it is powered off or you are signed
+out, it catches up the next time you sign in. UsageLoop does not install a
+Windows service or store your Windows password.
+
+Settings contains the schedule, Windows startup, manual updates, and collapsed
+technical diagnostics. Update checks contact GitHub only after a button click
+and never affect quota.
+
+## Privacy and trust
+
+Codex owns authentication and network communication. UsageLoop launches the
+installed `codex app-server` locally, but it does not:
+
+- read `auth.json`, tokens, credentials, email, or account identifiers;
+- call private ChatGPT endpoints such as WHAM;
+- scrape the Codex or ChatGPT UI;
+- record prompts, model responses, conversations, or thread contents;
+- send telemetry;
+- require an API key or administrator rights.
+
+Safe local history contains only timestamps, window duration, usage, reset
+times, classifier evidence, attempt states, and sanitized error categories.
+Automation and Windows startup are both off on a new install. While automation
+is off, UsageLoop performs no provider-triggering work.
+
+The source is public, releases include a SHA-256 checksum, and the Windows test
+and packaging workflow is visible in [GitHub Actions](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml).
+The installer is still unsigned, so the checksum and public build process are
+useful verification signals, not a substitute for a trusted code-signing
+identity.
+
+UsageLoop is an independent open-source project. It is not affiliated with,
+endorsed by, or sponsored by OpenAI.
+
 ## How it works
 
-UsageLoop launches the installed `codex app-server` locally and completes its
-normal initialization handshake. It reads subscription windows through
-`account/rateLimits/read`, identifies windows by their actual duration, and
-classifies several observations instead of trusting one timestamp.
+UsageLoop completes the normal local app-server initialization handshake. It
+reads subscription windows through `account/rateLimits/read`, identifies
+windows by their actual duration, and classifies several observations instead
+of trusting one timestamp.
 
 When automation is enabled, a rollover start is allowed only after:
 
@@ -78,68 +164,7 @@ fresh rate-limit observations show a fixed reset timestamp.
 
 If a request may have been sent, UsageLoop never retries it automatically.
 
-## Privacy and security
-
-Codex owns authentication and network communication. UsageLoop does not:
-
-- read `auth.json`, tokens, credentials, email, or account identifiers;
-- call private ChatGPT endpoints such as WHAM;
-- scrape the Codex or ChatGPT UI;
-- record prompts, model responses, conversations, or thread contents;
-- send telemetry;
-- require an API key or administrator rights.
-
-Safe local history contains only timestamps, window duration, usage, reset
-times, classifier evidence, attempt states, and sanitized error categories.
-
-Automation and Windows startup are both off on a new install. While automation
-is off, UsageLoop performs no provider-triggering work.
-
-## Install and run
-
-Download the current per-user installer from
-[GitHub Releases](https://github.com/benthompsondev/usageloop/releases/latest).
-The installer does not need administrator rights or change the global PATH.
-
-To build it yourself on Windows:
-
-```powershell
-pwsh -NoProfile -File .\scripts\setup.ps1
-pwsh -NoProfile -File .\scripts\verify.ps1
-pwsh -NoProfile -File .\scripts\build-windows.ps1
-```
-
-The build creates:
-
-```text
-dist\UsageLoop\UsageLoop.exe
-dist\UsageLoop-Setup.exe
-dist\UsageLoop-Setup.exe.sha256
-```
-
-## Desktop flow
-
-1. Open UsageLoop and confirm Codex is detected.
-2. Review the cached five-hour and weekly state.
-3. In Settings, choose **As soon as the current one resets** or **At a set time
-   each day**, then turn on **Keep my 5-hour windows ready**.
-4. On a true first run, choose **Start my first window now**. This explicit
-   action is protected by the same evidence and weekly checks.
-5. Leave UsageLoop in the tray. The local countdown continues without Codex
-   traffic between observations. Automation and Windows startup stay off until
-   you enable them.
-
-Windows startup runs UsageLoop in your signed-in desktop session. If the PC
-sleeps, the app catches up after wake. If the PC is powered off or you are
-signed out, it catches up the next time you sign in. UsageLoop does not install
-a Windows service or store your Windows password.
-
-Use **Sync usage** when the dashboard looks stale or Codex changes a limit
-unexpectedly. Settings contains the schedule, Windows startup, manual updates,
-and collapsed technical diagnostics. Update checks contact GitHub only after a
-button click and never affect quota.
-
-## Feedback
+## Get help and share feedback
 
 - [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml)
@@ -148,7 +173,13 @@ Bug reports can include the privacy-safe summary from **Settings → Advanced �
 Copy this summary**. Do not paste credentials, Codex prompts or responses,
 conversations, account information, auth files, or unrelated logs.
 
-## CLI
+UsageLoop helping you? Consider starring the repository. It helps other Codex
+users find the project.
+
+## Advanced use and development
+
+<details>
+<summary><strong>CLI and classifier reference</strong></summary>
 
 The observer and guarded engine are also available from PowerShell:
 
@@ -164,7 +195,7 @@ The observer and guarded engine are also available from PowerShell:
 `doctor`, `status`, and `sample` are read-only. A real bootstrap requires
 `bootstrap --confirm`. The desktop app uses the same core.
 
-## Classifier states
+Classifier states:
 
 - `ANCHORED`: reset timestamp stays fixed while remaining time decreases.
 - `UNANCHORED`: reset timestamp advances with wall time and stays about five
@@ -175,6 +206,8 @@ The observer and guarded engine are also available from PowerShell:
 
 False `UNKNOWN` is preferred over false certainty. Rate-limit semantics are
 evolving implementation behavior and must be measured, not assumed.
+
+</details>
 
 ## Local data and removal
 
@@ -189,7 +222,24 @@ Remove-Item -LiteralPath "$env:LOCALAPPDATA\UsageLoop" -Recurse -Force
 Only run that command if you want to discard saved reset evidence and trigger
 reservations.
 
-## Development
+<details>
+<summary><strong>Build from source</strong></summary>
+
+```powershell
+pwsh -NoProfile -File .\scripts\setup.ps1
+pwsh -NoProfile -File .\scripts\verify.ps1
+pwsh -NoProfile -File .\scripts\build-windows.ps1
+```
+
+The build creates:
+
+```text
+dist\UsageLoop\UsageLoop.exe
+dist\UsageLoop-Setup.exe
+dist\UsageLoop-Setup.exe.sha256
+```
+
+For focused development checks:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -q
@@ -198,3 +248,5 @@ reservations.
 
 See [PROJECT_SPEC.md](PROJECT_SPEC.md) for the behavioral contract and
 [docs/RELEASING.md](docs/RELEASING.md) for the release checklist.
+
+</details>
