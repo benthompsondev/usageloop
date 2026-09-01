@@ -184,6 +184,17 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertEqual(1, readme.count("docs/screenshots/dashboard.png"))
         self.assertIn("Consider starring the repository", readme)
 
+    def test_release_checklist_forbids_reusing_an_installed_candidate_version(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        releasing = (root / "docs" / "RELEASING.md").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "Never publish different bits under a version that has already been installed",
+            releasing,
+        )
+        self.assertIn("prerelease or development version", releasing)
+        self.assertIn("next patch version", releasing)
+
 
 
 

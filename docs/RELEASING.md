@@ -26,10 +26,13 @@ configuration is never changed.
 For a release:
 
 1. Match the version in `src/sentinel/product.py` and `pyproject.toml`.
-2. Tag the verified commit as `vX.Y.Z`.
-3. Attach the installer and its checksum without renaming either.
-4. Install the uploaded artifact on a clean Windows machine.
-5. Confirm `/releases/latest` returns the tag and both exact assets.
+2. Never publish different bits under a version that has already been installed.
+   Give local updater-test candidates a distinct prerelease or development version,
+   or advance to the next patch version before publishing the final build.
+3. Tag the verified commit as `vX.Y.Z`.
+4. Attach the installer and its checksum without renaming either.
+5. Install the uploaded artifact on a clean Windows machine.
+6. Confirm `/releases/latest` returns the tag and both exact assets.
 
 The updater reads the latest GitHub Release for
 `benthompsondev/usageloop`. It rejects missing assets, untrusted
