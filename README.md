@@ -139,6 +139,9 @@ The installer is still unsigned, so the checksum and public build process are
 useful verification signals, not a substitute for a trusted code-signing
 identity.
 
+Suspected vulnerabilities can be reported privately through the
+[security policy](SECURITY.md).
+
 UsageLoop is an independent open-source project. It is not affiliated with,
 endorsed by, or sponsored by OpenAI.
 
