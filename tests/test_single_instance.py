@@ -7,6 +7,7 @@ import sys
 import time
 import unittest
 import uuid
+import tempfile
 from unittest.mock import Mock
 
 from PySide6.QtNetwork import QLocalServer
@@ -35,6 +36,25 @@ class SingleInstanceGuardTests(unittest.TestCase):
 
         first.close()
         self.assertTrue(third.acquire())
+
+
+@unittest.skipIf(os.name == "nt", "POSIX file-lock behavior")
+class LinuxSingleInstanceGuardTests(unittest.TestCase):
+    def test_second_process_guard_is_rejected_until_first_releases(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = __import__("pathlib").Path(directory)
+            name = f"UsageLoop-test-{uuid.uuid4().hex}"
+            first = SingleInstanceGuard(name, lock_root=root)
+            second = SingleInstanceGuard(name, lock_root=root)
+            third = SingleInstanceGuard(name, lock_root=root)
+            self.addCleanup(first.close)
+            self.addCleanup(second.close)
+            self.addCleanup(third.close)
+
+            self.assertTrue(first.acquire())
+            self.assertFalse(second.acquire())
+            first.close()
+            self.assertTrue(third.acquire())
 
 
 class InstanceCoordinatorTests(unittest.TestCase):
@@ -76,7 +96,6 @@ class InstanceCoordinatorTests(unittest.TestCase):
         self.assertFalse(InstanceCoordinator(guard, channel).claim(background=False))
 
 
-@unittest.skipUnless(os.name == "nt", "Windows local-server behavior")
 class ActivationChannelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

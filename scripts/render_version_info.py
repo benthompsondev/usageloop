@@ -8,7 +8,8 @@ from sentinel.product import PRODUCT
 
 
 def main() -> int:
-    parts = tuple(int(part) for part in PRODUCT.version.split(".")) + (0,)
+    release = PRODUCT.version.split("-", 1)[0]
+    parts = tuple(int(part) for part in release.split(".")) + (0,)
     version = parts[:4]
     target = (
         Path(__file__).resolve().parents[1]

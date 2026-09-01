@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+import platform
 import time
 from typing import Callable
 
@@ -148,11 +149,14 @@ class MainWindow(QMainWindow):
         confirm_enable: Callable[[], bool] | None = None,
         confirm_bootstrap: Callable[[], bool] | None = None,
         confirm_install: Callable[[str], bool] | None = None,
+        platform_name: str | None = None,
     ):
         super().__init__()
         self.controller = controller
         self.providers = providers
         self.startup_manager = startup_manager
+        self.platform_name = platform_name or platform.system() or "Desktop"
+        self.is_windows = self.platform_name == "Windows"
         self.confirm_enable = confirm_enable or self._confirm_enable
         self.confirm_bootstrap = confirm_bootstrap or self._confirm_bootstrap
         self.active_operations: dict[str, str] = {}
@@ -578,9 +582,14 @@ class MainWindow(QMainWindow):
         root.addWidget(schedule_card)
 
         startup_card, startup_layout = make_surface_card(
-            "Windows startup",
-            "Start in the tray when you sign in to Windows. Applies to your account only, needs no "
-            "administrator rights, and is off until you turn it on.",
+            f"{self.platform_name} startup",
+            (
+                "Start in the tray when you sign in to Windows. Applies to your account only, needs no "
+                "administrator rights, and is off until you turn it on."
+                if self.is_windows
+                else "Start in your desktop session when you sign in. This writes one per-user XDG "
+                "autostart entry and is off until you turn it on."
+            ),
         )
         startup_row = QFrame()
         startup_row.setObjectName("settingRow")
@@ -588,9 +597,13 @@ class MainWindow(QMainWindow):
         row_layout.setContentsMargins(14, 12, 14, 12)
         row_copy = QVBoxLayout()
         row_copy.setSpacing(2)
-        row_title = QLabel(f"Start {PRODUCT.display_name} with Windows")
+        row_title = QLabel(f"Start {PRODUCT.display_name} with {self.platform_name}")
         row_title.setObjectName("secondaryMetric")
-        row_hint = QLabel("Opens quietly in the tray, not on screen")
+        row_hint = QLabel(
+            "Opens quietly in the tray, not on screen"
+            if self.is_windows
+            else "Uses the tray when your desktop environment provides one"
+        )
         row_hint.setProperty("muted", True)
         row_copy.addWidget(row_title)
         row_copy.addWidget(row_hint)
@@ -627,11 +640,26 @@ class MainWindow(QMainWindow):
         technical_layout.addWidget(technical)
         root.addWidget(technical_card)
 
-        self.update_panel = UpdatePanel(
-            updater, confirm_install=confirm_install, parent=self
-        )
-        self.update_panel.installer_launched.connect(self._exit_for_update)
-        root.insertWidget(root.count() - 1, self.update_panel)
+        self.update_panel: UpdatePanel | None = None
+        if self.is_windows:
+            self.update_panel = UpdatePanel(
+                updater, confirm_install=confirm_install, parent=self
+            )
+            self.update_panel.installer_launched.connect(self._exit_for_update)
+            root.insertWidget(root.count() - 1, self.update_panel)
+        else:
+            updates, updates_layout = make_surface_card(
+                "Linux beta updates",
+                "Automatic updates are not available in this beta. Download a newer Linux preview "
+                "from GitHub Releases when one is published.",
+            )
+            self.update_notice_label = QLabel(
+                "Your settings and exactly-once history stay in your XDG state directory."
+            )
+            self.update_notice_label.setProperty("muted", True)
+            self.update_notice_label.setWordWrap(True)
+            updates_layout.addWidget(self.update_notice_label)
+            root.insertWidget(root.count() - 1, updates)
         root.addStretch()
         return page
 
@@ -640,7 +668,9 @@ class MainWindow(QMainWindow):
             f"About {PRODUCT.display_name}", PRODUCT.tagline
         )
         about, about_layout = make_surface_card(PRODUCT.display_name)
-        version = QLabel(f"Version {PRODUCT.version} \u00b7 Windows \u00b7 MIT licensed")
+        version = QLabel(
+            f"Version {PRODUCT.version} \u00b7 {self.platform_name} \u00b7 MIT licensed"
+        )
         version.setObjectName("secondaryMetric")
         about_layout.addWidget(version)
         self.about_description = QLabel(
@@ -968,7 +998,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Startup setting not changed",
-                "Windows did not allow the per-user startup setting to be changed.",
+                f"{self.platform_name} did not allow the per-user startup setting to be changed.",
             )
             return
         if not self.controller.set_start_with_windows(enabled):
@@ -1046,14 +1076,15 @@ class MainWindow(QMainWindow):
         try:
             clipboard = QApplication.clipboard()
             if clipboard is None:
-                raise RuntimeError("Windows clipboard is unavailable")
+                raise RuntimeError("The desktop clipboard is unavailable")
             clipboard.setText(self.diagnostic_text.text())
         except Exception:
             self.copy_summary_button.setText("Copy failed")
             QMessageBox.warning(
                 self,
                 "Summary not copied",
-                "Windows did not allow UsageLoop to copy the diagnostic summary. Try again after closing other clipboard tools.",
+                f"{self.platform_name} did not allow UsageLoop to copy the diagnostic summary. "
+                "Try again after closing other clipboard tools.",
             )
             return
         self.copy_summary_button.setText("Copied")
@@ -1126,11 +1157,13 @@ class DesktopShell:
         quit_action.triggered.connect(self.quit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._tray_activated)
-        self.window.hide_on_close = QSystemTrayIcon.isSystemTrayAvailable()
+        self.tray_available = QSystemTrayIcon.isSystemTrayAvailable()
+        self.window.hide_on_close = self.tray_available
         application = QApplication.instance()
         if application is not None:
             application.aboutToQuit.connect(self.tray.hide)
-        self.tray.show()
+        if self.tray_available:
+            self.tray.show()
 
     def hide_window(self) -> None:
         self.window.hide()

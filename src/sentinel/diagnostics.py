@@ -8,6 +8,8 @@ and keeps the raw technical text behind an expander.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import platform
+import sys
 from typing import Mapping
 
 from .app_state import AppSettings, ProviderViewState
@@ -189,15 +191,16 @@ def local_state_health(
 
 
 def startup_health(enabled: bool) -> HealthRow:
+    label = f"{platform.system() or 'Desktop'} startup"
     if enabled:
         return HealthRow(
-            "Windows startup",
+            label,
             "Enabled",
             "success",
             f"{PRODUCT.display_name} opens in the tray when you sign in.",
         )
     return HealthRow(
-        "Windows startup",
+        label,
         "Disabled",
         "neutral",
         f"{PRODUCT.display_name} only runs when you open it.",
@@ -288,9 +291,14 @@ def technical_summary(
     because this text is meant to be pasted into a bug report.
     """
     compatible = settings.compatible_runtime_identities or {}
+    local_data = (
+        "${XDG_STATE_HOME:-~/.local/state}/usageloop"
+        if sys.platform.startswith("linux")
+        else rf"%LOCALAPPDATA%\{PRODUCT.app_data_folder}"
+    )
     lines = [
         f"{PRODUCT.display_name} {app_version}",
-        rf"Local data: %LOCALAPPDATA%\{PRODUCT.app_data_folder}",
+        f"Local data: {local_data}",
         f"Local state: {'Needs attention' if persistence_error else 'Healthy'}",
         "",
         "Codex support",

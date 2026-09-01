@@ -67,6 +67,7 @@ def build_window(tmp_path):
         confirm_enable=lambda: False,
         confirm_bootstrap=lambda: False,
         confirm_install=lambda _v: False,
+        platform_name="Windows",
     )
     return app, window
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import ctypes
+import os
 from pathlib import Path
 import time
 from typing import Callable
@@ -76,7 +77,7 @@ class CodexProvider:
         self.history = history or SafeHistory()
         self._find = executable_finder or find_codex_executable
         self._identity = identity_reader or file_runtime_identity
-        self._version = version_reader or windows_file_version
+        self._version = version_reader or platform_file_version
         self._probe = capability_probe
         self._runner = operation_runner
         self._now = now
@@ -261,3 +262,10 @@ def windows_file_version(executable: Path) -> str | None:
         info.product_version_ls & 0xFFFF,
     )
     return ".".join(str(value) for value in values)
+
+
+def platform_file_version(executable: Path) -> str | None:
+    """Read Windows metadata only on Windows; Linux checks version on handshake."""
+    if os.name != "nt":
+        return None
+    return windows_file_version(executable)

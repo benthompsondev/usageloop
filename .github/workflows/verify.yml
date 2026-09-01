@@ -2,13 +2,56 @@ name: verify
 
 on:
   push:
-    branches: [main]
+    branches: [main, "codex/linux-beta"]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
+  linux-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install --editable ".[test]"
+      - name: Test shared and Linux contracts
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -v
+      - name: Compile
+        run: python -m compileall -q src tests
+
+  build-linux-package:
+    needs: linux-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install --editable ".[build,test]"
+      - name: Build Linux package
+        run: ./scripts/build-linux.sh
+      - name: Smoke packaged app without provider work
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          mkdir -p "$RUNNER_TEMP/usageloop-smoke"
+          tar -xzf dist/UsageLoop-Linux-x86_64.tar.gz -C "$RUNNER_TEMP/usageloop-smoke"
+          timeout 20s "$RUNNER_TEMP/usageloop-smoke/UsageLoop-Linux-x86_64/UsageLoop/UsageLoop" --package-smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-package
+          path: |
+            dist/UsageLoop-Linux-x86_64.tar.gz
+            dist/UsageLoop-Linux-x86_64.tar.gz.sha256
+          if-no-files-found: error
+
   windows-tests:
     runs-on: windows-latest
     steps:

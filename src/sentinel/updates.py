@@ -57,7 +57,11 @@ class VerifiedInstaller:
 
 
 def _version_tuple(value: str) -> tuple[int, int, int]:
-    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", value.strip())
+    match = re.fullmatch(
+        r"v?(\d+)\.(\d+)\.(\d+)(?:[-.]?(?:a|alpha|b|beta|rc)\.?\d+)?",
+        value.strip(),
+        re.IGNORECASE,
+    )
     if match is None:
         raise UpdateError("The release version was not understood.")
     return tuple(int(part) for part in match.groups())

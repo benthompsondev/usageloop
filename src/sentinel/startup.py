@@ -1,21 +1,38 @@
-"""Per-user Windows startup registration."""
+"""Per-user desktop-session startup registration."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-import winreg
+import sys
+from typing import Protocol
 
 from .product import PRODUCT
+
+
+if os.name == "nt":
+    import winreg as _winreg
+else:
+    _winreg = None
 
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _VALUE_NAME = PRODUCT.display_name
 
 
-class StartupManager:
-    def __init__(self, executable: str, *, registry=winreg):
+class StartupRegistration(Protocol):
+    def is_enabled(self) -> bool: ...
+    def has_registration(self) -> bool: ...
+    def has_valid_current_registration(self) -> bool: ...
+    def set_enabled(self, enabled: bool) -> None: ...
+
+
+class WindowsStartupManager:
+    def __init__(self, executable: str, *, registry=None):
         self.executable = executable
-        self.registry = registry
+        self.registry = _winreg if registry is None else registry
+        if self.registry is None:
+            raise OSError("Windows startup registration is unavailable.")
 
     @property
     def command(self) -> str:
@@ -72,8 +89,74 @@ class StartupManager:
             self.registry.CloseKey(key)
 
 
-def reconcile_startup_preference(enabled: bool, manager: StartupManager) -> bool:
-    """Return the durable preference after safely normalizing HKCU Run."""
+class XdgStartupManager:
+    """Freedesktop autostart entry scoped to the current Linux user."""
+
+    def __init__(self, executable: str, *, config_home: Path | None = None):
+        self.executable = str(Path(executable).resolve())
+        self.config_home = config_home or _xdg_config_home()
+        self.path = self.config_home / "autostart" / "usageloop.desktop"
+
+    @property
+    def command(self) -> str:
+        escaped = self.executable.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}" --background'
+
+    @property
+    def content(self) -> str:
+        return (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            f"Name={PRODUCT.display_name}\n"
+            f"Exec={self.command}\n"
+            "Terminal=false\n"
+            "X-GNOME-Autostart-enabled=true\n"
+        )
+
+    def is_enabled(self) -> bool:
+        try:
+            return self.path.read_text(encoding="utf-8") == self.content
+        except (OSError, UnicodeDecodeError):
+            return False
+
+    def has_registration(self) -> bool:
+        return self.path.is_file()
+
+    def has_valid_current_registration(self) -> bool:
+        return self.is_enabled() and Path(self.executable).is_file()
+
+    def set_enabled(self, enabled: bool) -> None:
+        if enabled:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_suffix(".desktop.tmp")
+            temporary.write_text(self.content, encoding="utf-8")
+            os.replace(temporary, self.path)
+            return
+        self.path.unlink(missing_ok=True)
+
+
+def _xdg_config_home() -> Path:
+    configured = os.environ.get("XDG_CONFIG_HOME")
+    candidate = Path(configured) if configured else None
+    if candidate is not None and candidate.is_absolute():
+        return candidate
+    return Path.home() / ".config"
+
+
+def create_startup_manager(executable: str) -> StartupRegistration:
+    if sys.platform.startswith("linux"):
+        return XdgStartupManager(executable)
+    return WindowsStartupManager(executable)
+
+
+# Existing Windows call sites and tests keep this public name.
+StartupManager = WindowsStartupManager
+
+
+def reconcile_startup_preference(
+    enabled: bool, manager: StartupRegistration
+) -> bool:
+    """Return the durable preference after normalizing per-user startup."""
     if enabled:
         if not manager.is_enabled():
             manager.set_enabled(True)

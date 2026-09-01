@@ -16,7 +16,7 @@ from .history import SafeHistory
 from .product import PRODUCT
 from .providers import CodexProvider
 from .single_instance import ActivationChannel, InstanceCoordinator, SingleInstanceGuard
-from .startup import StartupManager, reconcile_startup_preference
+from .startup import create_startup_manager, reconcile_startup_preference
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -30,6 +30,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--activation-smoke-auto-hide", action="store_true", help=argparse.SUPPRESS
     )
+    parser.add_argument("--package-smoke", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
@@ -64,6 +65,12 @@ def _run_activation_smoke(
 def main(argv: list[str] | None = None) -> int:
     args = create_parser().parse_args(argv)
     application = QApplication.instance() or QApplication(sys.argv[:1])
+    if args.package_smoke:
+        window = QWidget()
+        window.setWindowTitle("UsageLoop package smoke")
+        window.show()
+        QTimer.singleShot(250, application.quit)
+        return application.exec()
     if args.activation_smoke:
         return _run_activation_smoke(
             application,
@@ -87,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         providers, AppStateStore(), error_history=history
     )
     controller.start()
-    startup = StartupManager(str(Path(sys.executable).resolve()))
+    startup = create_startup_manager(str(Path(sys.executable).resolve()))
     try:
         normalized_startup = reconcile_startup_preference(
             controller.settings.start_with_windows, startup
@@ -98,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
                 startup.set_enabled(durable_startup)
     except OSError:
         # Startup registration is optional. The Settings control remains the
-        # visible recovery path if Windows temporarily denies registry access.
+        # visible recovery path if the desktop temporarily denies access.
         pass
     window = MainWindow(
         controller,

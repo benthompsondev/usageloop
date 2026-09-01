@@ -52,3 +52,17 @@ The updater reads the latest GitHub Release for
 `benthompsondev/usageloop`. It rejects missing assets, untrusted
 download hosts, older versions, and checksum mismatches. Repository and asset
 names are therefore compatibility contracts for already-installed copies.
+
+## Linux preview releases
+
+Linux previews are prereleases and do not replace the current Windows release.
+Build them on GitHub Actions with `scripts/build-linux.sh`, run the packaged
+`--package-smoke` check, and attach both exact files:
+
+```text
+UsageLoop-Linux-x86_64.tar.gz
+UsageLoop-Linux-x86_64.tar.gz.sha256
+```
+
+Before publishing, confirm the release is marked **Pre-release** and that
+`/releases/latest` still resolves to the current stable Windows tag.

@@ -39,25 +39,28 @@ def find_codex_executable(
     path_value: str | None = None,
     known_candidates: Iterable[Path] | None = None,
 ) -> Path:
-    """Prefer the installed native Codex binary, then PATH, then a command shim.
+    """Resolve Codex without guessing undocumented Linux install locations.
 
-    The npm shim is often an older release than the native app binary. Sentinel
-    depends on evolving app-server behavior, so it must not silently run the
-    stale one: a locally installed shim measured five minor versions behind the
-    native executable it shadowed on PATH.
+    Linux uses PATH first and has no guessed fallback. Windows keeps its measured
+    native-app preference because an npm shim can lag behind the installed app
+    binary and expose older app-server behavior.
     """
-    candidates = _default_known_candidates() if known_candidates is None else tuple(known_candidates)
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
-
     search_path = os.environ.get("PATH", "") if path_value is None else path_value
     names = ("codex.exe", "codex.cmd") if os.name == "nt" else ("codex",)
+    candidates = _default_known_candidates() if known_candidates is None else tuple(known_candidates)
+    if os.name == "nt":
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate.resolve()
     for name in names:
         for directory in search_path.split(os.pathsep):
             if not directory:
                 continue
             candidate = Path(directory.strip('"')) / name
+            if candidate.is_file():
+                return candidate.resolve()
+    if os.name != "nt":
+        for candidate in candidates:
             if candidate.is_file():
                 return candidate.resolve()
     raise CodexNotFoundError()

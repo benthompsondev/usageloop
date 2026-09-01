@@ -4,8 +4,9 @@
 
 **Keep your Codex 5-hour reset clock moving while you’re away.**
 
-UsageLoop is a local-first Windows app that shows whether your Codex reset clock
-is running and can start the normal next window while you’re away.
+UsageLoop is a local-first desktop app that shows whether your Codex reset clock
+is running and can start the normal next window while you’re away. Windows v1.0.8
+is the stable release; Linux support is in its first public beta.
 UsageLoop does not add quota or bypass limits. It starts the normal next window
 you were going to receive anyway.
 
@@ -13,9 +14,14 @@ you were going to receive anyway.
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
+**[Try the first Linux beta](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1)**
+The Linux build is a preview, not the stable release. Windows users should stay
+on v1.0.8.
+
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
 
 - Native x64-compatible Windows app with a quiet system tray mode
+- Standalone x86_64 Linux beta for real-machine testing
 - Free and open source under the MIT license
 - No API key, telemetry, cloud account, or administrator rights
 - Never reads Codex credentials, prompts, responses, or conversations
@@ -58,6 +64,33 @@ The result must be `True`. After checking the source and checksum, Windows
 normally exposes **More info → Run anyway** on systems that permit unsigned
 apps.
 
+### Linux beta
+
+The first Linux preview targets x86_64 desktop Linux, starting with Ubuntu-family
+systems. It has not been proven on my real Linux machine yet, so I am not claiming
+full distro or desktop-environment support.
+
+You need the signed-in Codex CLI available as `codex` on PATH, with
+`codex app-server` support. Download these two files from the
+[v1.1.0-beta.1 prerelease](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1):
+
+- `UsageLoop-Linux-x86_64.tar.gz`
+- `UsageLoop-Linux-x86_64.tar.gz.sha256`
+
+Then verify and launch it:
+
+```bash
+sha256sum -c UsageLoop-Linux-x86_64.tar.gz.sha256
+tar -xzf UsageLoop-Linux-x86_64.tar.gz
+cd UsageLoop-Linux-x86_64
+./UsageLoop/UsageLoop
+```
+
+Linux stores its local state under `$XDG_STATE_HOME/usageloop`, or
+`~/.local/state/usageloop` when `XDG_STATE_HOME` is not set. Optional sign-in
+startup uses the per-user XDG autostart directory. Automatic app updates are not
+available in this beta, and tray behavior depends on the desktop environment.
+
 ## What UsageLoop does
 
 Your Codex five-hour window starts when you actually use Codex. If the current
@@ -86,8 +119,8 @@ Automation has two local schedule choices:
 
 If the PC is asleep at the selected time, UsageLoop catches up once after wake
 or restart. If a Codex window is still active, it waits for the next day's
-selected time rather than starting early. Daylight-saving changes use the
-Windows local clock.
+selected time rather than starting early. Daylight-saving changes use the local
+desktop clock.
 
 The countdown moves locally. It does not poll Codex to make the UI look live.
 Usage percentages are snapshots from the last real observation.
@@ -104,17 +137,21 @@ weekly snapshots. It never selects a model or starts a Codex turn.
    each day**, then turn on **Keep my 5-hour windows ready**.
 4. On a true first run, choose **Start my first window now**. This explicit
    action uses the same evidence and weekly checks as an automatic start.
-5. Leave UsageLoop in the tray. Automation and Windows startup stay off until
-   you enable them.
+5. Leave UsageLoop in the tray where your desktop environment supports it.
+   Automation and sign-in startup stay off until you enable them.
 
 Windows startup runs UsageLoop in your signed-in desktop session. If the PC
 sleeps, the app catches up after wake. If it is powered off or you are signed
 out, it catches up the next time you sign in. UsageLoop does not install a
 Windows service or store your Windows password.
 
-Settings contains the schedule, Windows startup, manual updates, and collapsed
-technical diagnostics. Update checks contact GitHub only after a button click
-and never affect quota.
+Linux sign-in startup uses a per-user XDG autostart entry. Tray behavior depends
+on the desktop environment, and the main window stays open when no tray is
+available.
+
+Settings contains the schedule, per-user startup, and collapsed technical
+diagnostics. Windows also has manual updates, which contact GitHub only after a
+button click and never affect quota. Linux beta updates are manual downloads.
 
 ## Privacy and trust
 
@@ -130,11 +167,12 @@ installed `codex app-server` locally, but it does not:
 
 Safe local history contains only timestamps, window duration, usage, reset
 times, classifier evidence, attempt states, and sanitized error categories.
-Automation and Windows startup are both off on a new install. While automation
+Automation and sign-in startup are both off on a new install. While automation
 is off, UsageLoop performs no provider-triggering work.
 
-The source is public, releases include a SHA-256 checksum, and the Windows test
-and packaging workflow is visible in [GitHub Actions](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml).
+The source is public, releases include SHA-256 checksums, and the Windows and
+Linux test and packaging workflow is visible in
+[GitHub Actions](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml).
 The installer is still unsigned, so the checksum and public build process are
 useful verification signals, not a substitute for a trusted code-signing
 identity.
@@ -214,7 +252,7 @@ evolving implementation behavior and must be measured, not assumed.
 
 ## Local data and removal
 
-State is stored under `%LOCALAPPDATA%\UsageLoop`. The installer removes its
+On Windows, state is stored under `%LOCALAPPDATA%\UsageLoop`. The installer removes its
 per-user startup entry and installed files. To remove all remaining local data
 after uninstalling:
 

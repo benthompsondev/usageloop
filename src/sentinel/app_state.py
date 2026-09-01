@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, replace
 import json
 import os
 from pathlib import Path
+import sys
 from typing import Any
 
 from .product import PRODUCT
@@ -314,12 +315,21 @@ class AppStateStore:
 
 
 def app_data_root() -> Path:
-    """Return the local state directory, migrating the pre-rebrand folder once.
+    """Return the platform-local state directory.
 
-    The folder holds the one-shot provider guards. Abandoning it during a rename
-    would silently reset those guards, so a legacy folder is moved when the new
-    name is still free, and is used in place if the move cannot happen.
+    Linux uses XDG state storage. On Windows, the folder holds the one-shot
+    provider guards, so the pre-rebrand folder is migrated rather than abandoned.
     """
+    if sys.platform.startswith("linux"):
+        configured = os.environ.get("XDG_STATE_HOME")
+        candidate = Path(configured) if configured else None
+        root = (
+            candidate
+            if candidate is not None and candidate.is_absolute()
+            else Path.home() / ".local" / "state"
+        )
+        return root / "usageloop"
+
     root = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
     current = root / PRODUCT.app_data_folder
     legacy = root / PRODUCT.legacy_app_data_folder

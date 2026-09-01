@@ -273,7 +273,7 @@ class DesktopTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def make_window(self, state):
+    def make_window(self, state, *, platform_name="Windows"):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         provider = FakeProvider(state)
@@ -287,9 +287,21 @@ class DesktopTests(unittest.TestCase):
             FakeStartup(),
             confirm_enable=lambda: True,
             confirm_bootstrap=lambda: True,
+            platform_name=platform_name,
         )
         self.addCleanup(window.close)
         return window, provider
+
+    def test_linux_surface_labels_beta_limits_without_windows_updater(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True),
+            platform_name="Linux",
+        )
+
+        labels = "\n".join(label.text() for label in window.findChildren(QLabel))
+        self.assertIn("Linux startup", labels)
+        self.assertIn("Automatic updates are not available in this beta", labels)
+        self.assertIsNone(window.update_panel)
 
     def test_window_shows_primary_control_and_provider_state(self):
         window, _provider = self.make_window(
@@ -569,6 +581,7 @@ class DesktopTests(unittest.TestCase):
             updater=updater,
             confirm_enable=lambda: True,
             confirm_bootstrap=lambda: True,
+            platform_name="Windows",
         )
         self.addCleanup(window.close)
         self.assertEqual(0, updater.check_calls)

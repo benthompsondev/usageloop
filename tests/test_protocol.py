@@ -66,6 +66,16 @@ class AppServerProtocolTests(unittest.TestCase):
         self.assertFalse(transport.sent[0]["params"]["capabilities"]["experimentalApi"])
         self.assertEqual({"method": "initialized"}, transport.sent[1])
 
+    def test_same_handshake_accepts_linux_app_server_identity(self):
+        fixture = copy.deepcopy(messages()["initialize_result"])
+        fixture["result"]["platformFamily"] = "unix"
+        fixture["result"]["platformOs"] = "linux"
+        client = AppServerClient(MemoryTransport([fixture]), client_version="1.1.0-beta.1")
+
+        server = client.initialize()
+
+        self.assertEqual("linux", server.platform_os)
+
     def test_rate_read_correlates_response_and_keeps_sparse_notification(self):
         fixture = messages()
         transport = MemoryTransport(
@@ -137,6 +147,23 @@ class ExecutableResolutionTests(unittest.TestCase):
             with self.assertRaises(CodexNotFoundError) as caught:
                 find_codex_executable(path_value=directory, known_candidates=())
         self.assertEqual("codex_not_found", caught.exception.category)
+
+    @unittest.skipIf(os.name == "nt", "Linux PATH precedence")
+    def test_linux_prefers_path_without_guessing_an_install_location(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path_codex = root / "path" / "codex"
+            alternate = root / "alternate" / "codex"
+            path_codex.parent.mkdir()
+            alternate.parent.mkdir()
+            path_codex.touch()
+            alternate.touch()
+
+            found = find_codex_executable(
+                path_value=str(path_codex.parent), known_candidates=(alternate,)
+            )
+
+        self.assertEqual(path_codex.resolve(), found)
 
     @unittest.skipUnless(__import__("os").name == "nt", "Windows executable naming")
     def test_native_executable_is_preferred_over_command_shim(self):

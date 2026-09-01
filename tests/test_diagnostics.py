@@ -1,6 +1,8 @@
 """The Settings health surface has to be readable and honest without Qt running."""
 
 from pathlib import Path
+import platform
+import sys
 import unittest
 
 from sentinel.app_state import AppSettings, ProviderViewState
@@ -173,7 +175,14 @@ class SummaryTests(unittest.TestCase):
         rows = self.rows(states={"codex": state()})
         labels = [row.label for row in rows]
         self.assertEqual(
-            ["Codex installed", "5-hour window", "Weekly allowance", "Automation", "Local state", "Windows startup"],
+            [
+                "Codex installed",
+                "5-hour window",
+                "Weekly allowance",
+                "Automation",
+                "Local state",
+                f"{platform.system() or 'Desktop'} startup",
+            ],
             labels,
         )
 
@@ -247,7 +256,12 @@ class TechnicalSummaryTests(unittest.TestCase):
 
     def test_summary_names_canonical_local_data_without_expanding_the_user_path(self):
         text = self.summary()
-        self.assertIn(r"Local data: %LOCALAPPDATA%\UsageLoop", text)
+        expected = (
+            "Local data: ${XDG_STATE_HOME:-~/.local/state}/usageloop"
+            if sys.platform.startswith("linux")
+            else r"Local data: %LOCALAPPDATA%\UsageLoop"
+        )
+        self.assertIn(expected, text)
         self.assertNotIn(str(Path.home()), text)
 
     def test_summary_reports_confirmed_compatibility(self):

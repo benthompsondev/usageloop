@@ -118,6 +118,11 @@ class CorruptProviderCacheTests(unittest.TestCase):
 class AppDataMigrationTests(unittest.TestCase):
     """The state folder carries the one-shot guards, so a rename must not lose it."""
 
+    def setUp(self) -> None:
+        platform_patch = mock.patch("sentinel.app_state.sys.platform", "win32")
+        platform_patch.start()
+        self.addCleanup(platform_patch.stop)
+
     def test_legacy_folder_is_migrated_when_the_new_name_is_free(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             legacy = Path(directory) / PRODUCT.legacy_app_data_folder

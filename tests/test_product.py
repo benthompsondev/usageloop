@@ -73,6 +73,19 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("render_version_info.py", build)
         self.assertIn("Programs\\Inno Setup 6\\ISCC.exe", build)
 
+    def test_linux_package_is_standalone_and_never_runs_windows_packaging(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        build = (root / "scripts" / "build-linux.sh").read_text(encoding="utf-8")
+        workflow = (root / ".github" / "workflows" / "verify.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("UsageLoop-Linux-x86_64.tar.gz", build)
+        self.assertIn("UsageLoop-linux.spec", build)
+        self.assertNotIn("UsageLoop.iss", build)
+        self.assertNotIn("build-windows.ps1", build)
+        self.assertIn("Smoke packaged app without provider work", workflow)
+
     def test_in_place_update_keeps_the_same_app_identity_and_local_state(self) -> None:
         root = Path(__file__).resolve().parents[1]
         installer = (root / "packaging" / "UsageLoop.iss").read_text(

@@ -1,18 +1,27 @@
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from sentinel.app_state import (
     AppSettings,
     AppStateStore,
     ProviderViewState,
     automation_decision,
+    app_data_root,
     format_countdown,
 )
 
 
 class AppStateTests(unittest.TestCase):
+    def test_linux_state_uses_absolute_xdg_state_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch("sentinel.app_state.sys.platform", "linux"):
+                with mock.patch.dict(os.environ, {"XDG_STATE_HOME": directory}):
+                    self.assertEqual(Path(directory) / "usageloop", app_data_root())
+
     def test_missing_or_corrupt_settings_fail_safe_with_automation_off(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "app-state.json"

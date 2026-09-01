@@ -1,10 +1,16 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from sentinel.product import PRODUCT
 from sentinel.app_state import AppSettings
-from sentinel.startup import StartupManager, reconcile_startup_preference
+from sentinel.startup import (
+    StartupManager,
+    XdgStartupManager,
+    create_startup_manager,
+    reconcile_startup_preference,
+)
 
 
 class FakeRegistry:
@@ -40,6 +46,29 @@ class FakeRegistry:
 
 
 class StartupManagerTests(unittest.TestCase):
+    def test_linux_autostart_is_per_user_exact_and_reversible(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "UsageLoop folder" / "UsageLoop"
+            executable.parent.mkdir()
+            executable.touch()
+            manager = XdgStartupManager(executable, config_home=Path(directory) / "config")
+
+            manager.set_enabled(True)
+
+            self.assertTrue(manager.is_enabled())
+            self.assertIn(f"Exec={manager.command}", manager.content)
+            self.assertEqual(
+                Path(directory) / "config" / "autostart" / "usageloop.desktop",
+                manager.path,
+            )
+            manager.set_enabled(False)
+            self.assertFalse(manager.has_registration())
+
+    def test_linux_factory_never_constructs_the_registry_manager(self):
+        with mock.patch("sentinel.startup.sys.platform", "linux"):
+            manager = create_startup_manager("/opt/UsageLoop/UsageLoop")
+        self.assertIsInstance(manager, XdgStartupManager)
+
     def test_startup_registration_is_per_user_and_reversible(self):
         registry = FakeRegistry()
         manager = StartupManager("C:/Apps/UsageLoop.exe", registry=registry)
