@@ -62,6 +62,7 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("PRODUCT.icon_filename", pyinstaller)
         self.assertIn("PRODUCT.version_resource_filename", pyinstaller)
         self.assertIn("render_version_info.py", build)
+        self.assertIn("Programs\\Inno Setup 6\\ISCC.exe", build)
 
     def test_in_place_update_keeps_the_same_app_identity_and_local_state(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -102,6 +103,20 @@ class ProductMetadataTests(unittest.TestCase):
         )
         self.assertIn('IconFilename: "{app}\\{#AppExeName}"', installer)
         self.assertNotIn('Name: "{group}\\{#AppName}"', installer)
+
+    def test_installer_repairs_only_the_known_usage_loop_registration(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        installer = (root / "packaging" / "UsageLoop.iss").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("RepairUsageLoopRegistration", installer)
+        self.assertIn("{#AppId}", installer)
+        self.assertIn("{#LegacyInstallFolder}", installer)
+        self.assertIn("FileExists", installer)
+        self.assertIn("DisplayVersion", installer)
+        self.assertIn("UninstallString", installer)
+        self.assertNotIn("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*", installer)
 
     def test_packaging_paths_are_not_hardcoded_to_the_old_name(self) -> None:
         """The rebrand must not leave a stale path that silently breaks a build."""
@@ -149,6 +164,9 @@ class PackagingMetadataTests(unittest.TestCase):
         data = PRODUCT.packaging_metadata()
         self.assertEqual(PRODUCT.dist_folder_name, data["dist_folder_name"])
         self.assertEqual(PRODUCT.executable_name, data["executable_name"])
+        self.assertEqual(
+            "{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}", data["app_id_guid"]
+        )
         self.assertNotIn("claude_status_helper_name", data)
 
     def test_every_name_the_build_script_reads_is_exported(self) -> None:

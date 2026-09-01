@@ -2,7 +2,7 @@
   #define AppName "UsageLoop"
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.0.2"
+  #define AppVersion "1.0.3"
 #endif
 #ifndef AppExeName
   #define AppExeName "UsageLoop.exe"
@@ -12,6 +12,9 @@
 #endif
 #ifndef AppId
   #define AppId "{{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}"
+#endif
+#ifndef AppIdGuid
+  #define AppIdGuid "{907EA79E-18FD-4A38-BBD0-35FF22D0BD82}"
 #endif
 #ifndef InstallerBaseName
   #define InstallerBaseName "UsageLoop-Setup"
@@ -65,12 +68,59 @@ Filename: "{app}\{#AppExeName}"; Description: "Open {#AppName}"; Flags: nowait p
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey
 
 [Code]
+procedure WriteRequiredString(const KeyName, ValueName, ValueData: String);
+begin
+  if not RegWriteStringValue(HKCU, KeyName, ValueName, ValueData) then
+    RaiseException('UsageLoop could not repair its Windows app registration.');
+end;
+
+procedure RepairUsageLoopRegistration;
+var
+  UninstallKey: String;
+  UninstallExe: String;
+  InstallDir: String;
+begin
+  UninstallKey :=
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#AppIdGuid}_is1';
+  UninstallExe := ExpandConstant('{uninstallexe}');
+  InstallDir := AddBackslash(ExpandConstant('{app}'));
+
+  { Every historical public build used this one AppId and registry view. }
+  { Rewriting that exact record repairs beta entries that still reference }
+  { the deleted Window Sentinel folder without scanning other products. }
+  if not FileExists(UninstallExe) then
+    RaiseException('UsageLoop could not create its canonical uninstaller.');
+
+  WriteRequiredString(UninstallKey, 'DisplayName', '{#AppName}');
+  WriteRequiredString(UninstallKey, 'DisplayVersion', '{#AppVersion}');
+  WriteRequiredString(UninstallKey, 'Publisher', '{#AppPublisher}');
+  WriteRequiredString(UninstallKey, 'InstallLocation', InstallDir);
+  WriteRequiredString(
+    UninstallKey,
+    'DisplayIcon',
+    ExpandConstant('{app}\{#AppExeName},0')
+  );
+  WriteRequiredString(
+    UninstallKey,
+    'UninstallString',
+    '"' + UninstallExe + '"'
+  );
+  WriteRequiredString(
+    UninstallKey,
+    'QuietUninstallString',
+    '"' + UninstallExe + '" /SILENT'
+  );
+  WriteRequiredString(UninstallKey, 'Inno Setup: App Path', ExpandConstant('{app}'));
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   StartupCommand: String;
 begin
   if CurStep <> ssPostInstall then
     Exit;
+
+  RepairUsageLoopRegistration;
 
   { Preserve the user's existing startup choice while repairing its executable. }
   if RegQueryStringValue(

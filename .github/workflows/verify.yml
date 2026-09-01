@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [fresh, "0.9.1", "1.0.0", "1.0.1", legacy-chain]
+        scenario: [fresh, "0.9.1", "1.0.0", "1.0.1", "1.0.2", legacy-chain, broken-registration]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,6 +71,8 @@ jobs:
             '0.9.1' { @('0.9.1') }
             '1.0.0' { @('1.0.0') }
             '1.0.1' { @('1.0.1') }
+            '1.0.2' { @('1.0.2') }
+            'broken-registration' { @('1.0.2') }
             'legacy-chain' { @('0.9.1', '1.0.0', '1.0.1') }
             default { @() }
           }
@@ -85,6 +87,8 @@ jobs:
             '0.9.1' { @('0.9.1') }
             '1.0.0' { @('1.0.0') }
             '1.0.1' { @('1.0.1') }
+            '1.0.2' { @('1.0.2') }
+            'broken-registration' { @('1.0.2') }
             'legacy-chain' { @('0.9.1', '1.0.0', '1.0.1') }
             default { @() }
           }

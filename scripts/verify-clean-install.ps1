@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', 'legacy-chain')]
+    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', 'legacy-chain', 'broken-registration')]
     [string]$Scenario = 'fresh',
     [string[]]$PreviousInstallers = @()
 )
@@ -52,6 +52,23 @@ function Seed-LegacyInnoState {
     New-ItemProperty -LiteralPath $uninstallKey -Name InstallLocation -Value $legacyDir -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $uninstallKey -Name 'Inno Setup: App Path' -Value $legacyDir -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $uninstallKey -Name 'Inno Setup: Icon Group' -Value $product.legacy_install_folder -PropertyType String -Force | Out-Null
+}
+
+function Seed-BrokenRegistration {
+    New-ItemProperty -LiteralPath $uninstallKey -Name DisplayName -Value 'UsageLoop 0.9.1' -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $uninstallKey -Name DisplayVersion -Value '0.9.1' -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $uninstallKey -Name Publisher -Value 'Ben Thompson' -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $uninstallKey -Name InstallLocation -Value "$legacyDir\" -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $uninstallKey -Name DisplayIcon -Value (Join-Path $legacyDir $product.executable_name) -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $uninstallKey -Name UninstallString -Value ('"{0}"' -f (Join-Path $legacyDir 'unins000.exe')) -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $uninstallKey -Name QuietUninstallString -Value ('"{0}" /SILENT' -f (Join-Path $legacyDir 'unins000.exe')) -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $uninstallKey -Name 'Inno Setup: App Path' -Value $legacyDir -PropertyType String -Force | Out-Null
+    New-Item -Path $runKey -Force | Out-Null
+    New-ItemProperty -LiteralPath $runKey -Name UsageLoop -Value ('"{0}" --background' -f (Join-Path $legacyDir $product.executable_name)) -PropertyType String -Force | Out-Null
+    if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
+    if (Test-Path -LiteralPath $legacyDir) {
+        throw 'The broken-registration fixture requires the legacy target to be absent.'
+    }
 }
 
 function Get-UsageLoopUninstallEntries {
@@ -133,6 +150,19 @@ if ($PreviousInstallers.Count -gt 0) {
     }
     New-Item -Path $runKey -Force | Out-Null
     New-ItemProperty -LiteralPath $runKey -Name UsageLoop -Value ('"{0}" --background' -f $previousExe) -PropertyType String -Force | Out-Null
+}
+
+if ($Scenario -eq 'broken-registration') {
+    if (-not (Test-Path -LiteralPath $canonicalExe)) {
+        throw 'The broken-registration fixture requires canonical newer files.'
+    }
+    Seed-BrokenRegistration
+    $broken = Get-ItemProperty -LiteralPath $uninstallKey
+    $brokenTarget = [regex]::Match($broken.UninstallString, '^"([^"]+)"').Groups[1].Value
+    if (Test-Path -LiteralPath $brokenTarget) {
+        throw 'The broken-registration fixture unexpectedly has a valid uninstaller.'
+    }
+    Write-Output 'Reproduced stale 0.9.1 registration pointing at a deleted legacy uninstaller.'
 }
 
 if ($Scenario -eq 'legacy-chain') {
@@ -224,6 +254,9 @@ Start-Sleep -Seconds 3
 if ($second.HasExited) { throw 'UsageLoop could not be reopened from the Start Menu shortcut.' }
 Stop-Process -Id $second.Id -Force
 $second.WaitForExit()
+
+& (Join-Path $PSScriptRoot 'verify-packaged-activation.ps1') -Executable $canonicalExe
+if ($LASTEXITCODE -ne 0) { throw 'Packaged activation verification failed.' }
 
 $uninstall = Start-Process -FilePath $uninstallTarget -ArgumentList @(
     '/VERYSILENT',

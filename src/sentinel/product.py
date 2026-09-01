@@ -52,6 +52,11 @@ class ProductMetadata:
         identifier = self.app_id.strip("{}")
         return f"Local\\{self.display_name}-{identifier}"
 
+    @property
+    def app_id_guid(self) -> str:
+        """The stable Inno identity as a normal registry-key GUID."""
+        return "{" + self.app_id.strip("{}") + "}"
+
     def packaging_metadata(self) -> dict[str, str]:
         """Every name the Windows build script needs, derived values included.
 
@@ -63,6 +68,7 @@ class ProductMetadata:
         data = {key: str(value) for key, value in asdict(self).items()}
         data["dist_folder_name"] = self.dist_folder_name
         data["single_instance_name"] = self.single_instance_name
+        data["app_id_guid"] = self.app_id_guid
         return data
 
 
@@ -76,7 +82,7 @@ class ProductMetadata:
 PRODUCT = ProductMetadata(
     display_name="UsageLoop",
     tagline="Keep your Codex reset clock running.",
-    version="1.0.2",
+    version="1.0.3",
     github_owner="benthompsondev",
     github_repo="usageloop",
     executable_name="UsageLoop.exe",
