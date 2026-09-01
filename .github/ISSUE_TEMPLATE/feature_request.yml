@@ -1,42 +1,24 @@
 name: Request a feature
-description: Tell us about a problem UsageLoop could help solve.
+description: Have an idea? Tell us what would make UsageLoop more useful.
 title: "[Feature] "
 body:
   - type: markdown
     attributes:
       value: |
-        The most useful requests explain the problem before proposing a feature.
+        Thanks for helping make UsageLoop better.
 
-        **Keep this request privacy-safe.** Do not paste credentials, API keys, Codex prompts or responses, conversations, account information, auth files, or unrelated logs.
+        Please don't include passwords, API keys, private Codex conversations, or other sensitive information.
   - type: textarea
-    id: problem
+    id: usefulness
     attributes:
-      label: What problem are you trying to solve?
-      placeholder: Describe the situation and what makes it difficult today.
-    validations:
-      required: true
-  - type: textarea
-    id: current_workaround
-    attributes:
-      label: What do you do today instead?
-      placeholder: Describe your current workaround, even if it is manual.
+      label: What would make UsageLoop more useful for you?
+      placeholder: Tell us what you wish UsageLoop could do.
     validations:
       required: true
   - type: textarea
-    id: desired_outcome
+    id: anything_else
     attributes:
-      label: What would you like UsageLoop to do?
-      placeholder: Describe the outcome that would help, without worrying about implementation details.
+      label: Anything else you'd like to add?
+      placeholder: Add any extra context or ideas here.
     validations:
-      required: true
-  - type: dropdown
-    id: frequency
-    attributes:
-      label: How often would this help?
-      options:
-        - Every day
-        - A few times a week
-        - A few times a month
-        - Occasionally
-    validations:
-      required: true
+      required: false

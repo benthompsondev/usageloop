@@ -31,24 +31,57 @@ class IssueFormTests(unittest.TestCase):
             PRODUCT.feature_request_url,
         )
 
-    def test_issue_form_yaml_parses_and_has_the_expected_fields(self) -> None:
+    def test_issue_forms_are_quick_with_only_one_required_answer_each(self) -> None:
         bug = self.load_yaml("bug_report.yml")
         feature = self.load_yaml("feature_request.yml")
 
         self.assertEqual(
             [
-                "what_happened",
-                "expected_behavior",
-                "reproduction_steps",
-                "usageloop_version",
-                "windows_version",
+                "what_went_wrong",
+                "anything_else",
                 "diagnostic_summary",
             ],
             [item["id"] for item in bug["body"] if "id" in item],
         )
         self.assertEqual(
-            ["problem", "current_workaround", "desired_outcome", "frequency"],
+            ["usefulness", "anything_else"],
             [item["id"] for item in feature["body"] if "id" in item],
+        )
+
+        for form in (bug, feature):
+            fields = [item for item in form["body"] if "id" in item]
+            required = [
+                item["id"]
+                for item in fields
+                if item.get("validations", {}).get("required") is True
+            ]
+            self.assertEqual([fields[0]["id"]], required)
+
+    def test_issue_forms_render_friendly_low_pressure_questions(self) -> None:
+        bug = self.load_yaml("bug_report.yml")
+        feature = self.load_yaml("feature_request.yml")
+
+        bug_fields = {
+            item["id"]: item["attributes"] for item in bug["body"] if "id" in item
+        }
+        feature_fields = {
+            item["id"]: item["attributes"]
+            for item in feature["body"]
+            if "id" in item
+        }
+
+        self.assertEqual("What went wrong?", bug_fields["what_went_wrong"]["label"])
+        self.assertEqual(
+            "Anything else that might help?", bug_fields["anything_else"]["label"]
+        )
+        self.assertIn("skip", bug_fields["anything_else"]["description"].lower())
+        self.assertEqual(
+            "What would make UsageLoop more useful for you?",
+            feature_fields["usefulness"]["label"],
+        )
+        self.assertEqual(
+            "Anything else you'd like to add?",
+            feature_fields["anything_else"]["label"],
         )
 
     def test_blank_issues_are_disabled(self) -> None:
@@ -57,13 +90,10 @@ class IssueFormTests(unittest.TestCase):
 
     def test_both_forms_warn_against_pasting_private_codex_data(self) -> None:
         required_warnings = (
-            "credentials",
+            "passwords",
             "api keys",
-            "codex prompts or responses",
-            "conversations",
-            "account information",
-            "auth files",
-            "unrelated logs",
+            "private codex conversations",
+            "other sensitive information",
         )
         for name in ("bug_report.yml", "feature_request.yml"):
             form = self.load_yaml(name)
