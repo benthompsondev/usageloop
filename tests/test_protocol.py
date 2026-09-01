@@ -253,6 +253,7 @@ class TurnProtocolTests(unittest.TestCase):
 
 
 class NativePreferenceTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows native-install preference")
     def test_installed_native_binary_wins_over_a_stale_path_shim(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
