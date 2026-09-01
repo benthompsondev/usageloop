@@ -15,7 +15,12 @@ from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QStackedWidget
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
-from sentinel.desktop import MainWindow, DesktopShell, present_provider_state
+from sentinel.desktop import (
+    DesktopShell,
+    MainWindow,
+    present_provider_state,
+    tray_tooltip_text,
+)
 from sentinel.provider_runtime import CHAIN_RESULT_OUTCOMES, ProviderOperationResult
 from sentinel.product import PRODUCT
 from sentinel.ui_components import (
@@ -464,6 +469,20 @@ class DesktopTests(unittest.TestCase):
         open_url.assert_called_once()
         self.assertEqual(PRODUCT.github_url, open_url.call_args.args[0].toString())
 
+    def test_about_opens_the_two_centralized_feedback_forms(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+
+        with patch.object(QDesktopServices, "openUrl", return_value=True) as open_url:
+            window.about_link_buttons["Report a problem"].click()
+            window.about_link_buttons["Request a feature"].click()
+
+        self.assertEqual(
+            [PRODUCT.bug_report_url, PRODUCT.feature_request_url],
+            [call.args[0].toString() for call in open_url.call_args_list],
+        )
+
     def test_manual_sync_is_available_when_automation_is_off_and_never_triggers(self):
         state = ProviderViewState(
             "codex", "Codex", True, True, "Ready", "Stale.",
@@ -648,6 +667,91 @@ class DesktopTests(unittest.TestCase):
         shell.quit()
         self.assertTrue(window.force_close)
         self.assertFalse(window.isVisible())
+
+    def test_tray_tooltip_refresh_uses_only_cached_state(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(14_000, verified_at=100)
+        window, provider = self.make_window(state)
+        window.controller.set_automation_enabled(True)
+        shell = DesktopShell(window)
+        self.addCleanup(shell.tray.hide)
+
+        window.refresh_clock(now=740)
+
+        self.assertEqual("UsageLoop · 3h 41m left", shell.tray.toolTip())
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+
+
+class TrayTooltipTests(unittest.TestCase):
+    def state(self, **overrides):
+        values = dict(
+            provider_id="codex",
+            display_name="Codex",
+            installed=True,
+            automation_supported=True,
+            status="Waiting",
+            detail="Detected.",
+            runtime_identity="runtime:1",
+        )
+        values.update(overrides)
+        return ProviderViewState(**values)
+
+    def settings(self, **overrides):
+        from sentinel.app_state import AppSettings
+
+        values = dict(automation_enabled=True)
+        values.update(overrides)
+        return AppSettings(**values)
+
+    def test_automation_off(self):
+        tooltip = tray_tooltip_text(
+            self.settings(automation_enabled=False), self.state(), now=100
+        )
+        self.assertEqual("UsageLoop · Automation off", tooltip)
+
+    def test_active_countdown(self):
+        tooltip = tray_tooltip_text(
+            self.settings(), self.state(status="Ready", reset_at=13_360), now=100
+        )
+        self.assertEqual("UsageLoop · 3h 41m left", tooltip)
+
+    def test_daily_next_start(self):
+        reset = datetime(2026, 9, 1, 5, 0).timestamp()
+        now = datetime(2026, 9, 1, 5, 2).timestamp()
+        tooltip = tray_tooltip_text(
+            self.settings(
+                schedule_mode="daily", daily_start_hour=4, daily_start_minute=0
+            ),
+            self.state(reset_at=int(reset)),
+            now=now,
+        )
+        self.assertEqual("UsageLoop · next start tomorrow at 4:00 AM", tooltip)
+
+    def test_waiting_for_codex_status(self):
+        tooltip = tray_tooltip_text(self.settings(), self.state(), now=100)
+        self.assertEqual("UsageLoop · waiting for Codex status", tooltip)
+
+    def test_no_cached_state_waits_for_codex_status(self):
+        tooltip = tray_tooltip_text(self.settings(), None, now=100)
+        self.assertEqual("UsageLoop · waiting for Codex status", tooltip)
+
+    def test_needs_attention(self):
+        tooltip = tray_tooltip_text(
+            self.settings(), self.state(status="Needs attention"), now=100
+        )
+        self.assertEqual("UsageLoop · Needs attention", tooltip)
+
+    def test_unknown_or_degraded_state_is_consumer_safe(self):
+        internal_status = "INTERNAL_DEGRADED_42"
+        tooltip = tray_tooltip_text(
+            self.settings(), self.state(status=internal_status), now=100
+        )
+        self.assertEqual("UsageLoop · Status unavailable", tooltip)
+        self.assertNotIn(internal_status, tooltip)
+        self.assertLessEqual(len(tooltip), 127)
 
 
 

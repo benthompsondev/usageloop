@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+import yaml
+
+from sentinel.product import PRODUCT
+
+
+ROOT = Path(__file__).resolve().parents[1]
+TEMPLATE_ROOT = ROOT / ".github" / "ISSUE_TEMPLATE"
+
+
+class IssueFormTests(unittest.TestCase):
+    def load_yaml(self, name: str):
+        with (TEMPLATE_ROOT / name).open(encoding="utf-8") as stream:
+            return yaml.safe_load(stream)
+
+    def test_feedback_urls_are_centralized_and_open_the_expected_forms(self) -> None:
+        self.assertEqual(
+            "https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml",
+            PRODUCT.bug_report_url,
+        )
+        self.assertEqual(
+            "https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml",
+            PRODUCT.feature_request_url,
+        )
+
+    def test_issue_form_yaml_parses_and_has_the_expected_fields(self) -> None:
+        bug = self.load_yaml("bug_report.yml")
+        feature = self.load_yaml("feature_request.yml")
+
+        self.assertEqual(
+            [
+                "what_happened",
+                "expected_behavior",
+                "reproduction_steps",
+                "usageloop_version",
+                "windows_version",
+                "diagnostic_summary",
+            ],
+            [item["id"] for item in bug["body"] if "id" in item],
+        )
+        self.assertEqual(
+            ["problem", "current_workaround", "desired_outcome", "frequency"],
+            [item["id"] for item in feature["body"] if "id" in item],
+        )
+
+    def test_blank_issues_are_disabled(self) -> None:
+        config = self.load_yaml("config.yml")
+        self.assertIs(config["blank_issues_enabled"], False)
+
+    def test_both_forms_warn_against_pasting_private_codex_data(self) -> None:
+        required_warnings = (
+            "credentials",
+            "api keys",
+            "codex prompts or responses",
+            "conversations",
+            "account information",
+            "auth files",
+            "unrelated logs",
+        )
+        for name in ("bug_report.yml", "feature_request.yml"):
+            form = self.load_yaml(name)
+            markdown = " ".join(
+                item.get("attributes", {}).get("value", "")
+                for item in form["body"]
+                if item.get("type") == "markdown"
+            ).lower()
+            for warning in required_warnings:
+                with self.subTest(form=name, warning=warning):
+                    self.assertIn(warning, markdown)
+
+    def test_no_interactive_field_solicits_sensitive_codex_data(self) -> None:
+        sensitive_requests = (
+            "credential",
+            "api key",
+            "codex prompt",
+            "codex response",
+            "conversation",
+            "account information",
+            "auth file",
+            "unrelated log",
+        )
+        for name in ("bug_report.yml", "feature_request.yml"):
+            form = self.load_yaml(name)
+            for item in form["body"]:
+                if item.get("type") == "markdown":
+                    continue
+                attributes = item.get("attributes", {})
+                prompt = " ".join(
+                    str(attributes.get(key, ""))
+                    for key in ("label", "description", "placeholder")
+                ).lower()
+                for sensitive in sensitive_requests:
+                    with self.subTest(form=name, field=item.get("id"), term=sensitive):
+                        self.assertNotIn(sensitive, prompt)
+
+
+class ScreenshotToolTests(unittest.TestCase):
+    def test_screenshot_tool_generates_current_dashboard_settings_and_about(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(ROOT / "src")
+            environment["QT_QPA_PLATFORM"] = "offscreen"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "capture-ui-screenshots.py"),
+                    directory,
+                ],
+                cwd=ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            for name in ("dashboard.png", "settings.png", "about.png"):
+                target = Path(directory) / name
+                with self.subTest(image=name):
+                    self.assertTrue(target.is_file())
+                    self.assertGreater(target.stat().st_size, 10_000)
+
+
+if __name__ == "__main__":
+    unittest.main()

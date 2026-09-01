@@ -139,6 +139,15 @@ unexpectedly. Settings contains the schedule, Windows startup, manual updates,
 and collapsed technical diagnostics. Update checks contact GitHub only after a
 button click and never affect quota.
 
+## Feedback
+
+- [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
+- [Request a feature](https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml)
+
+Bug reports can include the privacy-safe summary from **Settings → Advanced →
+Copy this summary**. Do not paste credentials, Codex prompts or responses,
+conversations, account information, auth files, or unrelated logs.
+
 ## CLI
 
 The observer and guarded engine are also available from PowerShell:

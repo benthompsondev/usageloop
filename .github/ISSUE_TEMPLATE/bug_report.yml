@@ -1,0 +1,58 @@
+name: Report a problem
+description: Tell us about something that did not work as expected.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve UsageLoop.
+
+        **Keep this report privacy-safe.** Do not paste credentials, API keys, Codex prompts or responses, conversations, account information, auth files, or unrelated logs.
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      placeholder: Describe what you saw, including any message shown by UsageLoop.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: What did you expect?
+      placeholder: Describe what you expected UsageLoop to do instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: How can we reproduce it?
+      description: List the smallest set of steps that consistently shows the problem.
+      placeholder: |
+        1. Open ...
+        2. Choose ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: usageloop_version
+    attributes:
+      label: UsageLoop version
+      description: Find this on the About page.
+      placeholder: For example, 1.0.8
+    validations:
+      required: true
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      placeholder: For example, Windows 11 24H2
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostic_summary
+    attributes:
+      label: Optional diagnostic summary
+      description: If useful, paste the privacy-safe output from Settings → Advanced → Copy this summary.
+      render: text
+    validations:
+      required: false

@@ -26,6 +26,14 @@ class ProductMetadataTests(unittest.TestCase):
             "https://github.com/benthompsondev/usageloop/releases/latest",
             PRODUCT.releases_url,
         )
+        self.assertEqual(
+            "https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml",
+            PRODUCT.bug_report_url,
+        )
+        self.assertEqual(
+            "https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml",
+            PRODUCT.feature_request_url,
+        )
 
     def test_release_assets_are_named_from_the_product(self) -> None:
         self.assertEqual("UsageLoop-Setup.exe", PRODUCT.installer_filename)
@@ -53,6 +61,7 @@ class ProductMetadataTests(unittest.TestCase):
         pyinstaller = (root / "packaging" / "UsageLoop.spec").read_text(encoding="utf-8")
 
         self.assertIn("#ifndef AppVersion", installer)
+        self.assertIn(f'#define AppVersion "{PRODUCT.version}"', installer)
         self.assertIn("/DAppVersion=", build)
         self.assertIn("checksum_filename", build)
         self.assertNotIn("claude_status", build.lower())

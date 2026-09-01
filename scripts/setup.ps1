@@ -38,7 +38,7 @@ if (-not (Test-Path -LiteralPath $venvPath)) {
 }
 
 $venvPython = Join-Path $venvPath 'Scripts\python.exe'
-& $venvPython -m pip install --editable "${repoRoot}[build]"
+& $venvPython -m pip install --editable "${repoRoot}[build,test]"
 if ($LASTEXITCODE -ne 0) {
     throw 'Failed to install Sentinel in the local virtual environment.'
 }

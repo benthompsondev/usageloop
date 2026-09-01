@@ -34,6 +34,20 @@ For a release:
 5. Install the uploaded artifact on a clean Windows machine.
 6. Confirm `/releases/latest` returns the tag and both exact assets.
 
+Write release notes for the person using the app. Lead with what changed for
+them, then add the technical detail that makes the claim trustworthy.
+
+Prefer:
+
+> UsageLoop now keeps working safely if its local state files become unreadable.
+
+Over:
+
+> Treats unreadable trigger history as an integrity failure.
+
+Keep the notes short, concrete, and honest. Mention safety behavior when it
+matters, but do not make users translate internal state-machine language.
+
 The updater reads the latest GitHub Release for
 `benthompsondev/usageloop`. It rejects missing assets, untrusted
 download hosts, older versions, and checksum mismatches. Repository and asset

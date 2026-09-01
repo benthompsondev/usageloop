@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 import tempfile
-import time
 
 from PySide6.QtCore import QTime
 from PySide6.QtWidgets import QApplication, QScrollArea
@@ -58,7 +58,9 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
     app.setStyle("Fusion")
-    now = time.time()
+    # Keep public screenshots stable between runs while expressing the fixture
+    # in local time, just like the desktop UI does.
+    now = datetime(2030, 1, 15, 7, 30).astimezone().timestamp()
     codex = ProviderViewState(
         "codex", "Codex", True, True, "Ready", "Fixed reset verified.",
         "codex-runtime", "0.96.0", int(now + 3 * 3600 + 42 * 60), now - 60,
@@ -76,6 +78,9 @@ def main() -> int:
             confirm_enable=lambda: False, confirm_bootstrap=lambda: False,
             confirm_install=lambda _version: False,
         )
+        window.clock_timer.stop()
+        window.automation_timer.stop()
+        window.refresh_clock(now=now)
         for width, height in (
             (1024, 768),
             (1280, 720),
@@ -98,8 +103,12 @@ def main() -> int:
         window.refresh_clock(now=now)
         save(window, args.output / "settings-daily.png", app)
         release = ReleaseInfo(
-            "0.10.0", ("Example reliability update", "Small interface fixes"),
-            "https://github.com/example/usage-loop/releases/tag/v0.10.0",
+            "1.1.0",
+            (
+                "UsageLoop now keeps working safely if its local state files become unreadable.",
+                "Daily start times are checked before they are saved.",
+            ),
+            "https://github.com/example/usage-loop/releases/tag/v1.1.0",
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example/installer"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example/checksum"),
         )

@@ -36,6 +36,14 @@ class ProductMetadata:
         return f"{self.github_url}/issues"
 
     @property
+    def bug_report_url(self) -> str:
+        return f"{self.issues_url}/new?template=bug_report.yml"
+
+    @property
+    def feature_request_url(self) -> str:
+        return f"{self.issues_url}/new?template=feature_request.yml"
+
+    @property
     def release_api_url(self) -> str:
         return (
             f"https://api.github.com/repos/{self.github_owner}/"
@@ -82,7 +90,7 @@ class ProductMetadata:
 PRODUCT = ProductMetadata(
     display_name="UsageLoop",
     tagline="Keep your Codex reset clock running.",
-    version="1.0.7",
+    version="1.0.8",
     github_owner="benthompsondev",
     github_repo="usageloop",
     executable_name="UsageLoop.exe",

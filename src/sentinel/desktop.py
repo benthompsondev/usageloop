@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timedelta
 import time
 from typing import Callable
 
@@ -39,11 +40,13 @@ from PySide6.QtWidgets import (
 )
 
 from .app_controller import ApplicationController
+from .app_state import AppSettings, ProviderViewState, format_countdown
 from .chain import WEEKLY_PROTECTION_PERCENT
 from .branding import make_app_icon, render_mark
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
+from .schedule import DAILY, schedule_summary
 from .diagnostics import technical_summary
 from .ui_components import (
     Disclosure,
@@ -83,8 +86,57 @@ class OperationWorker(QRunnable):
         self.signals.completed.emit(self.provider_id, result)
 
 
+def tray_tooltip_text(
+    settings: AppSettings,
+    state: ProviderViewState | None,
+    *,
+    now: float,
+    persistence_error: str | None = None,
+) -> str:
+    """Summarize cached dashboard state without exposing implementation labels."""
+    prefix = f"{PRODUCT.display_name} · "
+    if persistence_error is not None:
+        return prefix + "Needs attention"
+    if state is not None and (not state.installed or state.status == "Needs attention"):
+        return prefix + "Needs attention"
+    if not settings.automation_enabled:
+        return prefix + "Automation off"
+    if state is None:
+        return prefix + "waiting for Codex status"
+    if state.reset_at is not None and state.reset_at > now:
+        return prefix + f"{format_countdown(state.reset_at, now)} left"
+    if settings.schedule_mode == DAILY and state.reset_at is not None:
+        try:
+            schedule = schedule_summary(
+                settings.schedule_mode,
+                boundary_reset_at=state.reset_at,
+                now=now,
+                hour=settings.daily_start_hour,
+                minute=settings.daily_start_minute,
+            )
+            if schedule.next_action_at is not None and schedule.next_action_at > now:
+                target = datetime.fromtimestamp(schedule.next_action_at)
+                today = datetime.fromtimestamp(now).date()
+                if target.date() == today:
+                    day = "today"
+                elif target.date() == today + timedelta(days=1):
+                    day = "tomorrow"
+                else:
+                    day = target.strftime("%a")
+                clock = target.strftime("%I:%M %p").lstrip("0")
+                return prefix + f"next start {day} at {clock}"
+        except (OSError, OverflowError, ValueError):
+            return prefix + "Status unavailable"
+    if state.status == "Waiting":
+        return prefix + "waiting for Codex status"
+    if state.status == "Starting":
+        return prefix + "checking Codex status"
+    return prefix + "Status unavailable"
+
+
 class MainWindow(QMainWindow):
     PAGE_NAMES = ("Dashboard", "Settings", "About")
+    tray_tooltip_changed = Signal(str)
 
     def __init__(
         self,
@@ -107,6 +159,7 @@ class MainWindow(QMainWindow):
         self.thread_pool = QThreadPool.globalInstance()
         self.hide_on_close = False
         self.force_close = False
+        self.current_tray_tooltip = PRODUCT.display_name
 
         self.setWindowTitle(PRODUCT.display_name)
         self.setWindowIcon(make_app_icon())
@@ -603,16 +656,19 @@ class MainWindow(QMainWindow):
         self.about_description.setWordWrap(True)
         about_layout.addWidget(self.about_description)
         links = QHBoxLayout()
+        self.about_link_buttons: dict[str, QPushButton] = {}
         for label, url in (
             ("View source", PRODUCT.github_url),
             ("Releases", PRODUCT.releases_url),
-            ("Report an issue", PRODUCT.issues_url),
+            ("Report a problem", PRODUCT.bug_report_url),
+            ("Request a feature", PRODUCT.feature_request_url),
         ):
             button = QPushButton(label)
             button.setObjectName("linkButton")
             button.clicked.connect(
                 lambda checked=False, target=url: QDesktopServices.openUrl(QUrl(target))
             )
+            self.about_link_buttons[label] = button
             links.addWidget(button)
         links.addStretch()
         about_layout.addLayout(links)
@@ -761,6 +817,15 @@ class MainWindow(QMainWindow):
                 )
             self.last_action_label.setText(presented.action)
         self._update_diagnostics(now=current)
+        tooltip = tray_tooltip_text(
+            self.controller.settings,
+            codex,
+            now=current,
+            persistence_error=self.controller.persistence_error,
+        )
+        if tooltip != self.current_tray_tooltip:
+            self.current_tray_tooltip = tooltip
+            self.tray_tooltip_changed.emit(tooltip)
 
     def evaluate_automation(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
@@ -1051,7 +1116,8 @@ class DesktopShell:
     def __init__(self, window: MainWindow):
         self.window = window
         self.tray = QSystemTrayIcon(make_app_icon(), window)
-        self.tray.setToolTip(PRODUCT.display_name)
+        self.tray.setToolTip(window.current_tray_tooltip)
+        self.window.tray_tooltip_changed.connect(self.tray.setToolTip)
         menu = QMenu()
         open_action = menu.addAction(f"Open {PRODUCT.display_name}")
         open_action.triggered.connect(self.restore_window)
