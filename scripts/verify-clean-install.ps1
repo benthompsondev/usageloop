@@ -1,7 +1,8 @@
 param(
     [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', 'legacy-chain', 'broken-registration')]
     [string]$Scenario = 'fresh',
-    [string[]]$PreviousInstallers = @()
+    [string[]]$PreviousInstallers = @(),
+    [switch]$SkipDesktopActivation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -255,8 +256,12 @@ if ($second.HasExited) { throw 'UsageLoop could not be reopened from the Start M
 Stop-Process -Id $second.Id -Force
 $second.WaitForExit()
 
-& (Join-Path $PSScriptRoot 'verify-packaged-activation.ps1') -Executable $canonicalExe
-if ($LASTEXITCODE -ne 0) { throw 'Packaged activation verification failed.' }
+if (-not $SkipDesktopActivation) {
+    & (Join-Path $PSScriptRoot 'verify-packaged-activation.ps1') -Executable $canonicalExe
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged activation verification failed.' }
+} else {
+    Write-Output 'Skipped visible-window activation proof because this runner has no interactive desktop.'
+}
 
 $uninstall = Start-Process -FilePath $uninstallTarget -ArgumentList @(
     '/VERYSILENT',

@@ -95,4 +95,5 @@ jobs:
           $installers = @($versions | ForEach-Object { "$env:RUNNER_TEMP\UsageLoop-Setup-$_.exe" })
           .\scripts\verify-clean-install.ps1 `
             -Scenario '${{ matrix.scenario }}' `
-            -PreviousInstallers $installers
+            -PreviousInstallers $installers `
+            -SkipDesktopActivation

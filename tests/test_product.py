@@ -154,6 +154,20 @@ class ProductMetadataTests(unittest.TestCase):
             self.assertIn(f"#ifndef {define}", installer)
             self.assertIn(f"/D{define}=", build)
 
+    def test_ci_keeps_visible_window_proof_out_of_headless_install_jobs(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        verifier = (root / "scripts" / "verify-clean-install.ps1").read_text(
+            encoding="utf-8"
+        )
+        workflow = (root / ".github" / "workflows" / "verify.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("[switch]$SkipDesktopActivation", verifier)
+        self.assertIn("if (-not $SkipDesktopActivation)", verifier)
+        self.assertIn("verify-packaged-activation.ps1", verifier)
+        self.assertIn("-SkipDesktopActivation", workflow)
+
 
 
 
