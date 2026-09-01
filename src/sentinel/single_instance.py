@@ -13,6 +13,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 ERROR_ALREADY_EXISTS = 183
 ACTIVATION_MESSAGE = b"activate\n"
+ACTIVATION_ACK = b"\x06"
 
 
 class SingleInstanceGuard:
@@ -98,7 +99,7 @@ class ActivationChannel(QObject):
 
     def activate_existing(self, timeout_ms: int = 1_000) -> bool:
         socket = QLocalSocket(self)
-        socket.connectToServer(self.name, QIODevice.OpenModeFlag.WriteOnly)
+        socket.connectToServer(self.name, QIODevice.OpenModeFlag.ReadWrite)
         if not socket.waitForConnected(timeout_ms):
             socket.abort()
             return False
@@ -111,6 +112,12 @@ class ActivationChannel(QObject):
             if socket.bytesToWrite():
                 socket.abort()
                 return False
+        if not socket.waitForReadyRead(timeout_ms):
+            socket.abort()
+            return False
+        if bytes(socket.readAll()) != ACTIVATION_ACK:
+            socket.abort()
+            return False
         socket.disconnectFromServer()
         return True
 
@@ -146,6 +153,8 @@ class ActivationChannel(QObject):
         if b"\n" not in payload:
             return
         if payload == ACTIVATION_MESSAGE:
+            socket.write(ACTIVATION_ACK)
+            socket.flush()
             self.activation_requested.emit()
 
     def _discard(self, socket: QLocalSocket) -> None:

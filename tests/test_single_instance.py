@@ -8,6 +8,7 @@ import unittest
 import uuid
 from unittest.mock import Mock
 
+from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import QApplication
 
 from sentinel.single_instance import (
@@ -111,6 +112,33 @@ class ActivationChannelTests(unittest.TestCase):
         self.assertEqual(0, worker.returncode, stderr)
         self.assertEqual("True", stdout.strip())
         self.assertEqual(["activate"], activations)
+
+    def test_activation_requires_primary_acknowledgement(self) -> None:
+        name = f"UsageLoop-no-ack-test-{uuid.uuid4().hex}"
+        channel = ActivationChannel(name)
+        server = QLocalServer()
+        self.addCleanup(server.close)
+        QLocalServer.removeServer(channel.name)
+        self.assertTrue(server.listen(channel.name))
+
+        child = (
+            "import os; "
+            "os.environ['QT_QPA_PLATFORM']='offscreen'; "
+            "from PySide6.QtWidgets import QApplication; "
+            "from sentinel.single_instance import ActivationChannel; "
+            "app=QApplication([]); "
+            f"print(ActivationChannel({name!r}).activate_existing(timeout_ms=100))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", child],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("False", result.stdout.strip())
 
     def test_primary_recovers_a_stale_endpoint_before_listening(self) -> None:
         name = f"UsageLoop-stale-test-{uuid.uuid4().hex}"
