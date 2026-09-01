@@ -10,6 +10,7 @@ import uuid
 import tempfile
 from unittest.mock import Mock
 
+from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import QApplication
 
@@ -101,10 +102,15 @@ class ActivationChannelTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.app = QApplication.instance() or QApplication([])
 
+    @staticmethod
+    def close_channel(channel: ActivationChannel) -> None:
+        channel.close()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
     def test_normal_second_launch_activates_primary_once(self) -> None:
         name = f"UsageLoop-activate-test-{uuid.uuid4().hex}"
         primary = ActivationChannel(name)
-        self.addCleanup(primary.close)
+        self.addCleanup(self.close_channel, primary)
         activations: list[str] = []
         primary.activation_requested.connect(lambda: activations.append("activate"))
 
@@ -138,7 +144,7 @@ class ActivationChannelTests(unittest.TestCase):
         primary_guard = SingleInstanceGuard(name)
         primary_channel = ActivationChannel(name)
         self.addCleanup(primary_guard.close)
-        self.addCleanup(primary_channel.close)
+        self.addCleanup(self.close_channel, primary_channel)
         activations: list[str] = []
         primary_channel.activation_requested.connect(
             lambda: activations.append("activate")
@@ -213,7 +219,7 @@ class ActivationChannelTests(unittest.TestCase):
     def test_primary_recovers_a_stale_endpoint_before_listening(self) -> None:
         name = f"UsageLoop-stale-test-{uuid.uuid4().hex}"
         channel = ActivationChannel(name)
-        self.addCleanup(channel.close)
+        self.addCleanup(self.close_channel, channel)
 
         # A stale named-pipe entry may survive an abnormal process death. The
         # mutex winner is the only process allowed to remove it.

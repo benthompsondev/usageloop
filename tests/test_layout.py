@@ -9,6 +9,7 @@ These assert containment directly rather than checking a minimum width, because
 a wider minimum window would have hidden the bug instead of fixing it.
 """
 
+import os
 import unittest
 
 from PySide6.QtCore import QSize
@@ -230,6 +231,7 @@ class ElidingLabelTests(unittest.TestCase):
 
 
 
+@unittest.skipUnless(os.name == "nt", "Windows text-scaling regression")
 class LargerUiFontTests(unittest.TestCase):
     """Windows text scaling makes header controls much wider than the default.
 

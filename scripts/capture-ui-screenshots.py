@@ -77,6 +77,7 @@ def main() -> int:
             controller, {"codex": provider}, PreviewStartup(), updater=PreviewUpdater(),
             confirm_enable=lambda: False, confirm_bootstrap=lambda: False,
             confirm_install=lambda _version: False,
+            platform_name="Windows",
         )
         window.clock_timer.stop()
         window.automation_timer.stop()
