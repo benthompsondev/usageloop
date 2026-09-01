@@ -148,8 +148,19 @@ def weekly_health(state: ProviderViewState) -> HealthRow:
 
 
 def local_state_health(
-    *, state_file_exists: bool, newest_observation_at: float | None, now: float
+    *,
+    state_file_exists: bool,
+    newest_observation_at: float | None,
+    now: float,
+    persistence_error: bool = False,
 ) -> HealthRow:
+    if persistence_error:
+        return HealthRow(
+            "Local state",
+            "Needs attention",
+            "error",
+            "A setting could not be saved. Automatic starts are paused until local state can be written again.",
+        )
     if not state_file_exists:
         return HealthRow(
             "Local state",
@@ -200,6 +211,7 @@ def build_health_rows(
     startup_enabled: bool,
     state_file_exists: bool,
     now: float,
+    persistence_error: bool = False,
 ) -> tuple[HealthRow, ...]:
     state = states.get("codex") or ProviderViewState.waiting("codex", "Codex", installed=False)
     rows = [codex_installation_health(state), five_hour_health(state, now=now), weekly_health(state)]
@@ -214,6 +226,7 @@ def build_health_rows(
             state_file_exists=state_file_exists,
             newest_observation_at=max(observations) if observations else None,
             now=now,
+            persistence_error=persistence_error,
         )
     )
     rows.append(startup_health(startup_enabled))
@@ -267,6 +280,7 @@ def technical_summary(
     settings: AppSettings,
     *,
     app_version: str = PRODUCT.version,
+    persistence_error: bool = False,
 ) -> str:
     """The raw detail, kept for troubleshooting and for the copy button.
 
@@ -277,6 +291,7 @@ def technical_summary(
     lines = [
         f"{PRODUCT.display_name} {app_version}",
         rf"Local data: %LOCALAPPDATA%\{PRODUCT.app_data_folder}",
+        f"Local state: {'Needs attention' if persistence_error else 'Healthy'}",
         "",
         "Codex support",
         "  Observation: local app-server account/rateLimits/read",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import winreg
 
 from .product import PRODUCT
@@ -26,6 +27,9 @@ class StartupManager:
 
     def has_registration(self) -> bool:
         return self._registered_command() is not None
+
+    def has_valid_current_registration(self) -> bool:
+        return self.is_enabled() and Path(self.executable).is_file()
 
     def _registered_command(self) -> str | None:
         try:
@@ -68,10 +72,14 @@ class StartupManager:
             self.registry.CloseKey(key)
 
 
-def reconcile_startup_preference(enabled: bool, manager: StartupManager) -> None:
-    """Keep an upgrade's HKCU Run command aligned with the current executable."""
+def reconcile_startup_preference(enabled: bool, manager: StartupManager) -> bool:
+    """Return the durable preference after safely normalizing HKCU Run."""
     if enabled:
         if not manager.is_enabled():
             manager.set_enabled(True)
-    elif manager.has_registration():
+        return True
+    if manager.has_valid_current_registration():
+        return True
+    if manager.has_registration():
         manager.set_enabled(False)
+    return False

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QWidget
 from .app_controller import ApplicationController
 from .app_state import AppStateStore
 from .desktop import DesktopShell, MainWindow
+from .history import SafeHistory
 from .product import PRODUCT
 from .providers import CodexProvider
 from .single_instance import ActivationChannel, InstanceCoordinator, SingleInstanceGuard
@@ -80,12 +81,21 @@ def main(argv: list[str] | None = None) -> int:
     application.setOrganizationName(PRODUCT.publisher)
     application.setStyle("Fusion")
 
-    providers = [CodexProvider()]
-    controller = ApplicationController(providers, AppStateStore())
+    history = SafeHistory()
+    providers = [CodexProvider(history=history)]
+    controller = ApplicationController(
+        providers, AppStateStore(), error_history=history
+    )
     controller.start()
     startup = StartupManager(str(Path(sys.executable).resolve()))
     try:
-        reconcile_startup_preference(controller.settings.start_with_windows, startup)
+        normalized_startup = reconcile_startup_preference(
+            controller.settings.start_with_windows, startup
+        )
+        if normalized_startup != controller.settings.start_with_windows:
+            durable_startup = controller.settings.start_with_windows
+            if not controller.set_start_with_windows(normalized_startup):
+                startup.set_enabled(durable_startup)
     except OSError:
         # Startup registration is optional. The Settings control remains the
         # visible recovery path if Windows temporarily denies registry access.

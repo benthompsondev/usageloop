@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
+import re
 import time
 
 from PySide6.QtCore import QSize, Qt
@@ -19,6 +20,24 @@ from .ui_theme import TOKENS
 
 
 STALE_AFTER_SECONDS = 6 * 60 * 60
+CHAIN_OUTCOME_COPY = {
+    "ALREADY_ANCHORED": "Current window was already running",
+    "ANCHOR_VERIFIED": "Successful",
+    "EVIDENCE_TOO_WEAK": "Waiting for clearer Codex status",
+    "ROLLOVER_BOUNDARY_UNKNOWN": "Waiting for a confirmed reset time",
+    "TRIGGER_NOT_SENT": "No request was sent",
+    "RESET_BUFFER": "Waiting briefly after the reset",
+    "NOT_ELIGIBLE": "No automatic start needed yet",
+    "WEEKLY_UNAVAILABLE": "Weekly limit could not be checked · No request sent",
+    "WEEKLY_EXHAUSTED": "Weekly limit protected your quota · No request sent",
+    "BOOTSTRAP_USAGE_UNSUITABLE": "First window was not safe to start",
+    "ATTEMPT_ALREADY_RECORDED": "Start already handled safely",
+    "BOOTSTRAP_COOLDOWN": "Waiting before another check",
+    "VERIFICATION_UNAVAILABLE": "Start could not be confirmed · No retry",
+    "ANCHOR_NOT_VERIFIED": "Start outcome unclear · No retry",
+    "CONSENT_REQUIRED": "Waiting for your approval",
+    "DRY_RUN": "Dry run only · No request sent",
+}
 
 
 class ToggleSwitch(QCheckBox):
@@ -328,10 +347,12 @@ class ScheduleCard(QFrame):
             self.next_label.setText(_schedule_time(summary.next_action_at, now=now))
 
 
-def _schedule_time(timestamp: float, *, now: float) -> str:
+def _schedule_time(
+    timestamp: float, *, now: float, timezone: tzinfo | None = None
+) -> str:
     try:
-        local = datetime.fromtimestamp(timestamp).astimezone()
-        current = datetime.fromtimestamp(now).astimezone()
+        local = _local_datetime(timestamp, timezone)
+        current = _local_datetime(now, timezone)
     except (OSError, OverflowError, ValueError):
         return "After the current reset"
     time_text = local.strftime("%I:%M %p").lstrip("0")
@@ -343,9 +364,15 @@ def _schedule_time(timestamp: float, *, now: float) -> str:
 
 
 def daily_schedule_example(
-    reset_at: int | None, *, hour: int, minute: int
+    reset_at: int | float | None,
+    *,
+    hour: int,
+    minute: int,
+    now: float | None = None,
+    timezone: tzinfo | None = None,
 ) -> str:
     """Explain the selected daily schedule using the current cached reset."""
+    current = time.time() if now is None else float(now)
     selected = (
         datetime(2000, 1, 1, hour, minute)
         .strftime("%I:%M %p")
@@ -357,27 +384,73 @@ def daily_schedule_example(
             f"at {selected}."
         )
     try:
-        reset = (
-            datetime.fromtimestamp(reset_at)
-            .astimezone()
-            .strftime("%I:%M %p")
-            .lstrip("0")
+        summary = schedule_summary(
+            DAILY,
+            boundary_reset_at=float(reset_at),
+            now=current,
+            hour=hour,
+            minute=minute,
+            timezone=timezone,
         )
     except (OSError, OverflowError, ValueError):
         return (
             "After the current window ends, UsageLoop will start the next one "
             f"at {selected}."
         )
+    reset = _inline_schedule_time(float(reset_at), now=current, timezone=timezone)
+    if reset is None:
+        return (
+            "After the current window ends, UsageLoop will start the next one "
+            f"at {selected}."
+        )
+    tense = "previous window ended" if reset_at <= current else "current window ends"
+    if summary.due:
+        next_action = "UsageLoop is due to start the next one now."
+    else:
+        scheduled = _inline_schedule_time(
+            summary.next_action_at, now=current, timezone=timezone
+        )
+        if scheduled is None:
+            return (
+                "After the current window ends, UsageLoop will start the next one "
+                f"at {selected}."
+            )
+        next_action = f"UsageLoop will start the next one {scheduled}."
     return (
-        f"Your current window ends at {reset}. "
-        f"UsageLoop will start the next one at {selected}."
+        f"Your {tense} {reset}. "
+        f"{next_action}"
     )
+
+
+def _local_datetime(timestamp: float, timezone: tzinfo | None) -> datetime:
+    if timezone is None:
+        return datetime.fromtimestamp(timestamp).astimezone()
+    return datetime.fromtimestamp(timestamp, timezone)
+
+
+def _inline_schedule_time(
+    timestamp: float | None, *, now: float, timezone: tzinfo | None
+) -> str | None:
+    if timestamp is None:
+        return None
+    label = _schedule_time(timestamp, now=now, timezone=timezone)
+    if label == "After the current reset":
+        return None
+    if label.startswith(("Today", "Tomorrow")):
+        return label[0].lower() + label[1:]
+    return label
 
 
 def _automatic_action_copy(state: ProviderViewState, *, now: float) -> str:
     action = state.last_action
     if not action:
         return "Last automatic start: None yet"
+    outcome = re.sub(r"[^A-Z0-9]+", "_", action.upper()).strip("_")
+    if outcome == "ANCHOR_VERIFIED":
+        when = _friendly_time(state.last_verified_at, now=now)
+        return f"Last automatic start: {when} · Successful"
+    if outcome in CHAIN_OUTCOME_COPY:
+        return f"Last automatic start: {CHAIN_OUTCOME_COPY[outcome]}"
     normalized = action.casefold()
     if "unclear" in normalized or "not verified" in normalized:
         return "Last automatic start: Outcome unclear · No retry"
@@ -388,7 +461,7 @@ def _automatic_action_copy(state: ProviderViewState, *, now: float) -> str:
     if "verified" in normalized or "successful" in normalized:
         when = _friendly_time(state.last_verified_at, now=now)
         return f"Last automatic start: {when} · Successful"
-    return f"Last automatic start: {action}"
+    return "Last automatic start: Action recorded · See Technical details"
 
 
 def _metric_bar(name: str) -> QProgressBar:

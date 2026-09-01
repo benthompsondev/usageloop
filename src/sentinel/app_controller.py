@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import sys
 from typing import Iterable, Protocol, Collection
 
 from .app_state import (
@@ -26,12 +27,24 @@ class DetectingProvider(Protocol):
     def detect(self) -> ProviderViewState: ...
 
 
+class ErrorHistory(Protocol):
+    def record_error(self, category: str) -> None: ...
+
+
 class ApplicationController:
-    def __init__(self, providers: Iterable[DetectingProvider], store: AppStateStore):
+    def __init__(
+        self,
+        providers: Iterable[DetectingProvider],
+        store: AppStateStore,
+        *,
+        error_history: ErrorHistory | None = None,
+    ):
         self.providers = {provider.provider_id: provider for provider in providers}
         self.store = store
+        self.error_history = error_history
         self.settings = AppSettings()
         self.states: dict[str, ProviderViewState] = {}
+        self.persistence_error: str | None = None
 
     def start(self) -> None:
         self.settings = self.store.load()
@@ -141,35 +154,43 @@ class ApplicationController:
         self.states = detected
         self._save()
 
-    def set_automation_enabled(self, enabled: bool) -> None:
-        self.settings = replace(
+    def set_automation_enabled(self, enabled: bool) -> bool:
+        candidate = replace(
             self.settings,
             automation_enabled=bool(enabled),
             first_run_complete=True,
         )
-        self._save()
+        return self._save_settings(candidate)
 
-    def set_start_with_windows(self, enabled: bool) -> None:
-        self.settings = replace(self.settings, start_with_windows=bool(enabled))
-        self._save()
+    def set_start_with_windows(self, enabled: bool) -> bool:
+        return self._save_settings(
+            replace(self.settings, start_with_windows=bool(enabled))
+        )
 
-    def set_schedule_mode(self, mode: str) -> None:
+    def set_schedule_mode(self, mode: str) -> bool:
         if mode not in SCHEDULE_MODES:
             raise ValueError(f"unsupported schedule mode: {mode}")
-        self.settings = replace(self.settings, schedule_mode=mode)
-        self._save()
+        return self._save_settings(replace(self.settings, schedule_mode=mode))
 
-    def set_daily_start_time(self, hour: int, minute: int) -> None:
+    def set_daily_start_time(self, hour: int, minute: int) -> bool:
         if not 0 <= hour <= 23 or not 0 <= minute <= 59:
             raise ValueError("daily start time is outside the supported range")
-        self.settings = replace(
-            self.settings,
-            daily_start_hour=int(hour),
-            daily_start_minute=int(minute),
+        return self._save_settings(
+            replace(
+                self.settings,
+                daily_start_hour=int(hour),
+                daily_start_minute=int(minute),
+            )
         )
-        self._save()
 
     def decisions(self, *, now: float) -> dict[str, AutomationDecision]:
+        if self.persistence_error is not None:
+            return {
+                provider_id: AutomationDecision(
+                    "WAIT", "Local state could not be saved safely."
+                )
+                for provider_id in self.states
+            }
         compatible = self.settings.compatible_runtime_identities or {}
         checked = self.settings.checked_runtime_identities or {}
         return {
@@ -188,6 +209,7 @@ class ApplicationController:
 
     def refresh_local_states(self, *, exclude: Collection[str] = ()) -> None:
         """Refresh executable identity and local caches without provider traffic."""
+        previous_states = dict(self.states)
         changed = False
         excluded = set(exclude)
         for provider_id, provider in self.providers.items():
@@ -241,11 +263,14 @@ class ApplicationController:
                 )
                 changed = True
         if changed:
-            self._save()
+            if not self._save():
+                self.states = previous_states
 
     def apply_compatibility(
         self, provider_id: str, result: CompatibilityResult
-    ) -> None:
+    ) -> bool:
+        previous_settings = self.settings
+        previous_state = self.states[provider_id]
         state = self.states[provider_id]
         checked = dict(self.settings.checked_runtime_identities or {})
         checked[provider_id] = result.runtime_identity
@@ -266,11 +291,22 @@ class ApplicationController:
             detail=result.detail,
             runtime_identity=result.runtime_identity,
         )
-        self._save()
+        if self._save():
+            return True
+        self.settings = previous_settings
+        self.states[provider_id] = previous_state
+        return False
 
-    def update_provider_state(self, state: ProviderViewState) -> None:
+    def update_provider_state(self, state: ProviderViewState) -> bool:
+        previous = self.states.get(state.provider_id)
         self.states[state.provider_id] = state
-        self._save()
+        if self._save():
+            return True
+        if previous is None:
+            self.states.pop(state.provider_id, None)
+        else:
+            self.states[state.provider_id] = previous
+        return False
 
     def apply_operation_result(
         self,
@@ -309,11 +345,40 @@ class ApplicationController:
                 recovery_attempts=attempts,
                 recovery_not_before=float(now) + delay,
             )
-        self.update_provider_state(applied)
-        return applied
+        if self.update_provider_state(applied):
+            return applied
+        return self.states.get(state.provider_id, applied)
 
-    def _save(self) -> None:
-        self.store.save(self.settings, self.states)
+    def _save_settings(self, candidate: AppSettings) -> bool:
+        previous = self.settings
+        self.settings = candidate
+        if self._save():
+            return True
+        self.settings = previous
+        return False
+
+    def _save(self) -> bool:
+        try:
+            self.store.save(self.settings, self.states)
+        except OSError:
+            self.persistence_error = "state_write_failed"
+            self._record_persistence_error()
+            return False
+        self.persistence_error = None
+        return True
+
+    def _record_persistence_error(self) -> None:
+        if self.error_history is not None:
+            try:
+                self.error_history.record_error("state_write_failed")
+                return
+            except OSError:
+                pass
+        try:
+            if sys.stderr is not None:
+                print("UsageLoop: state_write_failed", file=sys.stderr)
+        except Exception:
+            pass
 
 
 def _recovery_signature(outcome: str, state: ProviderViewState) -> str:

@@ -6,16 +6,23 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QTime, Qt
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QStackedWidget
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow, DesktopShell, present_provider_state
-from sentinel.provider_runtime import ProviderOperationResult
+from sentinel.provider_runtime import CHAIN_RESULT_OUTCOMES, ProviderOperationResult
 from sentinel.product import PRODUCT
+from sentinel.ui_components import (
+    CHAIN_OUTCOME_COPY,
+    _automatic_action_copy,
+    daily_schedule_example,
+)
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateError, VerifiedInstaller
 
 
@@ -78,6 +85,58 @@ class FakeInstallerUpdater:
 
 
 class DesktopTests(unittest.TestCase):
+    def test_failed_setting_save_reverts_visible_toggle_and_shows_attention(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        with patch.object(
+            window.controller.store,
+            "save",
+            side_effect=PermissionError("private path"),
+        ), patch.object(QMessageBox, "warning") as warning:
+            window.automation_toggle.setChecked(True)
+
+        self.assertFalse(window.controller.settings.automation_enabled)
+        self.assertFalse(window.automation_toggle.isChecked())
+        self.assertEqual("UsageLoop needs attention", window.overall_title.text())
+        self.assertIn("Local state: Needs attention", window.diagnostic_text.text())
+        warning.assert_called_once()
+        self.assertEqual(0, provider.action_calls)
+
+    def test_failed_startup_preference_save_restores_registration_and_toggle(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+
+        with patch.object(
+            window.controller.store,
+            "save",
+            side_effect=PermissionError("private path"),
+        ), patch.object(QMessageBox, "warning"):
+            window.startup_toggle.setChecked(True)
+
+        self.assertFalse(window.controller.settings.start_with_windows)
+        self.assertFalse(window.startup_manager.is_enabled())
+        self.assertFalse(window.startup_toggle.isChecked())
+
+    def test_failed_preflight_state_save_starts_no_provider_worker(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        window.thread_pool = FakeThreadPool()
+
+        with patch.object(
+            window.controller.store,
+            "save",
+            side_effect=PermissionError("private path"),
+        ):
+            window._start_operation("codex", "rollover")
+
+        self.assertEqual([], window.thread_pool.workers)
+        self.assertNotIn("codex", window.active_operations)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual("UsageLoop needs attention", window.overall_title.text())
+
     def test_packaged_entrypoint_runs_as_a_script(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
@@ -264,13 +323,9 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(6, window.controller.settings.daily_start_hour)
         self.assertEqual(30, window.controller.settings.daily_start_minute)
         self.assertEqual("At 6:30 AM each day", window.schedule_card.mode_label.text())
-        self.assertIn(
-            "Your current window ends at", window.daily_schedule_example.text()
-        )
-        self.assertIn(
-            "UsageLoop will start the next one at 6:30 AM",
-            window.daily_schedule_example.text(),
-        )
+        self.assertIn("Your current window ends", window.daily_schedule_example.text())
+        self.assertIn("UsageLoop will start the next one", window.daily_schedule_example.text())
+        self.assertIn("6:30 AM", window.daily_schedule_example.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 
@@ -302,7 +357,7 @@ class DesktopTests(unittest.TestCase):
             "A GitHub star helps other Codex users",
             window.star_description.text(),
         )
-        self.assertEqual("★ Star UsageLoop on GitHub", window.star_button.text())
+        self.assertEqual("★ Open GitHub to star UsageLoop", window.star_button.text())
 
         with patch.object(QDesktopServices, "openUrl", return_value=True) as open_url:
             window.star_button.click()
@@ -605,6 +660,87 @@ class FirstRunStateMappingTests(unittest.TestCase):
             presented.action,
         )
         self.assertNotIn("Successful", presented.action)
+
+    def test_every_declared_chain_outcome_has_consumer_copy(self):
+        self.assertEqual(CHAIN_RESULT_OUTCOMES, frozenset(CHAIN_OUTCOME_COPY))
+        for outcome in CHAIN_RESULT_OUTCOMES:
+            with self.subTest(outcome=outcome):
+                copy = _automatic_action_copy(
+                    self.provider(last_action=outcome, last_verified_at=90),
+                    now=100,
+                )
+                self.assertTrue(copy.startswith("Last automatic start:"))
+                self.assertNotIn(outcome, copy)
+                self.assertNotIn(outcome.replace("_", " ").title(), copy)
+
+    def test_weekly_protection_outcomes_name_the_weekly_guard(self):
+        for outcome in ("WEEKLY_UNAVAILABLE", "WEEKLY_EXHAUSTED"):
+            with self.subTest(outcome=outcome):
+                copy = _automatic_action_copy(
+                    self.provider(last_action=outcome), now=100
+                )
+                self.assertIn("Weekly", copy)
+                self.assertNotIn(outcome, copy)
+
+    def test_daily_example_uses_past_tense_and_tomorrow_after_a_missed_time(self):
+        zone = ZoneInfo("America/Toronto")
+        now = datetime(2026, 9, 1, 7, 9, tzinfo=zone).timestamp()
+        reset = datetime(2026, 9, 1, 5, 9, tzinfo=zone).timestamp()
+
+        copy = daily_schedule_example(
+            reset, hour=4, minute=0, now=now, timezone=zone
+        )
+
+        self.assertEqual(
+            "Your previous window ended today at 5:09 AM. "
+            "UsageLoop will start the next one tomorrow at 4:00 AM.",
+            copy,
+        )
+
+    def test_daily_example_uses_future_tense_and_truthful_days(self):
+        zone = ZoneInfo("America/Toronto")
+        now = datetime(2026, 9, 1, 7, 9, tzinfo=zone).timestamp()
+        reset = datetime(2026, 9, 1, 13, 30, tzinfo=zone).timestamp()
+
+        copy = daily_schedule_example(
+            reset, hour=4, minute=0, now=now, timezone=zone
+        )
+
+        self.assertEqual(
+            "Your current window ends today at 1:30 PM. "
+            "UsageLoop will start the next one tomorrow at 4:00 AM.",
+            copy,
+        )
+
+    def test_daily_example_uses_explicit_dates_when_the_reset_is_distant(self):
+        zone = ZoneInfo("America/Toronto")
+        now = datetime(2026, 9, 1, 7, 9, tzinfo=zone).timestamp()
+        reset = datetime(2026, 9, 10, 13, 30, tzinfo=zone).timestamp()
+
+        copy = daily_schedule_example(
+            reset, hour=4, minute=0, now=now, timezone=zone
+        )
+
+        self.assertEqual(
+            "Your current window ends Thu, Sep 10 at 1:30 PM. "
+            "UsageLoop will start the next one Fri, Sep 11 at 4:00 AM.",
+            copy,
+        )
+
+    def test_daily_example_says_when_the_scheduled_start_is_due_now(self):
+        zone = ZoneInfo("America/Toronto")
+        now = datetime(2026, 9, 1, 7, 9, tzinfo=zone).timestamp()
+        reset = datetime(2026, 9, 1, 1, 0, tzinfo=zone).timestamp()
+
+        copy = daily_schedule_example(
+            reset, hour=4, minute=0, now=now, timezone=zone
+        )
+
+        self.assertEqual(
+            "Your previous window ended today at 1:00 AM. "
+            "UsageLoop is due to start the next one now.",
+            copy,
+        )
 
     def test_missing_provider_is_unchanged(self):
         presented = present_provider_state(

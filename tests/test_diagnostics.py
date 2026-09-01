@@ -109,6 +109,17 @@ class ProviderHealthTests(unittest.TestCase):
 
 
 class LocalStateHealthTests(unittest.TestCase):
+    def test_write_failure_is_reported_from_in_memory_state(self):
+        row = local_state_health(
+            state_file_exists=True,
+            newest_observation_at=NOW,
+            now=NOW,
+            persistence_error=True,
+        )
+
+        self.assertEqual("Needs attention", row.status)
+        self.assertEqual("error", row.tone)
+        self.assertIn("could not be saved", row.detail)
     def test_first_run_is_not_a_problem(self):
         row = local_state_health(
             state_file_exists=False, newest_observation_at=None, now=NOW
@@ -211,6 +222,15 @@ class SummaryTests(unittest.TestCase):
 
 
 class TechnicalSummaryTests(unittest.TestCase):
+    def test_summary_reports_sanitized_persistence_failure(self):
+        text = technical_summary(
+            {"codex": state()},
+            AppSettings(),
+            persistence_error=True,
+        )
+
+        self.assertIn("Local state: Needs attention", text)
+        self.assertNotIn(str(Path.home()), text)
     def summary(self, **kwargs):
         return technical_summary(
             {"codex": state(runtime_version="0.96.0", runtime_identity="id-1")},

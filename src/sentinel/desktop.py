@@ -622,7 +622,7 @@ class MainWindow(QMainWindow):
         self.star_description.setProperty("muted", True)
         self.star_description.setWordWrap(True)
         about_layout.addWidget(self.star_description)
-        self.star_button = QPushButton("★ Star UsageLoop on GitHub")
+        self.star_button = QPushButton("★ Open GitHub to star UsageLoop")
         self.star_button.setObjectName("linkButton")
         self.star_button.clicked.connect(
             lambda checked=False: QDesktopServices.openUrl(QUrl(PRODUCT.github_url))
@@ -700,7 +700,13 @@ class MainWindow(QMainWindow):
             self.schedule_card.update_schedule(
                 self.controller.settings, codex, now=current
             )
-            if not codex.installed:
+            if self.controller.persistence_error is not None:
+                self.overall_icon.setText("!")
+                self.overall_title.setText("UsageLoop needs attention")
+                self.overall_detail.setText(
+                    "A local setting could not be saved, so automatic starts are paused. See Technical details."
+                )
+            elif not codex.installed:
                 self.overall_icon.setText("!")
                 self.overall_title.setText("Codex needs attention")
                 self.overall_detail.setText(
@@ -792,9 +798,12 @@ class MainWindow(QMainWindow):
         if provider is None:
             return
         state = self.controller.states[provider_id]
-        self.controller.update_provider_state(
+        saved = self.controller.update_provider_state(
             replace(state, status="Starting", detail="Checking Codex safely.")
         )
+        if not saved:
+            self.refresh_clock()
+            return
         self.active_operations[provider_id] = action
         operation = (
             provider.probe
@@ -813,14 +822,16 @@ class MainWindow(QMainWindow):
             self.controller.apply_compatibility(provider_id, result)
         elif isinstance(result, ProviderOperationResult):
             if action == "sync":
-                self.controller.update_provider_state(result.state)
+                saved = self.controller.update_provider_state(result.state)
             else:
                 self.controller.apply_operation_result(
                     result.outcome, result.state, now=time.time()
                 )
             if action == "sync":
                 self.provider_cards[provider_id].set_sync_state(
-                    "updated" if result.outcome == "SYNC_UPDATED" else "inconclusive"
+                    "updated"
+                    if saved and result.outcome == "SYNC_UPDATED"
+                    else "inconclusive"
                 )
         else:
             self._operation_failed(provider_id, "unsupported_result")
@@ -851,12 +862,21 @@ class MainWindow(QMainWindow):
             self.automation_toggle.setChecked(False)
             self.automation_toggle.blockSignals(False)
             return
-        self.controller.set_automation_enabled(enabled)
+        if not self.controller.set_automation_enabled(enabled):
+            self.automation_toggle.blockSignals(True)
+            self.automation_toggle.setChecked(
+                self.controller.settings.automation_enabled
+            )
+            self.automation_toggle.blockSignals(False)
+            self._show_persistence_warning()
+            self.refresh_clock()
+            return
         self.refresh_clock()
         if enabled:
             self.evaluate_automation()
 
     def _startup_toggled(self, enabled: bool) -> None:
+        previous = self.controller.settings.start_with_windows
         try:
             self.startup_manager.set_enabled(enabled)
         except OSError:
@@ -869,16 +889,51 @@ class MainWindow(QMainWindow):
                 "Windows did not allow the per-user startup setting to be changed.",
             )
             return
-        self.controller.set_start_with_windows(enabled)
+        if not self.controller.set_start_with_windows(enabled):
+            try:
+                self.startup_manager.set_enabled(previous)
+            except OSError:
+                pass
+            self.startup_toggle.blockSignals(True)
+            self.startup_toggle.setChecked(previous)
+            self.startup_toggle.blockSignals(False)
+            self._show_persistence_warning()
+            self.refresh_clock()
 
     def _schedule_mode_changed(self) -> None:
         mode = self.schedule_mode.currentData()
-        self.controller.set_schedule_mode(str(mode))
+        if not self.controller.set_schedule_mode(str(mode)):
+            self.schedule_mode.blockSignals(True)
+            index = self.schedule_mode.findData(
+                self.controller.settings.schedule_mode
+            )
+            if index >= 0:
+                self.schedule_mode.setCurrentIndex(index)
+            self.schedule_mode.blockSignals(False)
+            self._show_persistence_warning()
         self.refresh_clock()
 
     def _daily_time_changed(self, selected: QTime) -> None:
-        self.controller.set_daily_start_time(selected.hour(), selected.minute())
+        if not self.controller.set_daily_start_time(
+            selected.hour(), selected.minute()
+        ):
+            self.daily_time.blockSignals(True)
+            self.daily_time.setTime(
+                QTime(
+                    self.controller.settings.daily_start_hour,
+                    self.controller.settings.daily_start_minute,
+                )
+            )
+            self.daily_time.blockSignals(False)
+            self._show_persistence_warning()
         self.refresh_clock()
+
+    def _show_persistence_warning(self) -> None:
+        QMessageBox.warning(
+            self,
+            "Setting not saved",
+            "UsageLoop could not save that setting, so it was changed back. Automatic starts are paused until local state can be written again.",
+        )
 
     def _update_diagnostics(self, *, now: float) -> None:
         daily = self.controller.settings.schedule_mode == "daily"
@@ -894,10 +949,15 @@ class MainWindow(QMainWindow):
                 codex.reset_at if codex is not None else None,
                 hour=self.controller.settings.daily_start_hour,
                 minute=self.controller.settings.daily_start_minute,
+                now=now,
             )
         )
         self.diagnostic_text.setText(
-            technical_summary(self.controller.states, self.controller.settings)
+            technical_summary(
+                self.controller.states,
+                self.controller.settings,
+                persistence_error=self.controller.persistence_error is not None,
+            )
         )
 
     def _copy_diagnostics(self, _checked: bool = False) -> None:

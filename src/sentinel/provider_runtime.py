@@ -58,6 +58,13 @@ _GUARDED_OUTCOMES = {
     "VERIFICATION_UNAVAILABLE",
     "ANCHOR_NOT_VERIFIED",
 }
+CHAIN_RESULT_OUTCOMES = frozenset().union(
+    _READY_OUTCOMES,
+    _RECOVERABLE_OUTCOMES,
+    _PROTECTED_OUTCOMES,
+    _GUARDED_OUTCOMES,
+    {"CONSENT_REQUIRED", "DRY_RUN"},
+)
 
 
 def chain_outcome_policy(outcome: str) -> ChainOutcomePolicy:
@@ -271,7 +278,7 @@ class CodexOperationRunner:
             last_verified_at=(
                 latest.observed_at if policy.category == "READY" and latest else None
             ),
-            last_action=outcome.replace("_", " ").title(),
+            last_action=outcome,
             used_percent=selected.used_percent if selected else None,
             usage_checked_at=latest.observed_at if latest else None,
             weekly_used_percent=weekly.used_percent if weekly else None,

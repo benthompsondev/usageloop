@@ -1,9 +1,11 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppSettings, AppStateStore, ProviderViewState
+from sentinel.history import SafeHistory
 from sentinel.providers import CompatibilityResult
 
 
@@ -20,6 +22,98 @@ class FakeProvider:
 
 
 class ApplicationControllerTests(unittest.TestCase):
+    def test_history_failure_falls_back_without_retrying_the_state_store(self):
+        class UnavailableHistory:
+            def record_error(self, category):
+                raise OSError("history unavailable")
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "app-state.json")
+            controller = ApplicationController(
+                [], store, error_history=UnavailableHistory()
+            )
+            controller.start()
+
+            with patch.object(
+                store, "save", side_effect=PermissionError("state unavailable")
+            ) as save, patch("sys.stderr") as stderr:
+                saved = controller.set_automation_enabled(True)
+
+            self.assertFalse(saved)
+            self.assertEqual(1, save.call_count)
+            self.assertEqual("state_write_failed", controller.persistence_error)
+            self.assertTrue(stderr.write.called)
+
+    def test_permission_denied_reverts_setting_and_records_only_safe_category(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = AppStateStore(root / "app-state.json")
+            history = SafeHistory(root / "sentinel.jsonl")
+            provider = FakeProvider(
+                ProviderViewState.waiting("codex", "Codex", installed=True)
+            )
+            controller = ApplicationController(
+                [provider], store, error_history=history
+            )
+            controller.start()
+
+            with patch.object(
+                store,
+                "save",
+                side_effect=PermissionError("private expanded path must not leak"),
+            ):
+                saved = controller.set_automation_enabled(True)
+
+            self.assertFalse(saved)
+            self.assertFalse(controller.settings.automation_enabled)
+            self.assertEqual("state_write_failed", controller.persistence_error)
+            self.assertEqual("WAIT", controller.decisions(now=100)["codex"].action)
+            log = history.path.read_text(encoding="utf-8")
+            self.assertIn('"category":"state_write_failed"', log)
+            self.assertNotIn("private expanded path", log)
+
+    def test_replace_failure_reverts_schedule_to_last_durable_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = ApplicationController(
+                [],
+                AppStateStore(root / "app-state.json"),
+                error_history=SafeHistory(root / "sentinel.jsonl"),
+            )
+            controller.start()
+
+            with patch(
+                "sentinel.app_state.os.replace",
+                side_effect=OSError("replace failed"),
+            ):
+                saved = controller.set_schedule_mode("daily")
+
+            self.assertFalse(saved)
+            self.assertEqual("continuous", controller.settings.schedule_mode)
+            self.assertEqual("state_write_failed", controller.persistence_error)
+
+    def test_temporary_write_failure_reverts_daily_time(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = ApplicationController(
+                [],
+                AppStateStore(root / "app-state.json"),
+                error_history=SafeHistory(root / "sentinel.jsonl"),
+            )
+            controller.start()
+
+            with patch.object(
+                Path,
+                "write_text",
+                side_effect=OSError("temporary write failed"),
+            ):
+                saved = controller.set_daily_start_time(6, 30)
+
+            self.assertFalse(saved)
+            self.assertEqual(4, controller.settings.daily_start_hour)
+            self.assertEqual(0, controller.settings.daily_start_minute)
+            self.assertEqual("state_write_failed", controller.persistence_error)
+
     def test_schedule_choice_survives_restart_without_provider_work(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AppStateStore(Path(directory) / "state.json")
