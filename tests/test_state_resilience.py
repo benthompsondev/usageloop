@@ -20,6 +20,7 @@ from sentinel.app_state import (
     format_countdown,
 )
 from sentinel.app_controller import ApplicationController
+from sentinel.history import SafeHistory
 from sentinel.product import PRODUCT
 
 
@@ -157,6 +158,19 @@ class AppDataMigrationTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
                 root = app_data_root()
             self.assertEqual(Path(directory) / PRODUCT.app_data_folder, root)
+
+    def test_default_state_and_history_share_the_canonical_packaged_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            current = Path(directory) / PRODUCT.app_data_folder
+            current.mkdir()
+            legacy = Path(directory) / PRODUCT.legacy_app_data_folder
+            legacy.mkdir()
+            with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
+                store = AppStateStore()
+                history = SafeHistory()
+
+            self.assertEqual(current / "app-state.json", store.path)
+            self.assertEqual(current / "sentinel.jsonl", history.path)
 
 
 class RecordingProvider:

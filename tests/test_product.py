@@ -168,6 +168,22 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("verify-packaged-activation.ps1", verifier)
         self.assertIn("-SkipDesktopActivation", workflow)
 
+    def test_readme_opens_with_the_payoff_and_one_dashboard_screenshot(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        example = (
+            "Your current window ends at 1:00 AM. UsageLoop starts the next one at "
+            "4:00 AM. When you sit down at 7:00 AM, that reset clock has already been "
+            "running for three hours, so your next full reset arrives around 9:00 AM "
+            "instead of noon."
+        )
+
+        self.assertIn("Keep your Codex 5-hour reset clock moving while you’re away.", readme)
+        self.assertIn(example, readme.replace("\n", " "))
+        self.assertIn("UsageLoop does not add quota or bypass limits", readme)
+        self.assertEqual(1, readme.count("docs/screenshots/dashboard.png"))
+        self.assertIn("Consider starring the repository", readme)
+
 
 
 

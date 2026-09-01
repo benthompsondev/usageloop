@@ -74,10 +74,7 @@ def present_provider_state(
     )
     if state.weekly_reset_at is not None:
         weekly += f"  ·  {_reset_copy(state.weekly_reset_at, now=now)}"
-    action = (
-        f"Last automatic action  {state.last_action}"
-        if state.last_action else "Last automatic action  No window start recorded"
-    )
+    action = _automatic_action_copy(state, now=now)
     if not state.installed:
         return ProviderPresentation(
             "NEEDS ATTENTION", "error", "Codex is not installed", "No reset information",
@@ -128,7 +125,7 @@ def present_provider_state(
             "CLOCK RUNNING" if automation_enabled else "AUTOMATION OFF",
             "success" if automation_enabled else "neutral",
             format_countdown(state.reset_at, now), reset,
-            "Codex reports a fixed five-hour reset. The countdown runs locally with no provider traffic.",
+            "Codex confirms this reset time. The countdown runs locally with no Codex traffic.",
             verified, usage, weekly, action,
         )
     return ProviderPresentation(
@@ -167,7 +164,7 @@ class ProviderCard(QFrame):
         layout.setSpacing(8)
 
         header = QHBoxLayout()
-        self.name_label = QLabel("5-hour reset")
+        self.name_label = QLabel("Current 5-hour window")
         self.name_label.setObjectName("providerName")
         self.status_label = StatusPill()
         header.addWidget(self.name_label)
@@ -243,7 +240,7 @@ class ProviderCard(QFrame):
 
 
 class ScheduleCard(QFrame):
-    """Consumer-facing summary of when the guarded action can run."""
+    """Consumer-facing summary of when the next window can start."""
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -282,6 +279,10 @@ class ScheduleCard(QFrame):
         self.manage_button = QPushButton("Manage schedule")
         self.manage_button.setObjectName("secondaryButton")
         layout.addWidget(self.manage_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.last_action_label = QLabel()
+        self.last_action_label.setObjectName("lastAction")
+        self.last_action_label.setWordWrap(True)
+        layout.addWidget(self.last_action_label)
 
     def update_schedule(
         self,
@@ -295,12 +296,12 @@ class ScheduleCard(QFrame):
             time_text = datetime(2000, 1, 1, settings.daily_start_hour, settings.daily_start_minute).strftime(
                 "%I:%M %p"
             ).lstrip("0")
-            self.mode_label.setText(f"Daily at {time_text}")
+            self.mode_label.setText(f"At {time_text} each day")
             self.detail_label.setText(
                 "Starts only after the current window ends and this local time arrives."
             )
         else:
-            self.mode_label.setText("Continuous")
+            self.mode_label.setText("As soon as reset passes")
             self.detail_label.setText(
                 "Starts the next window after the current reset and safety buffer."
             )
@@ -339,6 +340,55 @@ def _schedule_time(timestamp: float, *, now: float) -> str:
     if local.date() == current.date() + timedelta(days=1):
         return f"Tomorrow at {time_text}"
     return local.strftime("%a, %b %d at %I:%M %p").replace(" 0", " ")
+
+
+def daily_schedule_example(
+    reset_at: int | None, *, hour: int, minute: int
+) -> str:
+    """Explain the selected daily schedule using the current cached reset."""
+    selected = (
+        datetime(2000, 1, 1, hour, minute)
+        .strftime("%I:%M %p")
+        .lstrip("0")
+    )
+    if reset_at is None:
+        return (
+            "After the current window ends, UsageLoop will start the next one "
+            f"at {selected}."
+        )
+    try:
+        reset = (
+            datetime.fromtimestamp(reset_at)
+            .astimezone()
+            .strftime("%I:%M %p")
+            .lstrip("0")
+        )
+    except (OSError, OverflowError, ValueError):
+        return (
+            "After the current window ends, UsageLoop will start the next one "
+            f"at {selected}."
+        )
+    return (
+        f"Your current window ends at {reset}. "
+        f"UsageLoop will start the next one at {selected}."
+    )
+
+
+def _automatic_action_copy(state: ProviderViewState, *, now: float) -> str:
+    action = state.last_action
+    if not action:
+        return "Last automatic start: None yet"
+    normalized = action.casefold()
+    if "unclear" in normalized or "not verified" in normalized:
+        return "Last automatic start: Outcome unclear · No retry"
+    if "before" in normalized and "sent" in normalized:
+        return "Last automatic start: Stopped before sending"
+    if "preparing" in normalized or "starting" in normalized:
+        return "Automatic start in progress"
+    if "verified" in normalized or "successful" in normalized:
+        when = _friendly_time(state.last_verified_at, now=now)
+        return f"Last automatic start: {when} · Successful"
+    return f"Last automatic start: {action}"
 
 
 def _metric_bar(name: str) -> QProgressBar:

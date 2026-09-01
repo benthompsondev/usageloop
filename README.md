@@ -1,18 +1,31 @@
-# UsageLoop for Codex
+# UsageLoop
 
-**Keep your Codex reset clock running.**
+**Keep your Codex 5-hour reset clock moving while you’re away.**
 
-UsageLoop is a small Windows app for Codex subscribers. It shows whether the
-current five-hour window is genuinely counting down, displays the last-known
-five-hour and weekly usage, and can start the next window with one minimal
-guarded Codex request.
+Your Codex 5-hour window only starts when you actually use Codex. UsageLoop can
+start the next one for you while you’re away, so its reset clock is already
+counting down when you come back.
 
-It does not grant extra quota or change the limits on your plan. It starts the
-normal next clock early so more of that five-hour period can pass before you
-need Codex again.
+Your current window ends at 1:00 AM. UsageLoop starts the next one at 4:00 AM.
+When you sit down at 7:00 AM, that reset clock has already been running for
+three hours, so your next full reset arrives around 9:00 AM instead of noon.
+
+UsageLoop does not add quota or bypass limits. It starts the normal next window
+you were going to receive anyway.
+
+![UsageLoop dashboard](docs/screenshots/dashboard.png)
+
+- Native Windows app with a quiet system tray mode
+- Free and open source
+- No API key, telemetry, or cloud account
+- Never reads Codex credentials or conversations
+- Automation and Windows startup are off by default
 
 UsageLoop is an independent open-source project. It is not affiliated with,
 endorsed by, or sponsored by OpenAI.
+
+UsageLoop helping you? Consider starring the repository. It helps others
+discover the project and is the simplest way to show that it’s useful.
 
 ## What the app shows
 
@@ -25,11 +38,12 @@ endorsed by, or sponsored by OpenAI.
 The countdown moves locally. It does not poll Codex to make the UI look live.
 Usage percentages are snapshots from the last real observation.
 
-Automation has two local schedule modes:
+Automation has two local schedule choices:
 
-- **Continuous** starts the next window after the current reset and safety
-  buffer.
-- **Daily start time** waits until your chosen local time after a window ends.
+- **As soon as the current one resets** starts the next window after the reset
+  and safety buffer.
+- **At a set time each day** waits until your chosen local time after a window
+  ends.
   If the PC is asleep at that time, UsageLoop catches up once after wake or
   restart. If a Codex window is still active at that time, it waits for the next
   day's selected time rather than starting early.
@@ -107,10 +121,10 @@ dist\UsageLoop-Setup.exe.sha256
 
 1. Open UsageLoop and confirm Codex is detected.
 2. Review the cached five-hour and weekly state.
-3. In Settings, choose **Continuous** or **Daily start time**, then turn on
-   **Keep my 5-hour windows ready**.
+3. In Settings, choose **As soon as the current one resets** or **At a set time
+   each day**, then turn on **Keep my 5-hour windows ready**.
 4. On a true first run, choose **Start my first window now**. This explicit
-   action is guarded by the same evidence and weekly checks.
+   action is protected by the same evidence and weekly checks.
 5. Leave UsageLoop in the tray. The local countdown continues without Codex
    traffic between observations. Automation and Windows startup stay off until
    you enable them.

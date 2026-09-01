@@ -310,7 +310,10 @@ class SettingsSurfaceTests(unittest.TestCase):
         self.assertEqual(
             "Keep my 5-hour windows ready", self.window.automation_title_label.text()
         )
-        self.assertEqual("Continuous", self.window.schedule_mode.currentText())
+        self.assertEqual(
+            "As soon as the current one resets",
+            self.window.schedule_mode.currentText(),
+        )
         self.assertIsNotNone(self.window.startup_toggle)
         self.assertEqual("Check for updates", self.window.update_panel.action_button.text())
 

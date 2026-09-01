@@ -85,9 +85,12 @@ def main() -> int:
         ):
             window.resize(width, height)
             save(window, args.output / f"dashboard-{width}x{height}.png", app)
-        window.resize(1040, 720)
+        # Use the 1366x768 composition for the README hero so the current
+        # window, schedule, and weekly guard are visible in one frame.
+        window.resize(1366, 768)
         save(window, args.output / "dashboard.png", app)
 
+        window.resize(1040, 720)
         window.show_page(1)
         save(window, args.output / "settings.png", app)
         window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("daily"))
@@ -118,7 +121,7 @@ def main() -> int:
             replace(codex, installed=False, status="Needs attention", reset_at=None)
         )
         window.refresh_clock(now=now)
-        save(window, args.output / "dashboard-codex-missing.png", app)
+        save(window, args.output / "dashboard-provider-missing.png", app)
         controller.update_provider_state(
             replace(codex, status="Needs attention", detail="Capability probe failed safely.")
         )

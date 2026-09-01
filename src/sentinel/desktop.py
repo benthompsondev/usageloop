@@ -52,6 +52,7 @@ from .ui_components import (
     ScheduleCard,
     StatusPill,
     ToggleSwitch,
+    daily_schedule_example,
     make_surface_card,
     present_provider_state,
 )
@@ -284,7 +285,9 @@ class MainWindow(QMainWindow):
         self.footer_widget = footer
         return footer
 
-    def _page(self, title: str, intro: str) -> tuple[QScrollArea, QVBoxLayout]:
+    def _page(
+        self, title: str, intro: str
+    ) -> tuple[QScrollArea, QVBoxLayout, QLabel]:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -309,13 +312,21 @@ class MainWindow(QMainWindow):
         wrapper_layout.addWidget(content, 1)
         wrapper_layout.addStretch()
         scroll.setWidget(wrapper)
-        return scroll, root
+        return scroll, root, intro_label
 
     def _build_dashboard(self) -> QWidget:
-        page, root = self._page(
+        page, root, self.dashboard_intro = self._page(
             "Your Codex reset clock",
-            "See the real five-hour clock, choose when the next one starts, and keep weekly usage protected.",
+            "Codex starts a new 5-hour reset clock when you use it. UsageLoop can start the next one "
+            "for you while you’re away, so the clock is already counting down when you come back.",
         )
+        self.dashboard_clarifier = QLabel(
+            "UsageLoop does not add quota or bypass limits. It uses one minimal request to start "
+            "your normal next window."
+        )
+        self.dashboard_clarifier.setProperty("muted", True)
+        self.dashboard_clarifier.setWordWrap(True)
+        root.addWidget(self.dashboard_clarifier)
         overall = QFrame()
         overall.setObjectName("overallStatusCard")
         overall_layout = QHBoxLayout(overall)
@@ -355,6 +366,7 @@ class MainWindow(QMainWindow):
             provider_row.addWidget(card, 1)
         self.schedule_card = ScheduleCard()
         self.schedule_card.manage_button.clicked.connect(lambda: self.show_page(1))
+        self.last_action_label = self.schedule_card.last_action_label
         provider_row.addWidget(self.schedule_card, 1)
         root.addLayout(provider_row)
 
@@ -373,11 +385,6 @@ class MainWindow(QMainWindow):
         weekly_layout.addWidget(self.weekly_status)
         root.addWidget(weekly)
 
-        self.last_action_label = QLabel()
-        self.last_action_label.setObjectName("lastAction")
-        self.last_action_label.setWordWrap(True)
-        root.addWidget(self.last_action_label)
-
         root.addWidget(self._build_assurance_strip(), 0)
         # A little slack above and more below reads as deliberate spacing
         # rather than content stranded at the top of a tall window.
@@ -393,7 +400,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(26)
         points = (
             ("Safe and private", "Codex keeps its own sign-in. UsageLoop never reads credentials."),
-            ("Local and lightweight", "Countdowns move on this PC with no provider polling."),
+            ("Local and lightweight", "Countdowns move on this PC with no Codex polling."),
             ("Quota protected", "Weekly allowance is checked, and unclear requests are never retried."),
         )
         for title, body in points:
@@ -423,7 +430,7 @@ class MainWindow(QMainWindow):
         updater: GitHubReleaseUpdater,
         confirm_install: Callable[[str], bool] | None,
     ) -> QWidget:
-        page, root = self._page(
+        page, root, _intro = self._page(
             "Settings",
             "Choose how UsageLoop keeps your reset clock running.",
         )
@@ -440,7 +447,7 @@ class MainWindow(QMainWindow):
         self.automation_title_label = QLabel("Keep my 5-hour windows ready")
         self.automation_title_label.setObjectName("secondaryMetric")
         automation_hint = QLabel(
-            "Uses one minimal guarded request only when a new window needs to start."
+            "Sends one tiny request to Codex, only when a new window needs to start."
         )
         automation_hint.setProperty("muted", True)
         automation_hint.setWordWrap(True)
@@ -455,25 +462,27 @@ class MainWindow(QMainWindow):
 
         schedule_card, schedule_layout = make_surface_card(
             "Schedule",
-            "Continuous keeps every five-hour window moving. Daily waits for your chosen local time after a window ends.",
+            "Start each next window right after reset, or wait for a local time you choose.",
         )
         schedule_row = QFrame()
         schedule_row.setObjectName("settingRow")
         schedule_row_layout = QHBoxLayout(schedule_row)
         schedule_row_layout.setContentsMargins(14, 12, 14, 12)
         mode_copy = QVBoxLayout()
-        mode_title = QLabel("Window start mode")
-        mode_title.setObjectName("secondaryMetric")
+        self.schedule_mode_title = QLabel("When should the next 5-hour window start?")
+        self.schedule_mode_title.setObjectName("secondaryMetric")
         self.schedule_explanation = QLabel()
         self.schedule_explanation.setProperty("muted", True)
         self.schedule_explanation.setWordWrap(True)
-        mode_copy.addWidget(mode_title)
+        mode_copy.addWidget(self.schedule_mode_title)
         mode_copy.addWidget(self.schedule_explanation)
         schedule_row_layout.addLayout(mode_copy, 1)
         self.schedule_mode = QComboBox()
         self.schedule_mode.setObjectName("scheduleModePicker")
-        self.schedule_mode.addItem("Continuous", "continuous")
-        self.schedule_mode.addItem("Daily start time", "daily")
+        self.schedule_mode.addItem(
+            "As soon as the current one resets", "continuous"
+        )
+        self.schedule_mode.addItem("At a set time each day", "daily")
         index = self.schedule_mode.findData(self.controller.settings.schedule_mode)
         self.schedule_mode.setCurrentIndex(max(0, index))
         schedule_row_layout.addWidget(self.schedule_mode)
@@ -484,13 +493,17 @@ class MainWindow(QMainWindow):
         time_layout = QHBoxLayout(self.daily_time_row)
         time_layout.setContentsMargins(14, 12, 14, 12)
         time_copy = QVBoxLayout()
-        time_title = QLabel("Daily start time")
-        time_title.setObjectName("secondaryMetric")
+        self.daily_time_title = QLabel("Start time")
+        self.daily_time_title.setObjectName("secondaryMetric")
         time_hint = QLabel("Local time on this PC. Missed starts catch up once after wake or restart.")
         time_hint.setProperty("muted", True)
         time_hint.setWordWrap(True)
-        time_copy.addWidget(time_title)
+        time_copy.addWidget(self.daily_time_title)
         time_copy.addWidget(time_hint)
+        self.daily_schedule_example = QLabel()
+        self.daily_schedule_example.setProperty("muted", True)
+        self.daily_schedule_example.setWordWrap(True)
+        time_copy.addWidget(self.daily_schedule_example)
         time_layout.addLayout(time_copy, 1)
         self.daily_time = QTimeEdit(
             QTime(
@@ -565,21 +578,25 @@ class MainWindow(QMainWindow):
         return page
 
     def _build_about(self) -> QWidget:
-        page, root = self._page(f"About {PRODUCT.display_name}", PRODUCT.tagline)
+        page, root, _intro = self._page(
+            f"About {PRODUCT.display_name}", PRODUCT.tagline
+        )
         about, about_layout = make_surface_card(PRODUCT.display_name)
         version = QLabel(f"Version {PRODUCT.version} \u00b7 Windows \u00b7 MIT licensed")
         version.setObjectName("secondaryMetric")
         about_layout.addWidget(version)
-        description = QLabel(
-            "Codex subscription windows start when Codex receives a real request. UsageLoop watches "
-            "the official local Codex app-server, keeps the countdown on this PC, and can start the "
-            "next five-hour clock after rollover with one minimal guarded request. It reports success "
-            "only after Codex exposes a fixed new reset time. It does not grant extra quota or change "
-            "your subscription limits."
+        self.about_description = QLabel(
+            "Codex gives you usage in 5-hour windows. A new window begins when you actually use Codex. "
+            "If the previous window ends while you’re away, the next reset clock normally waits until "
+            "you come back and use Codex again.\n\n"
+            "UsageLoop can start that next window for you with one minimal request, either as soon as "
+            "the old window ends or at a time you choose. That means the next reset clock can already "
+            "be counting down before you return.\n\n"
+            "UsageLoop does not increase your quota or bypass limits."
         )
-        description.setProperty("muted", True)
-        description.setWordWrap(True)
-        about_layout.addWidget(description)
+        self.about_description.setProperty("muted", True)
+        self.about_description.setWordWrap(True)
+        about_layout.addWidget(self.about_description)
         links = QHBoxLayout()
         for label, url in (
             ("View source", PRODUCT.github_url),
@@ -594,11 +611,28 @@ class MainWindow(QMainWindow):
             links.addWidget(button)
         links.addStretch()
         about_layout.addLayout(links)
+
+        star_title = QLabel("Finding UsageLoop useful?")
+        star_title.setObjectName("secondaryMetric")
+        about_layout.addWidget(star_title)
+        self.star_description = QLabel(
+            "A GitHub star helps other Codex users discover the project and lets us know it’s worth "
+            "continuing to improve."
+        )
+        self.star_description.setProperty("muted", True)
+        self.star_description.setWordWrap(True)
+        about_layout.addWidget(self.star_description)
+        self.star_button = QPushButton("★ Star UsageLoop on GitHub")
+        self.star_button.setObjectName("linkButton")
+        self.star_button.clicked.connect(
+            lambda checked=False: QDesktopServices.openUrl(QUrl(PRODUCT.github_url))
+        )
+        about_layout.addWidget(self.star_button, 0, Qt.AlignmentFlag.AlignLeft)
         root.addWidget(about)
 
         support, support_layout = make_surface_card(
             "Codex support",
-            "The app-server observation and guarded start path have both been proven on a real subscription account.",
+            "UsageLoop checks that the installed Codex client still supports every action it needs before automation runs.",
         )
         support_status = QLabel(
             "UsageLoop is an independent open-source project. It is not affiliated with, endorsed by, "
@@ -618,7 +652,7 @@ class MainWindow(QMainWindow):
         boundaries = QLabel(
             "\u2022 Codex automation is off until you switch it on\n"
             "\u2022 Update checks run only when you press the button, and never touch your plan\n"
-            "\u2022 Countdowns are calculated locally and cause no provider traffic\n"
+            "\u2022 Countdowns are calculated locally and cause no Codex traffic\n"
             "\u2022 A request whose outcome is unclear is never retried automatically\n"
             "\u2022 Weekly limits are respected before any action is considered"
         )
@@ -680,9 +714,9 @@ class MainWindow(QMainWindow):
                 )
             elif codex.reset_at is not None and codex.reset_at > current:
                 self.overall_icon.setText("✓")
-                self.overall_title.setText("Your Codex reset clock is running")
+                self.overall_title.setText("Everything is set")
                 self.overall_detail.setText(
-                    "The countdown is local. UsageLoop will follow your schedule when this window ends."
+                    "The countdown runs locally. UsageLoop will follow your schedule when this window ends."
                 )
             else:
                 self.overall_icon.setText("○")
@@ -759,7 +793,7 @@ class MainWindow(QMainWindow):
             return
         state = self.controller.states[provider_id]
         self.controller.update_provider_state(
-            replace(state, status="Starting", detail="Checking with the provider safely.")
+            replace(state, status="Starting", detail="Checking Codex safely.")
         )
         self.active_operations[provider_id] = action
         operation = (
@@ -850,9 +884,17 @@ class MainWindow(QMainWindow):
         daily = self.controller.settings.schedule_mode == "daily"
         self.daily_time_row.setVisible(daily)
         self.schedule_explanation.setText(
-            "Wait for the selected local time after a window ends."
+            "Wait for the selected local time after the current window ends."
             if daily
-            else "Start the next window after the current one ends."
+            else "Start the next window after the current reset and safety check."
+        )
+        codex = self.controller.states.get("codex")
+        self.daily_schedule_example.setText(
+            daily_schedule_example(
+                codex.reset_at if codex is not None else None,
+                hour=self.controller.settings.daily_start_hour,
+                minute=self.controller.settings.daily_start_minute,
+            )
         )
         self.diagnostic_text.setText(
             technical_summary(self.controller.states, self.controller.settings)

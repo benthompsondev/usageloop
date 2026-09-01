@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from PySide6.QtCore import QTime, Qt
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget
 
 from sentinel.app_controller import ApplicationController
@@ -146,6 +147,13 @@ class DesktopTests(unittest.TestCase):
             ["Dashboard", "Settings", "About"],
             [button.text() for button in window.nav_buttons],
         )
+        self.assertIn(
+            "Codex starts a new 5-hour reset clock", window.dashboard_intro.text()
+        )
+        self.assertIn(
+            "does not add quota or bypass limits",
+            window.dashboard_clarifier.text(),
+        )
 
     def test_local_countdown_refresh_does_not_call_provider(self):
         state = ProviderViewState.waiting(
@@ -199,10 +207,12 @@ class DesktopTests(unittest.TestCase):
         window.refresh_clock(now=100)
         card = window.provider_cards["codex"]
         self.assertEqual("CLOCK RUNNING", card.status_label.text())
+        self.assertEqual("Everything is set", window.overall_title.text())
         self.assertEqual("0h 15m", card.countdown_label.text())
         self.assertIn("12% used", card.usage_label.text())
         self.assertIn("34% used", window.weekly_detail.text())
-        self.assertIn("Anchor verified", window.last_action_label.text())
+        self.assertIn("Last automatic start", window.last_action_label.text())
+        self.assertIn("Successful", window.last_action_label.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 
@@ -253,9 +263,52 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual("daily", window.controller.settings.schedule_mode)
         self.assertEqual(6, window.controller.settings.daily_start_hour)
         self.assertEqual(30, window.controller.settings.daily_start_minute)
-        self.assertEqual("Daily at 6:30 AM", window.schedule_card.mode_label.text())
+        self.assertEqual("At 6:30 AM each day", window.schedule_card.mode_label.text())
+        self.assertIn(
+            "Your current window ends at", window.daily_schedule_example.text()
+        )
+        self.assertIn(
+            "UsageLoop will start the next one at 6:30 AM",
+            window.daily_schedule_example.text(),
+        )
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
+
+    def test_settings_use_plain_schedule_labels(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+
+        self.assertEqual(
+            ["As soon as the current one resets", "At a set time each day"],
+            [window.schedule_mode.itemText(index) for index in range(2)],
+        )
+        self.assertEqual(
+            "When should the next 5-hour window start?",
+            window.schedule_mode_title.text(),
+        )
+        self.assertEqual("Start time", window.daily_time_title.text())
+
+    def test_about_has_plain_product_explanation_and_star_link(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        self.assertIn(
+            "A new window begins when you actually use Codex",
+            window.about_description.text(),
+        )
+        self.assertIn("does not increase your quota", window.about_description.text())
+        self.assertIn(
+            "A GitHub star helps other Codex users",
+            window.star_description.text(),
+        )
+        self.assertEqual("★ Star UsageLoop on GitHub", window.star_button.text())
+
+        with patch.object(QDesktopServices, "openUrl", return_value=True) as open_url:
+            window.star_button.click()
+
+        open_url.assert_called_once()
+        self.assertEqual(PRODUCT.github_url, open_url.call_args.args[0].toString())
 
     def test_manual_sync_is_available_when_automation_is_off_and_never_triggers(self):
         state = ProviderViewState(
@@ -534,7 +587,24 @@ class FirstRunStateMappingTests(unittest.TestCase):
             automation_enabled=True,
         )
         self.assertTrue(presented.verified.startswith("Last synced "))
-        self.assertIn("Last automatic action", presented.action)
+        self.assertIn("Last automatic start", presented.action)
+        self.assertIn("Successful", presented.action)
+
+    def test_unverified_start_is_never_presented_as_successful(self):
+        presented = present_provider_state(
+            self.provider(
+                status="Needs attention",
+                last_action="Start not verified; no retry",
+            ),
+            now=1_700_000_100,
+            automation_enabled=True,
+        )
+
+        self.assertEqual(
+            "Last automatic start: Outcome unclear · No retry",
+            presented.action,
+        )
+        self.assertNotIn("Successful", presented.action)
 
     def test_missing_provider_is_unchanged(self):
         presented = present_provider_state(

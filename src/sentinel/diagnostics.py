@@ -276,6 +276,7 @@ def technical_summary(
     compatible = settings.compatible_runtime_identities or {}
     lines = [
         f"{PRODUCT.display_name} {app_version}",
+        rf"Local data: %LOCALAPPDATA%\{PRODUCT.app_data_folder}",
         "",
         "Codex support",
         "  Observation: local app-server account/rateLimits/read",

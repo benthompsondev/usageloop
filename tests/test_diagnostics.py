@@ -1,5 +1,6 @@
 """The Settings health surface has to be readable and honest without Qt running."""
 
+from pathlib import Path
 import unittest
 
 from sentinel.app_state import AppSettings, ProviderViewState
@@ -223,6 +224,11 @@ class TechnicalSummaryTests(unittest.TestCase):
 
     def test_summary_names_the_product_and_version(self):
         self.assertIn("UsageLoop", self.summary().splitlines()[0])
+
+    def test_summary_names_canonical_local_data_without_expanding_the_user_path(self):
+        text = self.summary()
+        self.assertIn(r"Local data: %LOCALAPPDATA%\UsageLoop", text)
+        self.assertNotIn(str(Path.home()), text)
 
     def test_summary_reports_confirmed_compatibility(self):
         text = technical_summary(
