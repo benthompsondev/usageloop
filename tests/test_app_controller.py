@@ -9,6 +9,17 @@ from sentinel.history import SafeHistory
 from sentinel.providers import CompatibilityResult
 
 
+WEEKLY_TIMES = (
+    (4, 0),
+    (4, 0),
+    (4, 0),
+    (4, 0),
+    (4, 0),
+    (5, 0),
+    (5, 0),
+)
+
+
 class FakeProvider:
     def __init__(self, state):
         self.provider_id = state.provider_id
@@ -197,6 +208,99 @@ class ApplicationControllerTests(unittest.TestCase):
             self.assertEqual(6, restarted.settings.daily_start_hour)
             self.assertEqual(45, restarted.settings.daily_start_minute)
             self.assertEqual(0, provider.operation_calls)
+
+    def test_first_weekly_switch_seeds_every_day_from_daily_time_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            controller = ApplicationController([], store)
+            controller.start()
+            controller.set_daily_start_time(6, 45)
+
+            self.assertTrue(controller.set_schedule_mode("weekly"))
+            self.assertEqual(((6, 45),) * 7, controller.settings.weekly_start_times)
+
+            changed = WEEKLY_TIMES
+            self.assertTrue(controller.set_weekly_start_times(changed))
+            self.assertTrue(controller.set_schedule_mode("continuous"))
+            self.assertTrue(controller.set_daily_start_time(8, 30))
+            self.assertTrue(controller.set_schedule_mode("weekly"))
+
+            self.assertEqual(changed, controller.settings.weekly_start_times)
+
+    def test_all_seven_weekly_values_survive_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            controller = ApplicationController([], store)
+            controller.start()
+            controller.set_schedule_mode("weekly")
+            controller.set_weekly_start_times(WEEKLY_TIMES)
+
+            restarted = ApplicationController([], store)
+            restarted.start()
+
+            self.assertEqual("weekly", restarted.settings.schedule_mode)
+            self.assertEqual(WEEKLY_TIMES, restarted.settings.weekly_start_times)
+
+    def test_failed_first_weekly_switch_does_not_persist_seed_or_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            controller = ApplicationController([], store)
+            controller.start()
+            controller.set_daily_start_time(6, 45)
+
+            with patch.object(store, "save", side_effect=OSError("write failed")):
+                saved = controller.set_schedule_mode("weekly")
+
+            self.assertFalse(saved)
+            self.assertEqual("continuous", controller.settings.schedule_mode)
+            self.assertIsNone(controller.settings.weekly_start_times)
+
+    def test_invalid_weekly_values_are_rejected_without_changing_saved_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller = ApplicationController(
+                [], AppStateStore(Path(directory) / "state.json")
+            )
+            controller.start()
+            controller.set_schedule_mode("weekly")
+            original = controller.settings.weekly_start_times
+
+            for invalid in (
+                ((4, 0),),
+                WEEKLY_TIMES[:-1] + ((24, 0),),
+                WEEKLY_TIMES[:-1] + ((5, True),),
+            ):
+                with self.subTest(invalid=invalid):
+                    with self.assertRaises(ValueError):
+                        controller.set_weekly_start_times(invalid)
+
+            self.assertEqual(original, controller.settings.weekly_start_times)
+
+    def test_schedule_edit_while_running_changes_local_due_decision(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        zone = ZoneInfo("America/Toronto")
+        reset = int(datetime(2026, 8, 31, 2, 0, tzinfo=zone).timestamp())
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(reset, verified_at=reset - 100)
+        with tempfile.TemporaryDirectory() as directory:
+            store = AppStateStore(Path(directory) / "state.json")
+            controller = ApplicationController([FakeProvider(state)], store)
+            controller.start()
+            controller.settings = AppSettings(
+                automation_enabled=True,
+                compatible_runtime_identities={"codex": "runtime:1"},
+                schedule_mode="weekly",
+                weekly_start_times=WEEKLY_TIMES,
+            )
+
+            now = datetime(2026, 8, 31, 7, 0, tzinfo=zone).timestamp()
+            self.assertEqual("ROLLOVER", controller.decisions(now=now)["codex"].action)
+
+            later = ((8, 0),) + WEEKLY_TIMES[1:]
+            self.assertTrue(controller.set_weekly_start_times(later))
+            self.assertEqual("WAIT", controller.decisions(now=now)["codex"].action)
 
     def test_start_prunes_retired_provider_cache_and_identities(self):
         with tempfile.TemporaryDirectory() as directory:

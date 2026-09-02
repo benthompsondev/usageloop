@@ -102,6 +102,14 @@ def main() -> int:
         window.daily_time.setTime(QTime(4, 0))
         window.refresh_clock(now=now)
         save(window, args.output / "settings-daily.png", app)
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        controller.set_weekly_start_times(
+            ((4, 0), (4, 0), (4, 0), (4, 0), (4, 0), (5, 0), (5, 0))
+        )
+        window._sync_weekly_editor()
+        window.refresh_clock(now=now)
+        window.resize(1366, 768)
+        save(window, args.output / "settings-weekly.png", app)
         release = ReleaseInfo(
             "1.1.0",
             (

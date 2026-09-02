@@ -153,7 +153,12 @@ class ScreenshotToolTests(unittest.TestCase):
             )
 
             self.assertEqual(0, result.returncode, result.stderr)
-            for name in ("dashboard.png", "settings.png", "about.png"):
+            for name in (
+                "dashboard.png",
+                "settings.png",
+                "settings-weekly.png",
+                "about.png",
+            ):
                 target = Path(directory) / name
                 with self.subTest(image=name):
                     self.assertTrue(target.is_file())

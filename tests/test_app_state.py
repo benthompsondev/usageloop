@@ -1,7 +1,9 @@
 import json
+from datetime import datetime
 from pathlib import Path
 import tempfile
 import unittest
+from zoneinfo import ZoneInfo
 
 from sentinel.app_state import (
     AppSettings,
@@ -9,6 +11,18 @@ from sentinel.app_state import (
     ProviderViewState,
     automation_decision,
     format_countdown,
+)
+
+
+TORONTO = ZoneInfo("America/Toronto")
+WEEKLY_TIMES = (
+    (4, 0),
+    (4, 0),
+    (4, 0),
+    (4, 0),
+    (4, 0),
+    (5, 0),
+    (5, 0),
 )
 
 
@@ -49,6 +63,7 @@ class AppStateTests(unittest.TestCase):
                 schedule_mode="daily",
                 daily_start_hour=6,
                 daily_start_minute=30,
+                weekly_start_times=WEEKLY_TIMES,
             )
             state = ProviderViewState(
                 provider_id="codex",
@@ -75,6 +90,68 @@ class AppStateTests(unittest.TestCase):
             raw = json.loads(path.read_text(encoding="utf-8"))
             self.assertNotIn("prompt", json.dumps(raw).lower())
             self.assertNotIn("token", json.dumps(raw).lower())
+
+    def test_old_daily_settings_load_without_initializing_weekly_routine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "app-state.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "settings": {
+                            "automation_enabled": True,
+                            "schedule_mode": "daily",
+                            "daily_start_hour": 6,
+                            "daily_start_minute": 45,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            settings = AppStateStore(path).load()
+
+            self.assertEqual("daily", settings.schedule_mode)
+            self.assertEqual((6, 45), (
+                settings.daily_start_hour,
+                settings.daily_start_minute,
+            ))
+            self.assertIsNone(settings.weekly_start_times)
+
+    def test_partial_weekly_settings_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "app-state.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "settings": {
+                            "automation_enabled": True,
+                            "schedule_mode": "weekly",
+                            "weekly_start_times": [[4, 0]],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = AppStateStore(path).load()
+            state = ProviderViewState.waiting(
+                "codex", "Codex", installed=True, runtime_identity="native:same"
+            ).with_reset(
+                int(datetime(2026, 8, 30, 22, 0, tzinfo=TORONTO).timestamp()),
+                verified_at=100,
+            )
+
+            decision = automation_decision(
+                settings.automation_enabled,
+                state,
+                now=datetime(2026, 8, 31, 4, 0, tzinfo=TORONTO).timestamp(),
+                compatible_runtime_identity="native:same",
+                schedule_mode=settings.schedule_mode,
+                weekly_times=settings.weekly_start_times,
+                timezone=TORONTO,
+            )
+
+            self.assertIsNone(settings.weekly_start_times)
+            self.assertEqual("NONE", decision.action)
 
     def test_invalid_schedule_settings_fall_back_to_safe_defaults(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -324,6 +401,81 @@ class AppStateTests(unittest.TestCase):
         )
 
         self.assertEqual("NONE", decision.action)
+
+    def test_weekly_mode_waits_during_protected_overnight_period(self):
+        reset = datetime(2026, 8, 30, 22, 0, tzinfo=TORONTO).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        decision = automation_decision(
+            True,
+            state,
+            now=datetime(2026, 8, 31, 3, 0, tzinfo=TORONTO).timestamp(),
+            compatible_runtime_identity="native:same",
+            schedule_mode="weekly",
+            weekly_times=WEEKLY_TIMES,
+            timezone=TORONTO,
+        )
+
+        self.assertEqual("WAIT", decision.action)
+        self.assertIn("overnight", decision.reason.lower())
+
+    def test_weekly_mode_rolls_during_daytime(self):
+        reset = datetime(2026, 8, 31, 9, 0, tzinfo=TORONTO).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        decision = automation_decision(
+            True,
+            state,
+            now=reset + 60,
+            compatible_runtime_identity="native:same",
+            schedule_mode="weekly",
+            weekly_times=WEEKLY_TIMES,
+            timezone=TORONTO,
+        )
+
+        self.assertEqual("ROLLOVER", decision.action)
+        self.assertIn("daytime", decision.reason.lower())
+
+    def test_weekly_active_window_crossing_start_does_not_trigger(self):
+        reset = datetime(2026, 8, 31, 8, 0, tzinfo=TORONTO).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        decision = automation_decision(
+            True,
+            state,
+            now=datetime(2026, 8, 31, 4, 0, tzinfo=TORONTO).timestamp(),
+            compatible_runtime_identity="native:same",
+            schedule_mode="weekly",
+            weekly_times=WEEKLY_TIMES,
+            timezone=TORONTO,
+        )
+
+        self.assertEqual("WAIT", decision.action)
+
+    def test_weekly_sleep_after_scheduled_start_catches_up(self):
+        reset = datetime(2026, 8, 31, 2, 0, tzinfo=TORONTO).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="native:same"
+        ).with_reset(int(reset), verified_at=reset - 100)
+
+        decision = automation_decision(
+            True,
+            state,
+            now=datetime(2026, 8, 31, 7, 0, tzinfo=TORONTO).timestamp(),
+            compatible_runtime_identity="native:same",
+            schedule_mode="weekly",
+            weekly_times=WEEKLY_TIMES,
+            timezone=TORONTO,
+        )
+
+        self.assertEqual("ROLLOVER", decision.action)
+        self.assertIn("scheduled", decision.reason.lower())
 
 
 if __name__ == "__main__":

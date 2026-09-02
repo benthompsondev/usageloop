@@ -311,11 +311,29 @@ class SettingsSurfaceTests(unittest.TestCase):
             "Keep my 5-hour windows ready", self.window.automation_title_label.text()
         )
         self.assertEqual(
-            "As soon as the current one resets",
+            "Continuous",
             self.window.schedule_mode.currentText(),
         )
         self.assertIsNotNone(self.window.startup_toggle)
         self.assertEqual("Check for updates", self.window.update_panel.action_button.text())
+
+    def test_weekly_editor_fits_supported_settings_widths(self):
+        self.window.schedule_mode.setCurrentIndex(
+            self.window.schedule_mode.findData("weekly")
+        )
+        for width, height in ((1024, 768), (1366, 768)):
+            with self.subTest(size=f"{width}x{height}"):
+                self.window.resize(width, height)
+                self.window.show()
+                for _ in range(4):
+                    self.app.processEvents()
+                self.assertTrue(self.window.weekly_schedule_panel.isVisible())
+                self.assertLessEqual(
+                    self.window.weekly_schedule_panel.width(),
+                    self.window.pages.widget(1).viewport().width(),
+                )
+                for editor in self.window.weekly_day_times:
+                    self.assertGreater(editor.width(), 0)
 
     def test_technical_details_start_collapsed(self):
         self.assertFalse(self.window.diagnostic_text.isVisible())

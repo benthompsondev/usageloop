@@ -15,7 +15,13 @@ from PySide6.QtWidgets import (
 )
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
-from .schedule import DAILY, schedule_summary
+from .schedule import (
+    DAILY,
+    FIVE_HOUR_WINDOW_SECONDS,
+    WEEKLY,
+    next_weekly_start_after,
+    schedule_summary,
+)
 from .ui_theme import TOKENS
 
 
@@ -321,6 +327,11 @@ class ScheduleCard(QFrame):
             self.detail_label.setText(
                 "Starts only after the current window ends and this local time arrives."
             )
+        elif settings.schedule_mode == WEEKLY:
+            self.mode_label.setText("Weekly routine")
+            self.detail_label.setText(
+                "Keeps windows rolling during the day, then pauses so tomorrow's first start stays on schedule."
+            )
         else:
             self.mode_label.setText("As soon as reset passes")
             self.detail_label.setText(
@@ -340,8 +351,21 @@ class ScheduleCard(QFrame):
             now=now,
             hour=settings.daily_start_hour,
             minute=settings.daily_start_minute,
+            weekly_times=settings.weekly_start_times,
         )
-        if summary.due:
+        if settings.schedule_mode == WEEKLY and summary.phase == "overnight_pause":
+            target = _schedule_time(summary.next_action_at, now=now)
+            target = target[0].lower() + target[1:]
+            self.next_label.setText(f"Overnight pause · first start {target}")
+        elif settings.schedule_mode == WEEKLY and summary.phase == "active_window":
+            self.next_label.setText(
+                "Current window stays active · waiting for its verified reset"
+            )
+        elif summary.due and summary.phase == "scheduled_first_start":
+            self.next_label.setText("Scheduled first start is due now")
+        elif summary.due and summary.phase == "continuous_rollover":
+            self.next_label.setText("Daytime rollover safety checks are due now")
+        elif summary.due:
             self.next_label.setText("Safety checks are due now")
         elif summary.next_action_at is not None:
             self.next_label.setText(_schedule_time(summary.next_action_at, now=now))
@@ -419,6 +443,34 @@ def daily_schedule_example(
     return (
         f"Your {tense} {reset}. "
         f"{next_action}"
+    )
+
+
+def weekly_schedule_preview(
+    weekly_times: tuple[tuple[int, int], ...],
+    *,
+    now: float | None = None,
+    timezone: tzinfo | None = None,
+) -> str:
+    """Describe the next weekly target and its derived overnight pause."""
+    current = time.time() if now is None else float(now)
+    target = next_weekly_start_after(current, weekly_times, timezone=timezone)
+
+    def clock(timestamp: float) -> str:
+        return _local_datetime(timestamp, timezone).strftime("%I:%M %p").lstrip("0")
+
+    target_local = _local_datetime(target, timezone)
+    current_local = _local_datetime(current, timezone)
+    if target_local.date() == current_local.date():
+        day = "Today"
+    elif target_local.date() == current_local.date() + timedelta(days=1):
+        day = "Tomorrow"
+    else:
+        day = target_local.strftime("%A")
+    return (
+        f"{day}: first start around {clock(target)} · "
+        f"next reset around {clock(target + FIVE_HOUR_WINDOW_SECONDS)}\n"
+        f"Overnight pause begins around {clock(target - FIVE_HOUR_WINDOW_SECONDS)}."
     )
 
 

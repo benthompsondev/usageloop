@@ -14,6 +14,8 @@ from .schedule import (
     DAILY,
     RESET_BUFFER_SECONDS,
     SCHEDULE_MODES,
+    WEEKLY,
+    normalize_weekly_times,
     schedule_summary,
 )
 
@@ -28,6 +30,7 @@ class AppSettings:
     schedule_mode: str = CONTINUOUS
     daily_start_hour: int = 4
     daily_start_minute: int = 0
+    weekly_start_times: tuple[tuple[int, int], ...] | None = None
 
     def __post_init__(self) -> None:
         if self.compatible_runtime_identities is None:
@@ -110,6 +113,7 @@ def automation_decision(
     schedule_mode: str = CONTINUOUS,
     daily_hour: int = 4,
     daily_minute: int = 0,
+    weekly_times: tuple[tuple[int, int], ...] | None = None,
     timezone: Any = None,
 ) -> AutomationDecision:
     if not enabled:
@@ -135,6 +139,7 @@ def automation_decision(
             now=now,
             hour=daily_hour,
             minute=daily_minute,
+            weekly_times=weekly_times,
             timezone=timezone,
         )
     except (OSError, OverflowError, ValueError):
@@ -144,9 +149,22 @@ def automation_decision(
             return AutomationDecision(
                 "ROLLOVER", "The selected daily start is due after the verified reset."
             )
+        if schedule_mode == WEEKLY:
+            if schedule.phase == "scheduled_first_start":
+                return AutomationDecision(
+                    "ROLLOVER",
+                    "The scheduled weekly first start is due after the verified reset.",
+                )
+            return AutomationDecision(
+                "ROLLOVER", "The daytime reset boundary has passed."
+            )
         return AutomationDecision("ROLLOVER", "The verified reset boundary has passed.")
     if schedule_mode == DAILY and now >= state.reset_at + RESET_BUFFER_SECONDS:
         return AutomationDecision("WAIT", "Waiting for the selected daily start time.")
+    if schedule_mode == WEEKLY and schedule.phase == "overnight_pause":
+        return AutomationDecision(
+            "WAIT", "Waiting through the overnight pause for the next scheduled start."
+        )
     return AutomationDecision("WAIT", "The countdown is maintained locally.")
 
 
@@ -260,6 +278,12 @@ class AppStateStore:
         daily_minute = settings.get("daily_start_minute")
         if not is_valid_daily_start_time(daily_hour, daily_minute):
             daily_hour, daily_minute = 4, 0
+        try:
+            weekly_times = normalize_weekly_times(
+                settings.get("weekly_start_times")
+            )
+        except ValueError:
+            weekly_times = None
         return AppSettings(
             automation_enabled=settings.get("automation_enabled") is True,
             start_with_windows=settings.get("start_with_windows") is True,
@@ -269,6 +293,7 @@ class AppStateStore:
             schedule_mode=schedule_mode,
             daily_start_hour=daily_hour,
             daily_start_minute=daily_minute,
+            weekly_start_times=weekly_times,
         )
 
     def load_provider_cache(self) -> dict[str, ProviderViewState]:

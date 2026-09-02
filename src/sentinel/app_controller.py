@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import sys
-from typing import Iterable, Protocol, Collection
+from typing import Iterable, Protocol, Collection, Sequence
 
 from .app_state import (
     AppSettings,
@@ -15,7 +15,7 @@ from .app_state import (
     is_valid_daily_start_time,
 )
 from .providers import CompatibilityResult
-from .schedule import SCHEDULE_MODES
+from .schedule import SCHEDULE_MODES, WEEKLY, normalize_weekly_times
 
 
 RECOVERY_INITIAL_SECONDS = 60
@@ -171,7 +171,18 @@ class ApplicationController:
     def set_schedule_mode(self, mode: str) -> bool:
         if mode not in SCHEDULE_MODES:
             raise ValueError(f"unsupported schedule mode: {mode}")
-        return self._save_settings(replace(self.settings, schedule_mode=mode))
+        weekly_times = self.settings.weekly_start_times
+        if mode == WEEKLY and weekly_times is None:
+            weekly_times = (
+                (self.settings.daily_start_hour, self.settings.daily_start_minute),
+            ) * 7
+        return self._save_settings(
+            replace(
+                self.settings,
+                schedule_mode=mode,
+                weekly_start_times=weekly_times,
+            )
+        )
 
     def set_daily_start_time(self, hour: int, minute: int) -> bool:
         if not is_valid_daily_start_time(hour, minute):
@@ -182,6 +193,14 @@ class ApplicationController:
                 daily_start_hour=hour,
                 daily_start_minute=minute,
             )
+        )
+
+    def set_weekly_start_times(
+        self, values: Sequence[tuple[int, int]]
+    ) -> bool:
+        weekly_times = normalize_weekly_times(values)
+        return self._save_settings(
+            replace(self.settings, weekly_start_times=weekly_times)
         )
 
     def decisions(self, *, now: float) -> dict[str, AutomationDecision]:
@@ -204,6 +223,7 @@ class ApplicationController:
                 schedule_mode=self.settings.schedule_mode,
                 daily_hour=self.settings.daily_start_hour,
                 daily_minute=self.settings.daily_start_minute,
+                weekly_times=self.settings.weekly_start_times,
             )
             for provider_id, state in self.states.items()
         }

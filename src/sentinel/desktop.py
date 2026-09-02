@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -46,7 +47,7 @@ from .branding import make_app_icon, render_mark
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
-from .schedule import DAILY, schedule_summary
+from .schedule import DAILY, WEEKLY, schedule_summary
 from .diagnostics import technical_summary
 from .ui_components import (
     Disclosure,
@@ -58,6 +59,7 @@ from .ui_components import (
     daily_schedule_example,
     make_surface_card,
     present_provider_state,
+    weekly_schedule_preview,
 )
 from .ui_theme import desktop_stylesheet
 from .update_ui import UpdatePanel
@@ -105,7 +107,7 @@ def tray_tooltip_text(
         return prefix + "waiting for Codex status"
     if state.reset_at is not None and state.reset_at > now:
         return prefix + f"{format_countdown(state.reset_at, now)} left"
-    if settings.schedule_mode == DAILY and state.reset_at is not None:
+    if settings.schedule_mode in {DAILY, WEEKLY} and state.reset_at is not None:
         try:
             schedule = schedule_summary(
                 settings.schedule_mode,
@@ -113,6 +115,7 @@ def tray_tooltip_text(
                 now=now,
                 hour=settings.daily_start_hour,
                 minute=settings.daily_start_minute,
+                weekly_times=settings.weekly_start_times,
             )
             if schedule.next_action_at is not None and schedule.next_action_at > now:
                 target = datetime.fromtimestamp(schedule.next_action_at)
@@ -192,6 +195,18 @@ class MainWindow(QMainWindow):
         self.startup_toggle.toggled.connect(self._startup_toggled)
         self.schedule_mode.currentIndexChanged.connect(self._schedule_mode_changed)
         self.daily_time.timeChanged.connect(self._daily_time_changed)
+        for day_index, editor in enumerate(self.weekly_day_times):
+            editor.timeChanged.connect(
+                lambda selected, index=day_index: self._weekly_day_time_changed(
+                    index, selected
+                )
+            )
+        self.apply_weekdays.clicked.connect(
+            lambda: self._apply_weekly_group(range(5), self.weekday_quick_time.time())
+        )
+        self.apply_weekend.clicked.connect(
+            lambda: self._apply_weekly_group(range(5, 7), self.weekend_quick_time.time())
+        )
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.refresh_clock)
         self.clock_timer.start(1_000)
@@ -537,10 +552,9 @@ class MainWindow(QMainWindow):
         schedule_row_layout.addLayout(mode_copy, 1)
         self.schedule_mode = QComboBox()
         self.schedule_mode.setObjectName("scheduleModePicker")
-        self.schedule_mode.addItem(
-            "As soon as the current one resets", "continuous"
-        )
-        self.schedule_mode.addItem("At a set time each day", "daily")
+        self.schedule_mode.addItem("Continuous", "continuous")
+        self.schedule_mode.addItem("Once each day", "daily")
+        self.schedule_mode.addItem("Weekly routine", "weekly")
         index = self.schedule_mode.findData(self.controller.settings.schedule_mode)
         self.schedule_mode.setCurrentIndex(max(0, index))
         schedule_row_layout.addWidget(self.schedule_mode)
@@ -575,6 +589,56 @@ class MainWindow(QMainWindow):
         self.daily_time.setToolTip("Type a local time or use the keyboard arrow keys")
         time_layout.addWidget(self.daily_time)
         schedule_layout.addWidget(self.daily_time_row)
+
+        self.weekly_schedule_panel = QFrame()
+        self.weekly_schedule_panel.setObjectName("settingRow")
+        weekly_layout = QVBoxLayout(self.weekly_schedule_panel)
+        weekly_layout.setContentsMargins(14, 12, 14, 12)
+        weekly_layout.setSpacing(10)
+        weekly_intro = QLabel(
+            "Choose when you want your first window to start each day. UsageLoop keeps windows rolling during the day, then pauses overnight so tomorrow's start stays on schedule."
+        )
+        weekly_intro.setProperty("muted", True)
+        weekly_intro.setWordWrap(True)
+        weekly_layout.addWidget(weekly_intro)
+
+        quick_grid = QGridLayout()
+        quick_grid.setContentsMargins(0, 0, 0, 0)
+        quick_grid.setHorizontalSpacing(8)
+        self.weekday_quick_time = self._weekly_time_editor("weekdayQuickTime")
+        self.weekend_quick_time = self._weekly_time_editor("weekendQuickTime")
+        self.apply_weekdays = QPushButton("Apply Mon–Fri")
+        self.apply_weekdays.setObjectName("secondaryButton")
+        self.apply_weekend = QPushButton("Apply Sat–Sun")
+        self.apply_weekend.setObjectName("secondaryButton")
+        quick_grid.addWidget(QLabel("Weekdays"), 0, 0)
+        quick_grid.addWidget(self.weekday_quick_time, 0, 1)
+        quick_grid.addWidget(self.apply_weekdays, 0, 2)
+        quick_grid.addWidget(QLabel("Weekends"), 0, 3)
+        quick_grid.addWidget(self.weekend_quick_time, 0, 4)
+        quick_grid.addWidget(self.apply_weekend, 0, 5)
+        weekly_layout.addLayout(quick_grid)
+
+        day_grid = QGridLayout()
+        day_grid.setContentsMargins(0, 0, 0, 0)
+        day_grid.setHorizontalSpacing(8)
+        day_grid.setVerticalSpacing(6)
+        self.weekly_day_times: list[QTimeEdit] = []
+        for index, day_name in enumerate(
+            ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+        ):
+            editor = self._weekly_time_editor(f"weekly{day_name}Time")
+            self.weekly_day_times.append(editor)
+            column = index
+            day_grid.addWidget(QLabel(day_name[:3]), 0, column)
+            day_grid.addWidget(editor, 1, column)
+        weekly_layout.addLayout(day_grid)
+        self.weekly_preview = QLabel()
+        self.weekly_preview.setProperty("muted", True)
+        self.weekly_preview.setWordWrap(True)
+        weekly_layout.addWidget(self.weekly_preview)
+        schedule_layout.addWidget(self.weekly_schedule_panel)
+        self._sync_weekly_editor()
         root.addWidget(schedule_card)
 
         startup_card, startup_layout = make_surface_card(
@@ -993,6 +1057,7 @@ class MainWindow(QMainWindow):
                 self.schedule_mode.setCurrentIndex(index)
             self.schedule_mode.blockSignals(False)
             self._show_persistence_warning()
+        self._sync_weekly_editor()
         self.refresh_clock()
 
     def _daily_time_changed(self, selected: QTime) -> None:
@@ -1010,6 +1075,54 @@ class MainWindow(QMainWindow):
             self._show_persistence_warning()
         self.refresh_clock()
 
+    @staticmethod
+    def _weekly_time_editor(object_name: str) -> QTimeEdit:
+        editor = QTimeEdit()
+        editor.setObjectName(object_name)
+        editor.setDisplayFormat("h:mm AP")
+        editor.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        editor.setToolTip("Type a local time or use the keyboard arrow keys")
+        return editor
+
+    def _weekly_values(self) -> tuple[tuple[int, int], ...]:
+        return tuple(
+            (editor.time().hour(), editor.time().minute())
+            for editor in self.weekly_day_times
+        )
+
+    def _sync_weekly_editor(self) -> None:
+        values = self.controller.settings.weekly_start_times or (
+            (
+                self.controller.settings.daily_start_hour,
+                self.controller.settings.daily_start_minute,
+            ),
+        ) * 7
+        for editor, (hour, minute) in zip(self.weekly_day_times, values):
+            editor.blockSignals(True)
+            editor.setTime(QTime(hour, minute))
+            editor.blockSignals(False)
+        self.weekday_quick_time.setTime(QTime(*values[0]))
+        self.weekend_quick_time.setTime(QTime(*values[5]))
+
+    def _weekly_day_time_changed(self, index: int, selected: QTime) -> None:
+        values = list(self._weekly_values())
+        values[index] = (selected.hour(), selected.minute())
+        if not self.controller.set_weekly_start_times(values):
+            self._sync_weekly_editor()
+            self._show_persistence_warning()
+        self.refresh_clock()
+
+    def _apply_weekly_group(self, indices: range, selected: QTime) -> None:
+        values = list(self._weekly_values())
+        for index in indices:
+            values[index] = (selected.hour(), selected.minute())
+        if not self.controller.set_weekly_start_times(values):
+            self._sync_weekly_editor()
+            self._show_persistence_warning()
+        else:
+            self._sync_weekly_editor()
+        self.refresh_clock()
+
     def _show_persistence_warning(self) -> None:
         QMessageBox.warning(
             self,
@@ -1019,11 +1132,17 @@ class MainWindow(QMainWindow):
 
     def _update_diagnostics(self, *, now: float) -> None:
         daily = self.controller.settings.schedule_mode == "daily"
+        weekly = self.controller.settings.schedule_mode == WEEKLY
         self.daily_time_row.setVisible(daily)
+        self.weekly_schedule_panel.setVisible(weekly)
         self.schedule_explanation.setText(
             "Wait for the selected local time after the current window ends."
             if daily
-            else "Start the next window after the current reset and safety check."
+            else (
+                "Use a first-start time for each day, then keep windows rolling until the derived overnight pause."
+                if weekly
+                else "Start the next window after the current reset and safety check."
+            )
         )
         codex = self.controller.states.get("codex")
         self.daily_schedule_example.setText(
@@ -1034,6 +1153,13 @@ class MainWindow(QMainWindow):
                 now=now,
             )
         )
+        if self.controller.settings.weekly_start_times is not None:
+            self.weekly_preview.setText(
+                weekly_schedule_preview(
+                    self.controller.settings.weekly_start_times,
+                    now=now,
+                )
+            )
         self.diagnostic_text.setText(
             technical_summary(
                 self.controller.states,

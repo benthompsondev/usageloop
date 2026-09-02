@@ -23,10 +23,12 @@ from sentinel.desktop import (
 )
 from sentinel.provider_runtime import CHAIN_RESULT_OUTCOMES, ProviderOperationResult
 from sentinel.product import PRODUCT
+from sentinel.providers import CompatibilityResult
 from sentinel.ui_components import (
     CHAIN_OUTCOME_COPY,
     _automatic_action_copy,
     daily_schedule_example,
+    weekly_schedule_preview,
 )
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateError, VerifiedInstaller
 
@@ -439,14 +441,144 @@ class DesktopTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            ["As soon as the current one resets", "At a set time each day"],
-            [window.schedule_mode.itemText(index) for index in range(2)],
+            ["Continuous", "Once each day", "Weekly routine"],
+            [window.schedule_mode.itemText(index) for index in range(3)],
         )
         self.assertEqual(
             "When should the next 5-hour window start?",
             window.schedule_mode_title.text(),
         )
         self.assertEqual("Start time", window.daily_time_title.text())
+
+    def test_weekly_editor_seeds_once_and_supports_group_and_individual_times(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(2_000_000_000, verified_at=1_999_990_000)
+        window, provider = self.make_window(state)
+        window.daily_time.setTime(QTime(6, 30))
+
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        self.app.processEvents()
+
+        self.assertFalse(window.weekly_schedule_panel.isHidden())
+        self.assertEqual(((6, 30),) * 7, window.controller.settings.weekly_start_times)
+
+        window.weekday_quick_time.setTime(QTime(4, 0))
+        window.apply_weekdays.click()
+        window.weekend_quick_time.setTime(QTime(5, 0))
+        window.apply_weekend.click()
+        window.weekly_day_times[2].setTime(QTime(4, 30))
+        self.app.processEvents()
+
+        expected = (
+            (4, 0),
+            (4, 0),
+            (4, 30),
+            (4, 0),
+            (4, 0),
+            (5, 0),
+            (5, 0),
+        )
+        self.assertEqual(expected, window.controller.settings.weekly_start_times)
+        self.assertEqual(expected, window.controller.store.load().weekly_start_times)
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+
+    def test_failed_weekly_edit_restores_last_durable_time(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        self.app.processEvents()
+
+        with patch.object(
+            window.controller.store, "save", side_effect=OSError("write failed")
+        ), patch.object(QMessageBox, "warning") as warning:
+            window.weekly_day_times[0].setTime(QTime(8, 15))
+            self.app.processEvents()
+
+        self.assertEqual((4, 0), window.controller.settings.weekly_start_times[0])
+        self.assertEqual(QTime(4, 0), window.weekly_day_times[0].time())
+        warning.assert_called_once()
+
+    def test_weekly_preview_explains_next_start_reset_and_pause(self):
+        zone = ZoneInfo("America/Toronto")
+        now = datetime(2026, 8, 30, 12, 0, tzinfo=zone).timestamp()
+        times = ((4, 0),) * 5 + ((5, 0),) * 2
+
+        preview = weekly_schedule_preview(times, now=now, timezone=zone)
+
+        self.assertEqual(
+            "Tomorrow: first start around 4:00 AM · next reset around 9:00 AM\n"
+            "Overnight pause begins around 11:00 PM.",
+            preview,
+        )
+
+    def test_weekly_dashboard_reports_overnight_pause_truthfully(self):
+        zone = ZoneInfo("America/Toronto")
+        reset = int(datetime(2026, 8, 30, 22, 0, tzinfo=zone).timestamp())
+        now = datetime(2026, 8, 31, 3, 0, tzinfo=zone).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(reset, verified_at=reset - 100)
+        window, _provider = self.make_window(state)
+        window.controller.set_automation_enabled(True)
+        window.controller.set_schedule_mode("weekly")
+
+        window.refresh_clock(now=now)
+
+        self.assertEqual("Weekly routine", window.schedule_card.mode_label.text())
+        self.assertIn("Overnight pause", window.schedule_card.next_label.text())
+        self.assertIn("4:00 AM", window.schedule_card.next_label.text())
+
+    def test_weekly_dashboard_reports_active_window_crossing_start(self):
+        zone = ZoneInfo("America/Toronto")
+        reset = int(datetime(2026, 8, 31, 8, 0, tzinfo=zone).timestamp())
+        now = datetime(2026, 8, 31, 4, 0, tzinfo=zone).timestamp()
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(reset, verified_at=reset - 100)
+        window, _provider = self.make_window(state)
+        window.controller.set_automation_enabled(True)
+        window.controller.set_schedule_mode("weekly")
+
+        window.refresh_clock(now=now)
+
+        self.assertIn("Current window", window.schedule_card.next_label.text())
+        self.assertIn("verified reset", window.schedule_card.next_label.text())
+
+    def test_weekly_pause_starts_no_worker_and_due_rollover_starts_at_most_one(self):
+        zone = ZoneInfo("America/Toronto")
+        reset = int(datetime(2026, 8, 30, 22, 0, tzinfo=zone).timestamp())
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ).with_reset(reset, verified_at=reset - 100)
+        window, provider = self.make_window(state)
+        window.thread_pool = FakeThreadPool()
+        window.controller.set_automation_enabled(True)
+        window.controller.set_schedule_mode("weekly")
+        window.controller.apply_compatibility(
+            "codex", CompatibilityResult(True, "Ready", "Compatible.", "runtime:1")
+        )
+
+        window.evaluate_automation(
+            now=datetime(2026, 8, 31, 3, 0, tzinfo=zone).timestamp()
+        )
+
+        self.assertEqual([], window.thread_pool.workers)
+        self.assertEqual(0, provider.action_calls)
+
+        window.evaluate_automation(
+            now=datetime(2026, 8, 31, 4, 0, tzinfo=zone).timestamp()
+        )
+        window.evaluate_automation(
+            now=datetime(2026, 8, 31, 4, 1, tzinfo=zone).timestamp()
+        )
+
+        self.assertEqual(1, len(window.thread_pool.workers))
+        self.assertEqual("rollover", window.active_operations["codex"])
+        self.assertEqual(0, provider.action_calls)
 
     def test_about_has_plain_product_explanation_and_star_link(self):
         window, _provider = self.make_window(
@@ -729,6 +861,20 @@ class TrayTooltipTests(unittest.TestCase):
             now=now,
         )
         self.assertEqual("UsageLoop · next start tomorrow at 4:00 AM", tooltip)
+
+    def test_weekly_overnight_pause_uses_next_first_start(self):
+        reset = datetime(2026, 8, 30, 22, 0).timestamp()
+        now = datetime(2026, 8, 31, 3, 0).timestamp()
+        tooltip = tray_tooltip_text(
+            self.settings(
+                schedule_mode="weekly",
+                weekly_start_times=((4, 0),) * 5 + ((5, 0),) * 2,
+            ),
+            self.state(reset_at=int(reset)),
+            now=now,
+        )
+
+        self.assertEqual("UsageLoop · next start today at 4:00 AM", tooltip)
 
     def test_waiting_for_codex_status(self):
         tooltip = tray_tooltip_text(self.settings(), self.state(), now=100)
