@@ -277,10 +277,11 @@ class ApplicationControllerTests(unittest.TestCase):
 
     def test_schedule_edit_while_running_changes_local_due_decision(self):
         from datetime import datetime
-        from zoneinfo import ZoneInfo
 
-        zone = ZoneInfo("America/Toronto")
-        reset = int(datetime(2026, 8, 31, 2, 0, tzinfo=zone).timestamp())
+        # ApplicationController intentionally uses the PC's local timezone.
+        # Keep this integration fixture local too; timezone-specific behavior
+        # is covered independently by the pure schedule tests.
+        reset = int(datetime(2026, 8, 31, 2, 0).timestamp())
         state = ProviderViewState.waiting(
             "codex", "Codex", installed=True, runtime_identity="runtime:1"
         ).with_reset(reset, verified_at=reset - 100)
@@ -295,7 +296,7 @@ class ApplicationControllerTests(unittest.TestCase):
                 weekly_start_times=WEEKLY_TIMES,
             )
 
-            now = datetime(2026, 8, 31, 7, 0, tzinfo=zone).timestamp()
+            now = datetime(2026, 8, 31, 7, 0).timestamp()
             self.assertEqual("ROLLOVER", controller.decisions(now=now)["codex"].action)
 
             later = ((8, 0),) + WEEKLY_TIMES[1:]
