@@ -516,9 +516,8 @@ class DesktopTests(unittest.TestCase):
         )
 
     def test_weekly_dashboard_reports_overnight_pause_truthfully(self):
-        zone = ZoneInfo("America/Toronto")
-        reset = int(datetime(2026, 8, 30, 22, 0, tzinfo=zone).timestamp())
-        now = datetime(2026, 8, 31, 3, 0, tzinfo=zone).timestamp()
+        reset = int(datetime(2026, 8, 30, 22, 0).timestamp())
+        now = datetime(2026, 8, 31, 3, 0).timestamp()
         state = ProviderViewState.waiting(
             "codex", "Codex", installed=True, runtime_identity="runtime:1"
         ).with_reset(reset, verified_at=reset - 100)
@@ -533,9 +532,8 @@ class DesktopTests(unittest.TestCase):
         self.assertIn("4:00 AM", window.schedule_card.next_label.text())
 
     def test_weekly_dashboard_reports_active_window_crossing_start(self):
-        zone = ZoneInfo("America/Toronto")
-        reset = int(datetime(2026, 8, 31, 8, 0, tzinfo=zone).timestamp())
-        now = datetime(2026, 8, 31, 4, 0, tzinfo=zone).timestamp()
+        reset = int(datetime(2026, 8, 31, 8, 0).timestamp())
+        now = datetime(2026, 8, 31, 4, 0).timestamp()
         state = ProviderViewState.waiting(
             "codex", "Codex", installed=True, runtime_identity="runtime:1"
         ).with_reset(reset, verified_at=reset - 100)
@@ -549,8 +547,7 @@ class DesktopTests(unittest.TestCase):
         self.assertIn("verified reset", window.schedule_card.next_label.text())
 
     def test_weekly_pause_starts_no_worker_and_due_rollover_starts_at_most_one(self):
-        zone = ZoneInfo("America/Toronto")
-        reset = int(datetime(2026, 8, 30, 22, 0, tzinfo=zone).timestamp())
+        reset = int(datetime(2026, 8, 30, 22, 0).timestamp())
         state = ProviderViewState.waiting(
             "codex", "Codex", installed=True, runtime_identity="runtime:1"
         ).with_reset(reset, verified_at=reset - 100)
@@ -563,17 +560,17 @@ class DesktopTests(unittest.TestCase):
         )
 
         window.evaluate_automation(
-            now=datetime(2026, 8, 31, 3, 0, tzinfo=zone).timestamp()
+            now=datetime(2026, 8, 31, 3, 0).timestamp()
         )
 
         self.assertEqual([], window.thread_pool.workers)
         self.assertEqual(0, provider.action_calls)
 
         window.evaluate_automation(
-            now=datetime(2026, 8, 31, 4, 0, tzinfo=zone).timestamp()
+            now=datetime(2026, 8, 31, 4, 0).timestamp()
         )
         window.evaluate_automation(
-            now=datetime(2026, 8, 31, 4, 1, tzinfo=zone).timestamp()
+            now=datetime(2026, 8, 31, 4, 1).timestamp()
         )
 
         self.assertEqual(1, len(window.thread_pool.workers))
