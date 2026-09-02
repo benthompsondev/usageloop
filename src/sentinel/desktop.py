@@ -40,7 +40,12 @@ from PySide6.QtWidgets import (
 )
 
 from .app_controller import ApplicationController
-from .app_state import AppSettings, ProviderViewState, format_countdown
+from .app_state import (
+    AppSettings,
+    ProviderViewState,
+    automation_decision,
+    format_countdown,
+)
 from .chain import WEEKLY_PROTECTION_PERCENT
 from .branding import make_app_icon, render_mark
 from .product import PRODUCT
@@ -107,6 +112,27 @@ def tray_tooltip_text(
         return prefix + "waiting for Codex status"
     if state.reset_at is not None and state.reset_at > now:
         return prefix + f"{format_countdown(state.reset_at, now)} left"
+    if state.status == "Starting":
+        return prefix + "checking Codex status"
+    decision = automation_decision(
+        settings.automation_enabled,
+        state,
+        now=now,
+        compatible_runtime_identity=settings.compatible_runtime_identities.get(
+            state.provider_id
+        ),
+        checked_runtime_identity=settings.checked_runtime_identities.get(
+            state.provider_id
+        ),
+        schedule_mode=settings.schedule_mode,
+        daily_hour=settings.daily_start_hour,
+        daily_minute=settings.daily_start_minute,
+        weekly_times=settings.weekly_start_times,
+    )
+    if decision.action == "ROLLOVER":
+        return prefix + "Next window due now"
+    if decision.action == "BOOTSTRAP":
+        return prefix + "Waiting for first window"
     if settings.schedule_mode in {DAILY, WEEKLY} and state.reset_at is not None:
         try:
             schedule = schedule_summary(
@@ -132,8 +158,6 @@ def tray_tooltip_text(
             return prefix + "Status unavailable"
     if state.status == "Waiting":
         return prefix + "waiting for Codex status"
-    if state.status == "Starting":
-        return prefix + "checking Codex status"
     return prefix + "Status unavailable"
 
 
@@ -202,10 +226,20 @@ class MainWindow(QMainWindow):
                 )
             )
         self.apply_weekdays.clicked.connect(
-            lambda: self._apply_weekly_group(range(5), self.weekday_quick_time.time())
+            lambda: self._apply_weekly_group(
+                range(5),
+                self.weekday_quick_time.time(),
+                self.apply_weekdays,
+                "Apply Mon–Fri",
+            )
         )
         self.apply_weekend.clicked.connect(
-            lambda: self._apply_weekly_group(range(5, 7), self.weekend_quick_time.time())
+            lambda: self._apply_weekly_group(
+                range(5, 7),
+                self.weekend_quick_time.time(),
+                self.apply_weekend,
+                "Apply Sat–Sun",
+            )
         )
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.refresh_clock)
@@ -615,10 +649,14 @@ class MainWindow(QMainWindow):
 
         self.weekday_quick_time = self._weekly_time_editor("weekdayQuickTime")
         self.weekend_quick_time = self._weekly_time_editor("weekendQuickTime")
+        self.weekday_quick_time.setAccessibleName("Weekdays start time")
+        self.weekend_quick_time.setAccessibleName("Weekends start time")
         self.apply_weekdays = QPushButton("Apply Mon–Fri")
         self.apply_weekdays.setObjectName("secondaryButton")
+        self.apply_weekdays.setToolTip("Apply this time to Monday through Friday.")
         self.apply_weekend = QPushButton("Apply Sat–Sun")
         self.apply_weekend.setObjectName("secondaryButton")
+        self.apply_weekend.setToolTip("Apply this time to Saturday and Sunday.")
         quick_row = QHBoxLayout()
         quick_row.setContentsMargins(0, 0, 0, 0)
         quick_row.setSpacing(12)
@@ -658,6 +696,7 @@ class MainWindow(QMainWindow):
             ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
         ):
             editor = self._weekly_time_editor(f"weekly{day_name}Time")
+            editor.setAccessibleName(f"{day_name} start time")
             self.weekly_day_times.append(editor)
             row = QFrame()
             row.setObjectName("weeklyDayRow")
@@ -1277,7 +1316,13 @@ class MainWindow(QMainWindow):
             self._sync_weekly_editor()
         self.refresh_clock()
 
-    def _apply_weekly_group(self, indices: range, selected: QTime) -> None:
+    def _apply_weekly_group(
+        self,
+        indices: range,
+        selected: QTime,
+        button: QPushButton,
+        normal_text: str,
+    ) -> None:
         values = list(self._weekly_values())
         for index in indices:
             values[index] = (selected.hour(), selected.minute())
@@ -1286,6 +1331,11 @@ class MainWindow(QMainWindow):
             self._show_persistence_warning()
         else:
             self._sync_weekly_editor()
+            button.setText("Applied")
+            QTimer.singleShot(
+                1_500,
+                lambda: button.setText(normal_text),
+            )
         self.refresh_clock()
 
     def _show_persistence_warning(self) -> None:

@@ -505,6 +505,40 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(0, provider.action_calls)
         self.assertEqual(0, provider.sync_calls)
 
+    def test_apply_weekly_groups_acknowledge_and_persist(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        callbacks = []
+
+        with patch(
+            "sentinel.desktop.QTimer.singleShot",
+            side_effect=lambda delay, callback: callbacks.append((delay, callback)),
+        ):
+            window.weekday_quick_time.setTime(QTime(6, 15))
+            window.apply_weekdays.click()
+            window.weekend_quick_time.setTime(QTime(7, 45))
+            window.apply_weekend.click()
+
+        expected = ((6, 15),) * 5 + ((7, 45),) * 2
+        self.assertEqual(expected, window.controller.settings.weekly_start_times)
+        self.assertEqual(expected, window.controller.store.load().weekly_start_times)
+        self.assertEqual("Applied", window.apply_weekdays.text())
+        self.assertEqual("Applied", window.apply_weekend.text())
+        self.assertTrue(window.apply_weekdays.isEnabled())
+        self.assertTrue(window.apply_weekend.isEnabled())
+        self.assertEqual([1_500, 1_500], [delay for delay, _callback in callbacks])
+
+        for _delay, callback in callbacks:
+            callback()
+
+        self.assertEqual("Apply Mon–Fri", window.apply_weekdays.text())
+        self.assertEqual("Apply Sat–Sun", window.apply_weekend.text())
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+
     def test_schedule_times_use_native_section_aware_step_controls(self):
         window, _provider = self.make_window(
             ProviderViewState.waiting("codex", "Codex", installed=True)
@@ -524,6 +558,41 @@ class DesktopTests(unittest.TestCase):
                     editor.buttonSymbols(),
                 )
                 self.assertIn("hour, minute, or AM/PM", editor.toolTip())
+
+    def test_weekly_schedule_controls_have_accessible_names_and_apply_help(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+
+        self.assertEqual(
+            "Weekdays start time", window.weekday_quick_time.accessibleName()
+        )
+        self.assertEqual(
+            "Weekends start time", window.weekend_quick_time.accessibleName()
+        )
+        self.assertEqual(
+            [
+                f"{day} start time"
+                for day in (
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                )
+            ],
+            [editor.accessibleName() for editor in window.weekly_day_times],
+        )
+        self.assertEqual(
+            "Apply this time to Monday through Friday.",
+            window.apply_weekdays.toolTip(),
+        )
+        self.assertEqual(
+            "Apply this time to Saturday and Sunday.",
+            window.apply_weekend.toolTip(),
+        )
 
     def test_time_entry_painted_chevrons_match_spinner_direction(self):
         window, _provider = self.make_window(
@@ -1079,6 +1148,31 @@ class TrayTooltipTests(unittest.TestCase):
         )
 
         self.assertEqual("UsageLoop · next start today at 4:00 AM", tooltip)
+
+    def test_healthy_rollover_due_now_never_reports_status_unavailable(self):
+        tooltip = tray_tooltip_text(
+            self.settings(
+                compatible_runtime_identities={"codex": "runtime:1"},
+                checked_runtime_identities={"codex": "runtime:1"},
+            ),
+            self.state(status="Ready", reset_at=100),
+            now=161,
+        )
+
+        self.assertEqual("UsageLoop · Next window due now", tooltip)
+        self.assertNotIn("Status unavailable", tooltip)
+
+    def test_bootstrap_without_a_first_window_has_a_clear_tooltip(self):
+        tooltip = tray_tooltip_text(
+            self.settings(
+                compatible_runtime_identities={"codex": "runtime:1"},
+                checked_runtime_identities={"codex": "runtime:1"},
+            ),
+            self.state(status="Ready", reset_at=None),
+            now=100,
+        )
+
+        self.assertEqual("UsageLoop · Waiting for first window", tooltip)
 
     def test_waiting_for_codex_status(self):
         tooltip = tray_tooltip_text(self.settings(), self.state(), now=100)
