@@ -317,10 +317,26 @@ class SettingsSurfaceTests(unittest.TestCase):
         self.assertIsNotNone(self.window.startup_toggle)
         self.assertEqual("Check for updates", self.window.update_panel.action_button.text())
 
+    def test_settings_groups_related_cards_into_balanced_columns(self):
+        self.assertEqual(2, self.window.settings_top_row.layout().count())
+        self.assertEqual(2, self.window.settings_bottom_row.layout().count())
+        for width, height in ((1024, 768), (1366, 768)):
+            with self.subTest(size=f"{width}x{height}"):
+                self.window.resize(width, height)
+                self.app.processEvents()
+                for row in (
+                    self.window.settings_top_row,
+                    self.window.settings_bottom_row,
+                ):
+                    self.assertLessEqual(
+                        row.width(), self.window.pages.widget(1).viewport().width()
+                    )
+
     def test_weekly_editor_fits_supported_settings_widths(self):
         self.window.schedule_mode.setCurrentIndex(
             self.window.schedule_mode.findData("weekly")
         )
+        self.window.weekly_custom_days.toggle.setChecked(True)
         for width, height in ((1024, 768), (1366, 768)):
             with self.subTest(size=f"{width}x{height}"):
                 self.window.resize(width, height)
@@ -332,8 +348,28 @@ class SettingsSurfaceTests(unittest.TestCase):
                     self.window.weekly_schedule_panel.width(),
                     self.window.pages.widget(1).viewport().width(),
                 )
+                for card in self.window.weekly_group_cards:
+                    self.assertGreaterEqual(card.width(), 240)
                 for editor in self.window.weekly_day_times:
-                    self.assertGreater(editor.width(), 0)
+                    self.assertGreaterEqual(editor.width(), 132)
+                    left = editor.mapTo(
+                        self.window.weekly_schedule_panel,
+                        editor.rect().topLeft(),
+                    ).x()
+                    self.assertGreaterEqual(left, 0)
+                    self.assertLessEqual(
+                        left + editor.width(),
+                        self.window.weekly_schedule_panel.width(),
+                    )
+
+    def test_weekly_primary_controls_are_not_hidden_behind_custom_day_editors(self):
+        self.window.schedule_mode.setCurrentIndex(
+            self.window.schedule_mode.findData("weekly")
+        )
+        self.assertTrue(self.window.weekday_quick_time.isVisible())
+        self.assertTrue(self.window.weekend_quick_time.isVisible())
+        self.assertTrue(self.window.weekly_custom_days.body.isHidden())
+        self.assertTrue(self.window.weekly_preview_card.isVisible())
 
     def test_technical_details_start_collapsed(self):
         self.assertFalse(self.window.diagnostic_text.isVisible())

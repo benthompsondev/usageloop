@@ -85,6 +85,16 @@ class ProviderPresentation:
     action: str
 
 
+@dataclass(frozen=True)
+class WeeklySchedulePreview:
+    """Scannable local-time values for the Weekly routine preview."""
+
+    day: str
+    first_start: str
+    next_reset: str
+    pause_start: str
+
+
 def present_provider_state(
     state: ProviderViewState, *, now: float, automation_enabled: bool = False
 ) -> ProviderPresentation:
@@ -359,7 +369,7 @@ class ScheduleCard(QFrame):
             self.next_label.setText(f"Overnight pause · first start {target}")
         elif settings.schedule_mode == WEEKLY and summary.phase == "active_window":
             self.next_label.setText(
-                "Current window stays active · waiting for its verified reset"
+                "Current window stays active until it resets"
             )
         elif summary.due and summary.phase == "scheduled_first_start":
             self.next_label.setText("Scheduled first start is due now")
@@ -453,6 +463,23 @@ def weekly_schedule_preview(
     timezone: tzinfo | None = None,
 ) -> str:
     """Describe the next weekly target and its derived overnight pause."""
+    details = weekly_schedule_preview_details(
+        weekly_times, now=now, timezone=timezone
+    )
+    return (
+        f"{details.day}: first start around {details.first_start} · "
+        f"next reset around {details.next_reset}\n"
+        f"Overnight pause begins around {details.pause_start}."
+    )
+
+
+def weekly_schedule_preview_details(
+    weekly_times: tuple[tuple[int, int], ...],
+    *,
+    now: float | None = None,
+    timezone: tzinfo | None = None,
+) -> WeeklySchedulePreview:
+    """Return the same Weekly preview as separate presentation fields."""
     current = time.time() if now is None else float(now)
     target = next_weekly_start_after(current, weekly_times, timezone=timezone)
 
@@ -467,10 +494,11 @@ def weekly_schedule_preview(
         day = "Tomorrow"
     else:
         day = target_local.strftime("%A")
-    return (
-        f"{day}: first start around {clock(target)} · "
-        f"next reset around {clock(target + FIVE_HOUR_WINDOW_SECONDS)}\n"
-        f"Overnight pause begins around {clock(target - FIVE_HOUR_WINDOW_SECONDS)}."
+    return WeeklySchedulePreview(
+        day=day,
+        first_start=clock(target),
+        next_reset=clock(target + FIVE_HOUR_WINDOW_SECONDS),
+        pause_start=clock(target - FIVE_HOUR_WINDOW_SECONDS),
     )
 
 

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -59,7 +60,7 @@ from .ui_components import (
     daily_schedule_example,
     make_surface_card,
     present_provider_state,
-    weekly_schedule_preview,
+    weekly_schedule_preview_details,
 )
 from .ui_theme import desktop_stylesheet
 from .update_ui import UpdatePanel
@@ -364,11 +365,11 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         content = QWidget()
-        content.setMaximumWidth(1140)
+        content.setMaximumWidth(1260)
         content.setMinimumWidth(560)
         root = QVBoxLayout(content)
-        root.setContentsMargins(34, 27, 34, 30)
-        root.setSpacing(16)
+        root.setContentsMargins(34, 24, 34, 28)
+        root.setSpacing(14)
         title_label = QLabel(title)
         title_label.setObjectName("pageTitle")
         intro_label = QLabel(intro)
@@ -445,17 +446,32 @@ class MainWindow(QMainWindow):
 
         weekly = QFrame()
         weekly.setObjectName("weeklySafetyCard")
-        weekly_layout = QHBoxLayout(weekly)
+        weekly_layout = QVBoxLayout(weekly)
         weekly_layout.setContentsMargins(20, 14, 20, 14)
-        weekly_layout.setSpacing(14)
+        weekly_layout.setSpacing(8)
+        weekly_header = QHBoxLayout()
         weekly_title = QLabel("Weekly allowance")
-        weekly_title.setObjectName("assuranceTitle")
-        weekly_layout.addWidget(weekly_title)
+        weekly_title.setObjectName("providerName")
+        weekly_header.addWidget(weekly_title)
+        weekly_header.addStretch()
+        self.weekly_status = StatusPill()
+        weekly_header.addWidget(self.weekly_status)
+        weekly_layout.addLayout(weekly_header)
+        weekly_metrics = QHBoxLayout()
+        weekly_metrics.setSpacing(14)
+        self.weekly_value = QLabel()
+        self.weekly_value.setObjectName("weeklyValue")
+        weekly_metrics.addWidget(self.weekly_value)
         self.weekly_detail = QLabel()
         self.weekly_detail.setProperty("muted", True)
-        weekly_layout.addWidget(self.weekly_detail, 1)
-        self.weekly_status = StatusPill()
-        weekly_layout.addWidget(self.weekly_status)
+        weekly_metrics.addWidget(self.weekly_detail, 1, Qt.AlignmentFlag.AlignVCenter)
+        weekly_layout.addLayout(weekly_metrics)
+        self.weekly_bar = QProgressBar()
+        self.weekly_bar.setObjectName("weeklyBar")
+        self.weekly_bar.setRange(0, 100)
+        self.weekly_bar.setTextVisible(False)
+        self.weekly_bar.setFixedHeight(6)
+        weekly_layout.addWidget(self.weekly_bar)
         root.addWidget(weekly)
 
         root.addWidget(self._build_assurance_strip(), 0)
@@ -531,7 +547,6 @@ class MainWindow(QMainWindow):
         self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
         automation_row_layout.addWidget(self.automation_toggle)
         automation_layout.addWidget(automation_row)
-        root.addWidget(automation_card)
 
         schedule_card, schedule_layout = make_surface_card(
             "Schedule",
@@ -591,10 +606,10 @@ class MainWindow(QMainWindow):
         schedule_layout.addWidget(self.daily_time_row)
 
         self.weekly_schedule_panel = QFrame()
-        self.weekly_schedule_panel.setObjectName("settingRow")
+        self.weekly_schedule_panel.setObjectName("weeklySchedulePanel")
         weekly_layout = QVBoxLayout(self.weekly_schedule_panel)
-        weekly_layout.setContentsMargins(14, 12, 14, 12)
-        weekly_layout.setSpacing(10)
+        weekly_layout.setContentsMargins(18, 16, 18, 16)
+        weekly_layout.setSpacing(14)
         weekly_intro = QLabel(
             "Choose when you want your first window to start each day. UsageLoop keeps windows rolling during the day, then pauses overnight so tomorrow's start stays on schedule."
         )
@@ -602,44 +617,101 @@ class MainWindow(QMainWindow):
         weekly_intro.setWordWrap(True)
         weekly_layout.addWidget(weekly_intro)
 
-        quick_grid = QGridLayout()
-        quick_grid.setContentsMargins(0, 0, 0, 0)
-        quick_grid.setHorizontalSpacing(8)
         self.weekday_quick_time = self._weekly_time_editor("weekdayQuickTime")
         self.weekend_quick_time = self._weekly_time_editor("weekendQuickTime")
         self.apply_weekdays = QPushButton("Apply Mon–Fri")
         self.apply_weekdays.setObjectName("secondaryButton")
         self.apply_weekend = QPushButton("Apply Sat–Sun")
         self.apply_weekend.setObjectName("secondaryButton")
-        quick_grid.addWidget(QLabel("Weekdays"), 0, 0)
-        quick_grid.addWidget(self.weekday_quick_time, 0, 1)
-        quick_grid.addWidget(self.apply_weekdays, 0, 2)
-        quick_grid.addWidget(QLabel("Weekends"), 0, 3)
-        quick_grid.addWidget(self.weekend_quick_time, 0, 4)
-        quick_grid.addWidget(self.apply_weekend, 0, 5)
-        weekly_layout.addLayout(quick_grid)
+        quick_row = QHBoxLayout()
+        quick_row.setContentsMargins(0, 0, 0, 0)
+        quick_row.setSpacing(12)
+        self.weekly_group_cards: list[QFrame] = []
+        for title, days, editor, button in (
+            ("Weekdays", "Monday through Friday", self.weekday_quick_time, self.apply_weekdays),
+            ("Weekends", "Saturday and Sunday", self.weekend_quick_time, self.apply_weekend),
+        ):
+            group = QFrame()
+            group.setObjectName("weeklyGroupCard")
+            group_layout = QVBoxLayout(group)
+            group_layout.setContentsMargins(16, 13, 16, 14)
+            group_layout.setSpacing(8)
+            title_label = QLabel(title)
+            title_label.setObjectName("weeklyGroupTitle")
+            subtitle = QLabel(days)
+            subtitle.setProperty("muted", True)
+            controls = QHBoxLayout()
+            controls.setSpacing(8)
+            controls.addWidget(editor, 1)
+            controls.addWidget(button)
+            group_layout.addWidget(title_label)
+            group_layout.addWidget(subtitle)
+            group_layout.addLayout(controls)
+            self.weekly_group_cards.append(group)
+            quick_row.addWidget(group, 1)
+        weekly_layout.addLayout(quick_row)
 
+        self.weekly_custom_days = Disclosure("Customize individual days")
         day_grid = QGridLayout()
-        day_grid.setContentsMargins(0, 0, 0, 0)
-        day_grid.setHorizontalSpacing(8)
-        day_grid.setVerticalSpacing(6)
+        day_grid.setContentsMargins(0, 2, 0, 0)
+        day_grid.setHorizontalSpacing(12)
+        day_grid.setVerticalSpacing(8)
         self.weekly_day_times: list[QTimeEdit] = []
+        self.weekly_day_rows: list[QFrame] = []
         for index, day_name in enumerate(
             ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
         ):
             editor = self._weekly_time_editor(f"weekly{day_name}Time")
             self.weekly_day_times.append(editor)
-            column = index
-            day_grid.addWidget(QLabel(day_name[:3]), 0, column)
-            day_grid.addWidget(editor, 1, column)
-        weekly_layout.addLayout(day_grid)
-        self.weekly_preview = QLabel()
-        self.weekly_preview.setProperty("muted", True)
-        self.weekly_preview.setWordWrap(True)
-        weekly_layout.addWidget(self.weekly_preview)
+            row = QFrame()
+            row.setObjectName("weeklyDayRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(12, 8, 12, 8)
+            row_layout.setSpacing(10)
+            day_label = QLabel(day_name)
+            day_label.setObjectName("weeklyDayLabel")
+            row_layout.addWidget(day_label, 1)
+            row_layout.addWidget(editor)
+            self.weekly_day_rows.append(row)
+            day_grid.addWidget(row, index // 2, index % 2)
+        self.weekly_custom_days.body_layout.addLayout(day_grid)
+        weekly_layout.addWidget(self.weekly_custom_days)
+
+        self.weekly_preview_card = QFrame()
+        self.weekly_preview_card.setObjectName("weeklyPreviewCard")
+        preview_layout = QVBoxLayout(self.weekly_preview_card)
+        preview_layout.setContentsMargins(16, 13, 16, 14)
+        preview_layout.setSpacing(10)
+        preview_header = QHBoxLayout()
+        preview_title = QLabel("Next routine")
+        preview_title.setObjectName("weeklyGroupTitle")
+        self.weekly_preview_day = QLabel()
+        self.weekly_preview_day.setObjectName("previewTag")
+        preview_header.addWidget(preview_title)
+        preview_header.addStretch()
+        preview_header.addWidget(self.weekly_preview_day)
+        preview_layout.addLayout(preview_header)
+        preview_metrics = QHBoxLayout()
+        preview_metrics.setSpacing(12)
+        (
+            self.weekly_preview_first_title,
+            self.weekly_preview_first_value,
+        ) = self._weekly_preview_metric(preview_metrics, "First start")
+        (
+            self.weekly_preview_reset_title,
+            self.weekly_preview_reset_value,
+        ) = self._weekly_preview_metric(preview_metrics, "Next reset")
+        (
+            self.weekly_preview_pause_title,
+            self.weekly_preview_pause_value,
+        ) = self._weekly_preview_metric(preview_metrics, "Overnight pause")
+        preview_layout.addLayout(preview_metrics)
+        preview_note = QLabel("Times are approximate and shown in your local time.")
+        preview_note.setProperty("muted", True)
+        preview_layout.addWidget(preview_note)
+        weekly_layout.addWidget(self.weekly_preview_card)
         schedule_layout.addWidget(self.weekly_schedule_panel)
         self._sync_weekly_editor()
-        root.addWidget(schedule_card)
 
         startup_card, startup_layout = make_surface_card(
             "Windows startup",
@@ -664,7 +736,6 @@ class MainWindow(QMainWindow):
         self.startup_toggle.setChecked(bool(self.startup_manager.is_enabled()))
         row_layout.addWidget(self.startup_toggle)
         startup_layout.addWidget(startup_row)
-        root.addWidget(startup_card)
 
         technical_card, technical_layout = make_surface_card(
             "Advanced",
@@ -689,37 +760,102 @@ class MainWindow(QMainWindow):
         self.copy_summary_button.clicked.connect(self._copy_diagnostics)
         technical.add_widget(self.copy_summary_button)
         technical_layout.addWidget(technical)
-        root.addWidget(technical_card)
 
         self.update_panel = UpdatePanel(
             updater, confirm_install=confirm_install, parent=self
         )
         self.update_panel.installer_launched.connect(self._exit_for_update)
-        root.insertWidget(root.count() - 1, self.update_panel)
+
+        self.settings_top_row = QWidget()
+        top_layout = QHBoxLayout(self.settings_top_row)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(14)
+        top_layout.addWidget(automation_card, 1)
+        top_layout.addWidget(startup_card, 1)
+        root.addWidget(self.settings_top_row)
+        root.addWidget(schedule_card)
+
+        self.settings_bottom_row = QWidget()
+        bottom_layout = QHBoxLayout(self.settings_bottom_row)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(14)
+        bottom_layout.addWidget(self.update_panel, 1)
+        bottom_layout.addWidget(technical_card, 1)
+        root.addWidget(self.settings_bottom_row)
         root.addStretch()
         return page
 
     def _build_about(self) -> QWidget:
         page, root, _intro = self._page(
-            f"About {PRODUCT.display_name}", PRODUCT.tagline
+            f"About {PRODUCT.display_name}",
+            "A small local-first app that keeps your normal Codex reset clock moving.",
         )
-        about, about_layout = make_surface_card(PRODUCT.display_name)
+        about = QFrame()
+        about.setObjectName("aboutHero")
+        about_layout = QHBoxLayout(about)
+        about_layout.setContentsMargins(24, 22, 24, 22)
+        about_layout.setSpacing(26)
+        story = QVBoxLayout()
+        story.setSpacing(12)
+        product_title = QLabel(PRODUCT.display_name)
+        product_title.setObjectName("aboutProductTitle")
+        story.addWidget(product_title)
         version = QLabel(f"Version {PRODUCT.version} \u00b7 Windows \u00b7 MIT licensed")
         version.setObjectName("secondaryMetric")
-        about_layout.addWidget(version)
+        story.addWidget(version)
         self.about_description = QLabel(
             "Codex gives you usage in 5-hour windows. A new window begins when you actually use Codex. "
             "If the previous window ends while you’re away, the next reset clock normally waits until "
-            "you come back and use Codex again.\n\n"
-            "UsageLoop can start that next window for you with one minimal request, either as soon as "
-            "the old window ends or at a time you choose. That means the next reset clock can already "
-            "be counting down before you return.\n\n"
-            "UsageLoop does not increase your quota or bypass limits."
+            "you come back and use Codex again. UsageLoop can start that next window with one minimal "
+            "request, so its reset clock can already be counting down before you return. UsageLoop does "
+            "not increase your quota or bypass limits."
         )
         self.about_description.setProperty("muted", True)
         self.about_description.setWordWrap(True)
-        about_layout.addWidget(self.about_description)
-        links = QHBoxLayout()
+        self.about_description.setMinimumWidth(320)
+        self.about_description.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        story.addWidget(self.about_description)
+
+        self.about_steps: list[QFrame] = []
+        for number, title, detail in (
+            ("1", "Codex gives you 5-hour windows", "The clock begins when Codex is used."),
+            ("2", "UsageLoop starts the next one", "One minimal request can begin it while you’re away."),
+            ("3", "No shortcuts or extra quota", "Your existing limits and weekly protection still apply."),
+        ):
+            step = QFrame()
+            step.setObjectName("aboutStep")
+            step_layout = QHBoxLayout(step)
+            step_layout.setContentsMargins(12, 9, 12, 9)
+            step_layout.setSpacing(12)
+            badge = QLabel(number)
+            badge.setObjectName("aboutStepNumber")
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setFixedSize(28, 28)
+            step_copy = QVBoxLayout()
+            step_copy.setSpacing(2)
+            step_title = QLabel(title)
+            step_title.setObjectName("aboutStepTitle")
+            step_detail = QLabel(detail)
+            step_detail.setProperty("muted", True)
+            step_detail.setWordWrap(True)
+            step_copy.addWidget(step_title)
+            step_copy.addWidget(step_detail)
+            step_layout.addWidget(badge)
+            step_layout.addLayout(step_copy, 1)
+            story.addWidget(step)
+            self.about_steps.append(step)
+        about_layout.addLayout(story, 3)
+
+        action_panel = QFrame()
+        action_panel.setObjectName("aboutActions")
+        actions = QVBoxLayout(action_panel)
+        actions.setContentsMargins(16, 15, 16, 15)
+        actions.setSpacing(8)
+        self.about_action_title = QLabel("Project links")
+        self.about_action_title.setObjectName("weeklyGroupTitle")
+        actions.addWidget(self.about_action_title)
         self.about_link_buttons: dict[str, QPushButton] = {}
         for label, url in (
             ("View source", PRODUCT.github_url),
@@ -733,26 +869,27 @@ class MainWindow(QMainWindow):
                 lambda checked=False, target=url: QDesktopServices.openUrl(QUrl(target))
             )
             self.about_link_buttons[label] = button
-            links.addWidget(button)
-        links.addStretch()
-        about_layout.addLayout(links)
+            actions.addWidget(button)
 
         star_title = QLabel("Finding UsageLoop useful?")
         star_title.setObjectName("secondaryMetric")
-        about_layout.addWidget(star_title)
+        actions.addSpacing(6)
+        actions.addWidget(star_title)
         self.star_description = QLabel(
             "A GitHub star helps other Codex users discover the project and lets us know it’s worth "
             "continuing to improve."
         )
         self.star_description.setProperty("muted", True)
         self.star_description.setWordWrap(True)
-        about_layout.addWidget(self.star_description)
+        actions.addWidget(self.star_description)
         self.star_button = QPushButton("★ Open GitHub to star UsageLoop")
-        self.star_button.setObjectName("linkButton")
+        self.star_button.setObjectName("primaryButton")
         self.star_button.clicked.connect(
             lambda checked=False: QDesktopServices.openUrl(QUrl(PRODUCT.github_url))
         )
-        about_layout.addWidget(self.star_button, 0, Qt.AlignmentFlag.AlignLeft)
+        actions.addWidget(self.star_button)
+        actions.addStretch()
+        about_layout.addWidget(action_panel, 2)
         root.addWidget(about)
 
         support, support_layout = make_surface_card(
@@ -767,8 +904,6 @@ class MainWindow(QMainWindow):
         support_status.setProperty("muted", True)
         support_status.setWordWrap(True)
         support_layout.addWidget(support_status)
-        root.addWidget(support)
-
         privacy, privacy_layout = make_surface_card(
             "Privacy and safety",
             "Codex keeps its own sign-in. UsageLoop never reads tokens, credentials, conversations, "
@@ -784,7 +919,11 @@ class MainWindow(QMainWindow):
         boundaries.setObjectName("secondaryMetric")
         boundaries.setWordWrap(True)
         privacy_layout.addWidget(boundaries)
-        root.addWidget(privacy)
+        support_privacy = QHBoxLayout()
+        support_privacy.setSpacing(14)
+        support_privacy.addWidget(support, 1)
+        support_privacy.addWidget(privacy, 1)
+        root.addLayout(support_privacy)
         root.addStretch()
         return page
 
@@ -858,7 +997,9 @@ class MainWindow(QMainWindow):
                 )
 
             if codex.weekly_used_percent is None:
+                self.weekly_value.setText("—")
                 self.weekly_detail.setText("Not available in the last read-only sync")
+                self.weekly_bar.setValue(0)
                 self.weekly_status.set_status("NOT CHECKED", "neutral")
             else:
                 try:
@@ -874,6 +1015,8 @@ class MainWindow(QMainWindow):
                 self.weekly_detail.setText(
                     f"{codex.weekly_used_percent:g}% used · resets {weekly_reset}"
                 )
+                self.weekly_value.setText(f"{codex.weekly_used_percent:g}%")
+                self.weekly_bar.setValue(int(codex.weekly_used_percent))
                 weekly_safe = codex.weekly_used_percent < WEEKLY_PROTECTION_PERCENT
                 self.weekly_status.set_status(
                     "SAFE" if weekly_safe else "PROTECTED",
@@ -1084,6 +1227,25 @@ class MainWindow(QMainWindow):
         editor.setToolTip("Type a local time or use the keyboard arrow keys")
         return editor
 
+    @staticmethod
+    def _weekly_preview_metric(
+        layout: QHBoxLayout, title: str
+    ) -> tuple[QLabel, QLabel]:
+        metric = QFrame()
+        metric.setObjectName("weeklyPreviewMetric")
+        metric.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        metric_layout = QVBoxLayout(metric)
+        metric_layout.setContentsMargins(12, 9, 12, 10)
+        metric_layout.setSpacing(3)
+        title_label = QLabel(title)
+        title_label.setObjectName("weeklyPreviewLabel")
+        value_label = QLabel()
+        value_label.setObjectName("weeklyPreviewValue")
+        metric_layout.addWidget(title_label)
+        metric_layout.addWidget(value_label)
+        layout.addWidget(metric, 1)
+        return title_label, value_label
+
     def _weekly_values(self) -> tuple[tuple[int, int], ...]:
         return tuple(
             (editor.time().hour(), editor.time().minute())
@@ -1139,7 +1301,7 @@ class MainWindow(QMainWindow):
             "Wait for the selected local time after the current window ends."
             if daily
             else (
-                "Use a first-start time for each day, then keep windows rolling until the derived overnight pause."
+                "Use a first-start time for each day, then keep windows rolling until it is time to pause for tomorrow."
                 if weekly
                 else "Start the next window after the current reset and safety check."
             )
@@ -1154,12 +1316,14 @@ class MainWindow(QMainWindow):
             )
         )
         if self.controller.settings.weekly_start_times is not None:
-            self.weekly_preview.setText(
-                weekly_schedule_preview(
-                    self.controller.settings.weekly_start_times,
-                    now=now,
-                )
+            preview = weekly_schedule_preview_details(
+                self.controller.settings.weekly_start_times,
+                now=now,
             )
+            self.weekly_preview_day.setText(preview.day.upper())
+            self.weekly_preview_first_value.setText(preview.first_start)
+            self.weekly_preview_reset_value.setText(preview.next_reset)
+            self.weekly_preview_pause_value.setText(preview.pause_start)
         self.diagnostic_text.setText(
             technical_summary(
                 self.controller.states,

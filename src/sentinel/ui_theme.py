@@ -82,11 +82,12 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         background: {tokens.surface_raised}; color: {tokens.accent};
         border: 1px solid {tokens.border_strong};
     }}
-    QLabel#pageTitle {{ font-size: 27px; font-weight: 760; color: {tokens.text}; }}
+    QLabel#pageTitle {{ font-size: 29px; font-weight: 780; color: {tokens.text}; }}
     QLabel#pageIntro {{ font-size: 14px; color: {tokens.text_muted}; }}
     QFrame#surfaceCard, QFrame#providerCard, QFrame#scheduleCard,
     QFrame#overallStatusCard, QFrame#weeklySafetyCard {{
-        background: {tokens.surface};
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 {tokens.surface}, stop:1 #0E1926);
         border: 1px solid {tokens.border};
         border-radius: {tokens.radius}px;
     }}
@@ -108,6 +109,7 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QLabel#sectionTitle {{ font-size: 17px; font-weight: 720; color: {tokens.text}; }}
     QLabel#providerName {{ font-size: 18px; font-weight: 740; color: {tokens.text}; }}
     QLabel#countdown {{ font-size: 29px; font-weight: 780; color: {tokens.text}; }}
+    QLabel#weeklyValue {{ font-size: 23px; font-weight: 780; color: {tokens.text}; }}
     QLabel#scheduleMode {{ font-size: 26px; font-weight: 770; color: {tokens.text}; }}
     QLabel#scheduleNext {{ font-size: 17px; font-weight: 700; color: {tokens.accent}; }}
     QLabel#lastAction {{ color: {tokens.text_muted}; font-size: 12px; padding: 0 4px; }}
@@ -175,12 +177,43 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QPushButton#secondaryButton:hover {{ border-color: {tokens.accent}; color: {tokens.accent}; }}
     QPushButton#secondaryButton:disabled {{ color: {tokens.text_muted}; border-color: {tokens.border}; }}
     QPushButton#linkButton {{
-        background: transparent; color: {tokens.info}; border: 1px solid {tokens.border};
+        background: {tokens.surface_sunken}; color: {tokens.text_soft};
+        border: 1px solid {tokens.border}; text-align: left;
     }}
+    QPushButton#linkButton:hover {{ color: {tokens.accent}; border-color: {tokens.accent_deep}; }}
     QFrame#settingRow {{
         background: {tokens.surface_sunken}; border: 1px solid {tokens.border};
         border-radius: {tokens.radius_small}px;
     }}
+    QFrame#weeklySchedulePanel {{
+        background: transparent; border: 0;
+    }}
+    QFrame#weeklyGroupCard, QFrame#weeklyPreviewCard, QFrame#aboutActions {{
+        background: {tokens.surface_raised}; border: 1px solid {tokens.border_strong};
+        border-radius: {tokens.radius_small}px;
+    }}
+    QLabel#weeklyGroupTitle {{
+        color: {tokens.text}; font-size: 14px; font-weight: 750;
+    }}
+    QFrame#weeklyDayRow, QFrame#weeklyPreviewMetric, QFrame#aboutStep {{
+        background: {tokens.surface_sunken}; border: 1px solid {tokens.border};
+        border-radius: {tokens.radius_small}px;
+    }}
+    QLabel#weeklyDayLabel {{ color: {tokens.text_soft}; font-weight: 680; }}
+    QFrame#weeklyPreviewCard {{ border-left: 3px solid {tokens.accent}; }}
+    QLabel#weeklyPreviewLabel {{ color: {tokens.text_muted}; font-size: 12px; }}
+    QLabel#weeklyPreviewValue {{ color: {tokens.accent}; font-size: 19px; font-weight: 760; }}
+    QFrame#aboutHero {{
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 {tokens.surface}, stop:1 #0D1B29);
+        border: 1px solid {tokens.border_strong}; border-radius: {tokens.radius_large}px;
+    }}
+    QLabel#aboutProductTitle {{ font-size: 24px; font-weight: 780; color: {tokens.text}; }}
+    QLabel#aboutStepNumber {{
+        color: {tokens.accent}; background: #22D3A112; border: 1px solid #22D3A155;
+        border-radius: 14px; font-weight: 800;
+    }}
+    QLabel#aboutStepTitle {{ color: {tokens.text}; font-weight: 720; }}
     QLabel#diagnosticValue {{
         color: {tokens.text_muted}; font-family: "Cascadia Mono", Consolas;
         font-size: 12px; background: {tokens.surface_sunken};
@@ -230,7 +263,7 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
         background: {tokens.surface_sunken}; border: 0; border-radius: 3px;
     }}
     QProgressBar#usageBar::chunk {{ background: {tokens.accent}; border-radius: 3px; }}
-    QProgressBar#weeklyBar::chunk {{ background: {tokens.info}; border-radius: 3px; }}
+    QProgressBar#weeklyBar::chunk {{ background: {tokens.accent}; border-radius: 3px; }}
     QLabel#trustChip {{
         color: {tokens.accent}; background: {tokens.surface_sunken};
         border: 1px solid {tokens.accent_deep}; border-radius: {tokens.radius_small}px;
@@ -243,7 +276,7 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QLabel#assuranceTitle {{ font-size: 13px; font-weight: 720; color: {tokens.text}; }}
     QLabel#assuranceBody {{ font-size: 13px; color: {tokens.text_soft}; }}
     QLabel#previewTag {{
-        color: {tokens.warning}; background: #E3B34114; border: 1px solid #E3B34140;
+        color: {tokens.accent}; background: #22D3A114; border: 1px solid #22D3A140;
         border-radius: 9px; padding: 3px 8px; font-size: 10px; font-weight: 800;
     }}
     QToolTip {{

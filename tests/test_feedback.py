@@ -157,6 +157,8 @@ class ScreenshotToolTests(unittest.TestCase):
                 "dashboard.png",
                 "settings.png",
                 "settings-weekly.png",
+                "settings-weekly-expanded.png",
+                "settings-weekly-expanded-1024x768.png",
                 "about.png",
             ):
                 target = Path(directory) / name

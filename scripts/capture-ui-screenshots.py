@@ -110,6 +110,19 @@ def main() -> int:
         window.refresh_clock(now=now)
         window.resize(1366, 768)
         save(window, args.output / "settings-weekly.png", app)
+        window.weekly_custom_days.toggle.setChecked(True)
+        window.resize(1366, 900)
+        app.processEvents()
+        settings = window.pages.widget(1)
+        if isinstance(settings, QScrollArea):
+            settings.ensureWidgetVisible(window.weekly_preview_card, 24, 24)
+        save(window, args.output / "settings-weekly-expanded.png", app)
+        window.resize(1024, 768)
+        app.processEvents()
+        if isinstance(settings, QScrollArea):
+            settings.ensureWidgetVisible(window.weekly_preview_card, 24, 24)
+        save(window, args.output / "settings-weekly-expanded-1024x768.png", app)
+        window.weekly_custom_days.toggle.setChecked(False)
         release = ReleaseInfo(
             "1.1.0",
             (

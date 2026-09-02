@@ -28,6 +28,7 @@ from sentinel.ui_components import (
     CHAIN_OUTCOME_COPY,
     _automatic_action_copy,
     daily_schedule_example,
+    weekly_schedule_preview_details,
     weekly_schedule_preview,
 )
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateError, VerifiedInstaller
@@ -376,6 +377,8 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual("0h 15m", card.countdown_label.text())
         self.assertIn("12% used", card.usage_label.text())
         self.assertIn("34% used", window.weekly_detail.text())
+        self.assertEqual("34%", window.weekly_value.text())
+        self.assertEqual(34, window.weekly_bar.value())
         self.assertIn("Last automatic start", window.last_action_label.text())
         self.assertIn("Successful", window.last_action_label.text())
         self.assertEqual(0, provider.probe_calls)
@@ -461,6 +464,8 @@ class DesktopTests(unittest.TestCase):
         self.app.processEvents()
 
         self.assertFalse(window.weekly_schedule_panel.isHidden())
+        self.assertTrue(window.weekly_custom_days.body.isHidden())
+        self.assertEqual(2, len(window.weekly_group_cards))
         self.assertEqual(((6, 30),) * 7, window.controller.settings.weekly_start_times)
 
         window.weekday_quick_time.setTime(QTime(4, 0))
@@ -514,6 +519,26 @@ class DesktopTests(unittest.TestCase):
             "Overnight pause begins around 11:00 PM.",
             preview,
         )
+        details = weekly_schedule_preview_details(times, now=now, timezone=zone)
+        self.assertEqual("Tomorrow", details.day)
+        self.assertEqual("4:00 AM", details.first_start)
+        self.assertEqual("9:00 AM", details.next_reset)
+        self.assertEqual("11:00 PM", details.pause_start)
+
+    def test_weekly_preview_has_separate_scannable_metrics(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        )
+        window, _provider = self.make_window(state)
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        self.app.processEvents()
+
+        self.assertEqual("First start", window.weekly_preview_first_title.text())
+        self.assertRegex(window.weekly_preview_first_value.text(), r"\d{1,2}:\d{2} [AP]M")
+        self.assertEqual("Next reset", window.weekly_preview_reset_title.text())
+        self.assertRegex(window.weekly_preview_reset_value.text(), r"\d{1,2}:\d{2} [AP]M")
+        self.assertEqual("Overnight pause", window.weekly_preview_pause_title.text())
+        self.assertRegex(window.weekly_preview_pause_value.text(), r"\d{1,2}:\d{2} [AP]M")
 
     def test_weekly_dashboard_reports_overnight_pause_truthfully(self):
         reset = int(datetime(2026, 8, 30, 22, 0).timestamp())
@@ -544,7 +569,8 @@ class DesktopTests(unittest.TestCase):
         window.refresh_clock(now=now)
 
         self.assertIn("Current window", window.schedule_card.next_label.text())
-        self.assertIn("verified reset", window.schedule_card.next_label.text())
+        self.assertIn("until it resets", window.schedule_card.next_label.text())
+        self.assertNotIn("verified", window.schedule_card.next_label.text().lower())
 
     def test_weekly_pause_starts_no_worker_and_due_rollover_starts_at_most_one(self):
         reset = int(datetime(2026, 8, 30, 22, 0).timestamp())
@@ -591,6 +617,8 @@ class DesktopTests(unittest.TestCase):
             window.star_description.text(),
         )
         self.assertEqual("★ Open GitHub to star UsageLoop", window.star_button.text())
+        self.assertEqual(3, len(window.about_steps))
+        self.assertEqual("Project links", window.about_action_title.text())
 
         with patch.object(QDesktopServices, "openUrl", return_value=True) as open_url:
             window.star_button.click()
