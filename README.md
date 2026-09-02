@@ -10,9 +10,9 @@ window while you’re away.
 UsageLoop does not add quota or bypass limits. It starts the normal next window
 you were going to receive anyway.
 
-**[Download for Windows — Stable](https://github.com/benthompsondev/usageloop/releases/download/v1.0.9/UsageLoop-Setup.exe)**
+**[Download for Windows — Stable](https://github.com/benthompsondev/usageloop/releases/download/v1.0.10/UsageLoop-Setup.exe)**
 · **[Download for Linux — Beta](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1)**
-· [Windows release notes](https://github.com/benthompsondev/usageloop/releases/tag/v1.0.9)
+· [Windows release notes](https://github.com/benthompsondev/usageloop/releases/tag/v1.0.10)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
@@ -37,10 +37,10 @@ You need:
 - an x64-compatible Windows PC;
 - the Codex desktop app or Codex CLI installed and already signed in.
 
-Download the stable v1.0.9 per-user installer:
+Download the stable v1.0.10 per-user installer:
 
-- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/download/v1.0.9/UsageLoop-Setup.exe)
-- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.0.9/UsageLoop-Setup.exe.sha256)
+- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/download/v1.0.10/UsageLoop-Setup.exe)
+- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.0.10/UsageLoop-Setup.exe.sha256)
 
 The installer does not need administrator rights or change the global PATH.
 
