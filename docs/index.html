@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UsageLoop for Codex | Windows quota tracker</title>
+  <meta name="description" content="UsageLoop is a local-first Windows app that tracks Codex 5-hour and weekly limits and can start the normal next window while you are away.">
+  <link rel="canonical" href="https://benthompsondev.github.io/usageloop/">
+  <meta name="theme-color" content="#08131f">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="UsageLoop">
+  <meta property="og:title" content="UsageLoop for Codex">
+  <meta property="og:description" content="Keep your Codex 5-hour reset clock moving while you are away. Local-first for Windows, with no API key or telemetry.">
+  <meta property="og:url" content="https://benthompsondev.github.io/usageloop/">
+  <meta property="og:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
+  <meta property="og:image:alt" content="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="UsageLoop for Codex">
+  <meta name="twitter:description" content="A local-first Codex quota tracker for Windows. No API key, telemetry, or scraping.">
+  <meta name="twitter:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png">
+
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "UsageLoop",
+    "alternateName": "UsageLoop for Codex",
+    "description": "A local-first Windows app that tracks Codex 5-hour and weekly limits and can start the normal next window while you are away.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Windows",
+    "isAccessibleForFree": true,
+    "license": "https://github.com/benthompsondev/usageloop/blob/main/LICENSE",
+    "url": "https://benthompsondev.github.io/usageloop/",
+    "downloadUrl": "https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe",
+    "codeRepository": "https://github.com/benthompsondev/usageloop",
+    "image": "https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png",
+    "author": {
+      "@type": "Person",
+      "name": "Ben Thompson",
+      "url": "https://github.com/benthompsondev"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="UsageLoop home">
+      <img src="favicon.ico" width="38" height="38" alt="">
+      <span><strong>Usage<span>Loop</span></strong> <small>for Codex</small></span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#download">Download</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/benthompsondev/usageloop">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Local-first Codex quota tracker for Windows</p>
+        <h1 id="hero-title">Keep your Codex 5-hour reset clock moving while you’re away.</h1>
+        <p class="lede">UsageLoop shows whether your Codex reset clock is running and can start the normal next window after the current one resets.</p>
+        <p class="boundary"><strong>It does not add quota or bypass limits.</strong> It starts the normal next window you were going to receive anyway.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download for Windows</a>
+          <a class="button secondary" href="https://github.com/benthompsondev/usageloop">View on GitHub</a>
+        </div>
+        <ul class="trust-list" aria-label="UsageLoop trust highlights">
+          <li>No API key</li>
+          <li>No telemetry</li>
+          <li>No scraping</li>
+          <li>Open source</li>
+        </ul>
+      </div>
+      <a class="hero-shot" href="screenshots/dashboard-1280x720.png" aria-label="Open the full UsageLoop dashboard screenshot">
+        <img src="screenshots/dashboard-1280x720.png" width="1280" height="720" alt="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
+      </a>
+    </section>
+
+    <section class="section split" aria-labelledby="why-title">
+      <div>
+        <p class="section-number">01</p>
+        <h2 id="why-title">Why the 5-hour window matters</h2>
+      </div>
+      <div class="prose">
+        <p>Your Codex 5-hour window starts when you actually use Codex. If the current window ends while you are away, the next reset clock normally waits until you come back and use Codex again.</p>
+        <p>UsageLoop can start that next clock before you return. The quota does not change. The clock simply starts earlier, so more of the wait can happen while you are away.</p>
+      </div>
+    </section>
+
+    <section class="section split" aria-labelledby="does-title">
+      <div>
+        <p class="section-number">02</p>
+        <h2 id="does-title">What UsageLoop does</h2>
+      </div>
+      <ul class="plain-list">
+        <li>Shows the current 5-hour countdown, reset time, and last-known usage.</li>
+        <li>Shows weekly usage and blocks automatic starts when the weekly limit is nearly exhausted.</li>
+        <li>Starts the normal next window after reset or at a local time you choose.</li>
+        <li>Catches up once after sleep, restart, or your next Windows sign-in.</li>
+      </ul>
+    </section>
+
+    <section class="section boundary-section" aria-labelledby="not-title">
+      <div>
+        <p class="section-number">03</p>
+        <h2 id="not-title">What it does not do</h2>
+      </div>
+      <div class="boundary-grid">
+        <p><strong>No quota tricks.</strong><br>It cannot add quota, bypass a limit, or make Codex ignore one.</p>
+        <p><strong>No private-data access.</strong><br>It does not read credentials, prompts, responses, conversations, or account identifiers.</p>
+        <p><strong>No hidden service.</strong><br>It does not need an API key, administrator rights, a cloud account, or a Windows service.</p>
+        <p><strong>No tracking.</strong><br>It does not scrape the Codex interface, upload local data, or send telemetry.</p>
+      </div>
+    </section>
+
+    <section class="section download" id="download" aria-labelledby="download-title">
+      <div>
+        <p class="section-number">04</p>
+        <h2 id="download-title">Download for Windows</h2>
+        <p>UsageLoop needs an x64-compatible Windows PC and the Codex desktop app or CLI already installed and signed in.</p>
+      </div>
+      <div class="download-panel">
+        <a class="button primary wide" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download UsageLoop</a>
+        <div class="download-links">
+          <a href="https://github.com/benthompsondev/usageloop/releases/latest">Release notes</a>
+          <a href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256">SHA-256 checksum</a>
+        </div>
+        <p class="small"><strong>The installer is currently unsigned.</strong> Windows may show “Unknown publisher.” Download it only from the GitHub release and verify the checksum. If your organization blocks unsigned software, do not bypass that policy.</p>
+      </div>
+    </section>
+
+    <section class="section product-view" aria-labelledby="view-title">
+      <div class="section-heading">
+        <p class="section-number">05</p>
+        <h2 id="view-title">One quiet view of the current window</h2>
+        <p>The dashboard keeps the current clock, weekly safety state, schedule, and last action in one place. The countdown moves locally instead of polling Codex to look live.</p>
+      </div>
+      <a href="screenshots/dashboard-1280x720.png" aria-label="Open the full UsageLoop dashboard screenshot">
+        <img class="product-shot" src="screenshots/dashboard-1280x720.png" width="1280" height="720" loading="lazy" alt="UsageLoop dashboard showing an active Codex window and automation scheduled after the reset">
+      </a>
+    </section>
+
+    <section class="section split" id="privacy" aria-labelledby="privacy-title">
+      <div>
+        <p class="section-number">06</p>
+        <h2 id="privacy-title">Local-first by design</h2>
+      </div>
+      <div class="prose">
+        <p>Codex owns authentication and network communication. UsageLoop talks to the installed Codex app-server locally and stores only the timing, usage, reset, and safe state needed to do its job.</p>
+        <p>Automation and Windows startup are off on a new install. The source is public, releases include a checksum, and the Windows test and packaging workflow is visible on GitHub.</p>
+        <p><a href="https://github.com/benthompsondev/usageloop#privacy-and-trust">Read the privacy and trust details</a> or <a href="https://github.com/benthompsondev/usageloop/security">report a vulnerability privately</a>.</p>
+      </div>
+    </section>
+
+    <section class="section how" aria-labelledby="how-title">
+      <div class="section-heading">
+        <p class="section-number">07</p>
+        <h2 id="how-title">How it works, without the protocol tour</h2>
+      </div>
+      <ol class="steps">
+        <li><span>1</span><div><strong>Observe</strong><p>UsageLoop takes several local observations instead of trusting one changing timestamp.</p></div></li>
+        <li><span>2</span><div><strong>Wait safely</strong><p>It waits for the current reset, checks the weekly limit, and reserves only one attempt.</p></div></li>
+        <li><span>3</span><div><strong>Start and verify</strong><p>When automation is on, it sends one minimal request and reports success only after the new reset clock is visible.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="section faq" id="faq" aria-labelledby="faq-title">
+      <div class="section-heading">
+        <p class="section-number">08</p>
+        <h2 id="faq-title">Short answers</h2>
+      </div>
+      <div class="faq-list">
+        <details>
+          <summary>Does UsageLoop give me more Codex quota?</summary>
+          <p>No. It cannot add quota or bypass either limit. It can only start the normal next 5-hour window after the current one ends.</p>
+        </details>
+        <details>
+          <summary>Does it need my API key or Codex credentials?</summary>
+          <p>No. UsageLoop uses your installed, already signed-in Codex app and never reads its auth files or tokens.</p>
+        </details>
+        <details>
+          <summary>What happens if my PC is asleep or turned off?</summary>
+          <p>UsageLoop cannot act while the PC is unavailable. It catches up after wake, restart, or the next time you sign in.</p>
+        </details>
+        <details>
+          <summary>Why does Windows warn about the installer?</summary>
+          <p>The installer does not yet have a paid code-signing certificate. The release includes a SHA-256 checksum and a public build workflow, but those are not a substitute for a signed publisher identity.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="section final-cta" aria-labelledby="links-title">
+      <div>
+        <p class="section-number">09</p>
+        <h2 id="links-title">Try it, inspect it, or tell me what broke</h2>
+      </div>
+      <div class="final-links">
+        <a class="button primary" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download for Windows</a>
+        <a class="button secondary" href="https://github.com/benthompsondev/usageloop">GitHub source</a>
+        <a href="https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml">Report a problem</a>
+        <a href="https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml">Request a feature</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>UsageLoop is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by OpenAI.</p>
+    <p>Built by <a href="https://github.com/benthompsondev">Ben Thompson</a> · <a href="https://github.com/benthompsondev/usageloop/blob/main/LICENSE">MIT License</a></p>
+  </footer>
+</body>
+</html>

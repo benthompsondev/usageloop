@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://benthompsondev.github.io/usageloop/sitemap.xml
