@@ -320,3 +320,13 @@ See [PROJECT_SPEC.md](PROJECT_SPEC.md) for the behavioral contract and
 [docs/RELEASING.md](docs/RELEASING.md) for the release checklist.
 
 </details>
+
+## More of my work
+
+The other local-first apps are [CloakScan](https://github.com/benthompsondev/cloakscan),
+which strips secrets out of code and logs before you share them, and
+[SignalSpace Finance](https://github.com/benthompsondev/ledger-local-finance),
+private personal finance for Windows. My PowerShell automation portfolio is
+[Enterprise PowerShell Systems](https://github.com/benthompsondev/enterprise-powershell-systems).
+
+The rest is on [benthompsondev.github.io](https://benthompsondev.github.io/).
