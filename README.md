@@ -23,7 +23,8 @@ you were going to receive anyway.
 - Never reads Codex credentials, prompts, responses, or conversations
 - Automation and Windows startup are off by default
 
-[Install](#install) · [See what it does](#what-usageloop-does) ·
+[Website](https://benthompsondev.github.io/usageloop/) · [Install](#install) ·
+[See what it does](#what-usageloop-does) ·
 [Review privacy and trust](#privacy-and-trust) · [Understand how it works](#how-it-works)
 · [Get help](#get-help-and-share-feedback)
 
