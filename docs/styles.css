@@ -381,6 +381,24 @@ h2 {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
 }
 
+.weekly-points {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem 2.5rem;
+  margin-top: 2.75rem;
+}
+
+.weekly-points p {
+  margin: 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.weekly-points strong {
+  color: var(--text);
+}
+
 .steps {
   margin: 0;
   padding: 0;
@@ -520,7 +538,11 @@ footer p {
     min-height: 68px;
   }
 
-  nav a:not(:last-child) {
+  nav a:not(:last-child):not(.nav-primary) {
+    display: none;
+  }
+
+  .brand small {
     display: none;
   }
 
@@ -539,6 +561,12 @@ footer p {
 
   .boundary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .weekly-points {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    margin-top: 2rem;
   }
 
   .download-links {

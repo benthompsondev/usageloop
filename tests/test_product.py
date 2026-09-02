@@ -187,11 +187,46 @@ class ProductMetadataTests(unittest.TestCase):
             "instead of noon."
         )
 
-        self.assertIn("Keep your Codex 5-hour reset clock moving while you’re away.", readme)
+        self.assertIn("**Plan when your Codex day starts.**", readme)
         self.assertIn(example, readme.replace("\n", " "))
         self.assertIn("UsageLoop does not add quota or bypass limits", readme)
         self.assertEqual(1, readme.count("docs/screenshots/dashboard.png"))
         self.assertIn("Consider starring the repository", readme)
+
+    def test_readme_documents_every_schedule_mode_the_app_offers(self) -> None:
+        """The README described only two modes for three releases after Weekly shipped."""
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        flat = readme.replace("\n", " ")
+
+        self.assertIn("three local schedule choices", flat)
+        for mode in (
+            "As soon as the current one resets",
+            "At a set time each day",
+            "Weekly routine",
+        ):
+            self.assertIn(mode, flat)
+        self.assertIn("## Set your weekly routine", readme)
+        self.assertEqual(
+            1, readme.count("docs/screenshots/settings-weekly-expanded.png")
+        )
+        for weekly_term in ("Apply Mon", "Customize individual days", "Next routine"):
+            self.assertIn(weekly_term, flat)
+
+    def test_pages_site_reflects_the_current_product(self) -> None:
+        """The public site framed UsageLoop as a quota tracker and omitted Weekly."""
+        root = Path(__file__).resolve().parents[1]
+        index = (root / "docs" / "index.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("quota tracker", index)
+        self.assertIn("Plan when your Codex day starts.", index)
+        self.assertIn('id="weekly"', index)
+        self.assertIn("screenshots/settings-weekly-expanded.png", index)
+        self.assertIn("screenshots/dashboard-1280x720.png", index)
+        for weekly_term in ("Apply Mon", "Customize individual days", "Next routine"):
+            self.assertIn(weekly_term, index)
+        self.assertIn("does not add quota or bypass limits", index)
+        self.assertIn("The installer is currently unsigned.", index)
 
     def test_release_checklist_forbids_reusing_an_installed_candidate_version(self) -> None:
         root = Path(__file__).resolve().parents[1]

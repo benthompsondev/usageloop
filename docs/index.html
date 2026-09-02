@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>UsageLoop for Codex | Windows quota tracker</title>
-  <meta name="description" content="UsageLoop is a local-first Windows app that tracks Codex 5-hour and weekly limits and can start the normal next window while you are away.">
+  <title>UsageLoop for Codex | Plan when your Codex day starts</title>
+  <meta name="description" content="UsageLoop is a local-first Windows app that starts your next Codex 5-hour window on a schedule you choose, including separate weekday and weekend times. It does not add quota or bypass limits.">
   <link rel="canonical" href="https://benthompsondev.github.io/usageloop/">
   <meta name="theme-color" content="#08131f">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="UsageLoop">
   <meta property="og:title" content="UsageLoop for Codex">
-  <meta property="og:description" content="Keep your Codex 5-hour reset clock moving while you are away. Local-first for Windows, with no API key or telemetry.">
+  <meta property="og:description" content="Plan when your Codex day starts. Set weekday and weekend first-start times, keep windows rolling, and pause overnight. Local-first for Windows, no API key or telemetry.">
   <meta property="og:url" content="https://benthompsondev.github.io/usageloop/">
   <meta property="og:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png">
   <meta property="og:image:width" content="1280">
@@ -19,7 +19,7 @@
   <meta property="og:image:alt" content="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="UsageLoop for Codex">
-  <meta name="twitter:description" content="A local-first Codex quota tracker for Windows. No API key, telemetry, or scraping.">
+  <meta name="twitter:description" content="Plan when your Codex day starts. Weekday and weekend start times, rolling windows, overnight pause. Local-first, no API key or telemetry.">
   <meta name="twitter:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png">
 
   <link rel="icon" href="favicon.ico" sizes="any">
@@ -31,7 +31,7 @@
     "@type": "SoftwareApplication",
     "name": "UsageLoop",
     "alternateName": "UsageLoop for Codex",
-    "description": "A local-first Windows app that tracks Codex 5-hour and weekly limits and can start the normal next window while you are away.",
+    "description": "A local-first Windows app that starts your next Codex 5-hour window on a schedule you choose, including separate weekday and weekend first-start times, with rolling daytime windows and an overnight pause. It does not add quota or bypass limits.",
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "Windows",
     "isAccessibleForFree": true,
@@ -57,7 +57,8 @@
       <span><strong>Usage<span>Loop</span></strong> <small>for Codex</small></span>
     </a>
     <nav aria-label="Primary navigation">
-      <a href="#download">Download</a>
+      <a href="#weekly">Weekly routine</a>
+      <a class="nav-primary" href="#download">Download</a>
       <a href="#privacy">Privacy</a>
       <a href="#faq">FAQ</a>
       <a href="https://github.com/benthompsondev/usageloop">GitHub</a>
@@ -67,9 +68,9 @@
   <main id="main">
     <section class="hero" id="top" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow">Local-first Codex quota tracker for Windows</p>
-        <h1 id="hero-title">Keep your Codex 5-hour reset clock moving while you’re away.</h1>
-        <p class="lede">UsageLoop shows whether your Codex reset clock is running and can start the normal next window after the current one resets.</p>
+        <p class="eyebrow">Local-first Codex window scheduler for Windows</p>
+        <h1 id="hero-title">Plan when your Codex day starts.</h1>
+        <p class="lede">Your Codex 5-hour window only begins when you actually use Codex. UsageLoop starts the next one on a schedule you choose, with separate weekday and weekend times, so the clock is already running when you sit down.</p>
         <p class="boundary"><strong>It does not add quota or bypass limits.</strong> It starts the normal next window you were going to receive anyway.</p>
         <div class="hero-actions">
           <a class="button primary" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download for Windows</a>
@@ -94,7 +95,8 @@
       </div>
       <div class="prose">
         <p>Your Codex 5-hour window starts when you actually use Codex. If the current window ends while you are away, the next reset clock normally waits until you come back and use Codex again.</p>
-        <p>UsageLoop can start that next clock before you return. The quota does not change. The clock simply starts earlier, so more of the wait can happen while you are away.</p>
+        <p>Say your window ends at 1:00 AM and UsageLoop starts the next one at 4:00 AM. When you sit down at 7:00 AM that clock has already run for three hours, so your next full reset arrives around <strong>9:00 AM instead of noon</strong>.</p>
+        <p>The quota does not change. The clock simply starts earlier, so more of the waiting happens while you are asleep instead of while you are trying to work.</p>
       </div>
     </section>
 
@@ -106,14 +108,31 @@
       <ul class="plain-list">
         <li>Shows the current 5-hour countdown, reset time, and last-known usage.</li>
         <li>Shows weekly usage and blocks automatic starts when the weekly limit is nearly exhausted.</li>
-        <li>Starts the normal next window after reset or at a local time you choose.</li>
+        <li>Starts the next window one of three ways: <strong>as soon as the current one resets</strong>, <strong>at a set time each day</strong>, or on a <strong>weekly routine</strong> with its own time per day.</li>
         <li>Catches up once after sleep, restart, or your next Windows sign-in.</li>
       </ul>
     </section>
 
+    <section class="section product-view" id="weekly" aria-labelledby="weekly-title">
+      <div class="section-heading">
+        <p class="section-number">03</p>
+        <h2 id="weekly-title">Set a routine that matches your week</h2>
+        <p>Most people do not start work at the same time seven days a week. Give weekdays one first-start time and weekends another, then override any single day if you want to.</p>
+      </div>
+      <a href="screenshots/settings-weekly-expanded.png" aria-label="Open the full UsageLoop Weekly routine screenshot">
+        <img class="product-shot" src="screenshots/settings-weekly-expanded.png" width="1366" height="900" loading="lazy" alt="UsageLoop Weekly routine settings with separate weekday and weekend first-start times, per-day overrides for all seven days, and a Next routine card showing first start, next reset, and overnight pause">
+      </a>
+      <div class="weekly-points">
+        <p><strong>Weekdays and weekends.</strong><br>Set a time, press Apply Mon–Fri or Apply Sat–Sun, and the button confirms with “Applied”.</p>
+        <p><strong>Custom days when you need them.</strong><br>Open “Customize individual days” to give any day its own first-start time.</p>
+        <p><strong>Rolling days, quiet nights.</strong><br>After the first start, windows keep rolling as each one resets, then pause overnight so tomorrow begins on the time you chose.</p>
+        <p><strong>Next routine, in plain numbers.</strong><br>The card shows the upcoming first start, the next reset five hours later, and when the overnight pause begins.</p>
+      </div>
+    </section>
+
     <section class="section boundary-section" aria-labelledby="not-title">
       <div>
-        <p class="section-number">03</p>
+        <p class="section-number">04</p>
         <h2 id="not-title">What it does not do</h2>
       </div>
       <div class="boundary-grid">
@@ -126,7 +145,7 @@
 
     <section class="section download" id="download" aria-labelledby="download-title">
       <div>
-        <p class="section-number">04</p>
+        <p class="section-number">05</p>
         <h2 id="download-title">Download for Windows</h2>
         <p>UsageLoop needs an x64-compatible Windows PC and the Codex desktop app or CLI already installed and signed in.</p>
       </div>
@@ -140,16 +159,6 @@
       </div>
     </section>
 
-    <section class="section product-view" aria-labelledby="view-title">
-      <div class="section-heading">
-        <p class="section-number">05</p>
-        <h2 id="view-title">One quiet view of the current window</h2>
-        <p>The dashboard keeps the current clock, weekly safety state, schedule, and last action in one place. The countdown moves locally instead of polling Codex to look live.</p>
-      </div>
-      <a href="screenshots/dashboard-1280x720.png" aria-label="Open the full UsageLoop dashboard screenshot">
-        <img class="product-shot" src="screenshots/dashboard-1280x720.png" width="1280" height="720" loading="lazy" alt="UsageLoop dashboard showing an active Codex window and automation scheduled after the reset">
-      </a>
-    </section>
 
     <section class="section split" id="privacy" aria-labelledby="privacy-title">
       <div>

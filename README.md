@@ -2,13 +2,20 @@
 
 [![Latest release](https://img.shields.io/github/v/release/benthompsondev/usageloop?sort=semver)](https://github.com/benthompsondev/usageloop/releases/latest) [![Windows verification](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml/badge.svg)](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Keep your Codex 5-hour reset clock moving while you’re away.**
+**Plan when your Codex day starts.**
 
-UsageLoop is a local-first Windows app, with a Linux beta available for testing.
-It shows whether your Codex reset clock is running and can start the normal next
-window while you’re away.
+Your Codex 5-hour window only begins when you actually use Codex. If a window
+ends while you are asleep, the next reset clock sits idle until you come back,
+so the first stretch of your session is spent waiting instead of working.
+
+UsageLoop starts that next window for you. Pick one time, separate weekday and
+weekend times, or a different time for every day of the week. It keeps windows
+rolling through the day, pauses overnight, and shows you when the next one
+begins.
+
 UsageLoop does not add quota or bypass limits. It starts the normal next window
-you were going to receive anyway.
+you were going to receive anyway, earlier. It is a local-first Windows app, with
+a Linux beta available for testing.
 
 **[Download for Windows — Stable](https://github.com/benthompsondev/usageloop/releases/download/v1.1.3/UsageLoop-Setup.exe)**
 · **[Download for Linux — Beta](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1)**
@@ -23,10 +30,36 @@ you were going to receive anyway.
 - Never reads Codex credentials, prompts, responses, or conversations
 - Automation and Windows startup are off by default
 
-[Website](https://benthompsondev.github.io/usageloop/) · [Install](#install) ·
+[Website](https://benthompsondev.github.io/usageloop/) ·
+[Set your weekly routine](#set-your-weekly-routine) · [Install](#install) ·
 [See what it does](#what-usageloop-does) ·
 [Review privacy and trust](#privacy-and-trust) · [Understand how it works](#how-it-works)
 · [Get help](#get-help-and-share-feedback)
+
+## Set your weekly routine
+
+Most people do not want the same start time seven days a week. UsageLoop lets
+you set a first-start time for weekdays and another for weekends, then override
+any individual day if you want to.
+
+![UsageLoop Weekly routine settings showing separate weekday and weekend first-start times, per-day overrides, and the Next routine card with first start, next reset, and overnight pause](docs/screenshots/settings-weekly-expanded.png)
+
+- **Weekdays** and **Weekends** each hold one first-start time. Set the time,
+  press **Apply Mon–Fri** or **Apply Sat–Sun**, and the button confirms with
+  **Applied**.
+- **Customize individual days** opens a row per day when you want Wednesday to
+  differ from the rest of the week.
+- **Next routine** tells you what is actually going to happen: the **first
+  start**, the **next reset** five hours later, and when the **overnight pause**
+  begins.
+
+After the first start of the day, UsageLoop keeps windows rolling as each one
+resets. It stops starting new windows in the evening so the next morning begins
+on the time you chose rather than drifting later each day.
+
+If you want something simpler, the other two choices are still there:
+**As soon as the current one resets** for continuous rollover, and
+**At a set time each day** for a single daily start.
 
 ## Install
 
@@ -104,17 +137,21 @@ The dashboard shows:
 - the last-known weekly usage and safety state;
 - the next scheduled action and the last automatic action UsageLoop took.
 
-Automation has two local schedule choices:
+Automation has three local schedule choices:
 
 - **As soon as the current one resets** starts the next window after the reset
-  and safety buffer.
+  and safety buffer, so windows roll continuously.
 - **At a set time each day** waits until your chosen local time after a window
   ends.
+- **Weekly routine** uses a first-start time per day, with quick weekday and
+  weekend groups and optional per-day overrides. Windows keep rolling after the
+  first start and pause overnight so the next day begins on schedule. See
+  [Set your weekly routine](#set-your-weekly-routine).
 
-If the PC is asleep at the selected time, UsageLoop catches up once after wake
-or restart. If a Codex window is still active, it waits for the next day's
-selected time rather than starting early. Daylight-saving changes use the
-Windows local clock.
+All three run on your PC's local clock. If the PC is asleep at the selected
+time, UsageLoop catches up once after wake or restart. If a Codex window is
+still active, it waits for the next scheduled time rather than starting early.
+Daylight-saving changes use the Windows local clock.
 
 The countdown moves locally. It does not poll Codex to make the UI look live.
 Usage percentages are snapshots from the last real observation.
@@ -127,8 +164,11 @@ weekly snapshots. It never selects a model or starts a Codex turn.
 
 1. Open UsageLoop and confirm Codex is detected.
 2. Review the cached five-hour and weekly state.
-3. In Settings, choose **As soon as the current one resets** or **At a set time
-   each day**, then turn on **Keep my 5-hour windows ready**.
+3. In Settings, choose **As soon as the current one resets**, **At a set time
+   each day**, or **Weekly routine**, then turn on **Keep my 5-hour windows
+   ready**. Weekly routine gives each day its own first-start time: set the
+   weekday and weekend times, then check the **Next routine** card before you
+   leave.
 4. On a true first run, choose **Start my first window now**. This explicit
    action uses the same evidence and weekly checks as an automatic start.
 5. Leave UsageLoop in the tray. Automation and Windows startup stay off until
