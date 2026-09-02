@@ -8,8 +8,8 @@ from datetime import datetime
 from pathlib import Path
 import tempfile
 
-from PySide6.QtCore import QTime
-from PySide6.QtWidgets import QApplication, QScrollArea
+from PySide6.QtCore import QTime, Qt
+from PySide6.QtWidgets import QApplication, QDateTimeEdit, QScrollArea, QWidget
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
@@ -41,12 +41,23 @@ class PreviewUpdater:
         raise AssertionError("Screenshot rendering must not contact GitHub.")
 
 
-def save(window: MainWindow, target: Path, app: QApplication) -> None:
+def save(
+    window: MainWindow,
+    target: Path,
+    app: QApplication,
+    *,
+    focus: QWidget | None = None,
+) -> None:
     window.hide()
     app.processEvents()
     window.show()
     for _ in range(3):
         app.processEvents()
+    if focus is not None:
+        window.activateWindow()
+        focus.setFocus(Qt.FocusReason.OtherFocusReason)
+        for _ in range(2):
+            app.processEvents()
     if not window.grab().save(str(target), "PNG"):
         raise RuntimeError(f"Could not save {target}")
 
@@ -110,6 +121,15 @@ def main() -> int:
         window.refresh_clock(now=now)
         window.resize(1366, 768)
         save(window, args.output / "settings-weekly.png", app)
+        window.weekday_quick_time.setCurrentSection(
+            QDateTimeEdit.Section.MinuteSection
+        )
+        save(
+            window,
+            args.output / "settings-weekly-time-focused.png",
+            app,
+            focus=window.weekday_quick_time,
+        )
         window.weekly_custom_days.toggle.setChecked(True)
         window.resize(1366, 900)
         app.processEvents()
@@ -124,12 +144,12 @@ def main() -> int:
         save(window, args.output / "settings-weekly-expanded-1024x768.png", app)
         window.weekly_custom_days.toggle.setChecked(False)
         release = ReleaseInfo(
-            "1.1.0",
+            "1.2.0",
             (
                 "UsageLoop now keeps working safely if its local state files become unreadable.",
                 "Daily start times are checked before they are saved.",
             ),
-            "https://github.com/example/usage-loop/releases/tag/v1.1.0",
+            "https://github.com/example/usage-loop/releases/tag/v1.2.0",
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example/installer"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example/checksum"),
         )

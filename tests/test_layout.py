@@ -13,7 +13,7 @@ import unittest
 
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QFont, QFontMetrics
-from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton, QSizePolicy
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
@@ -351,7 +351,7 @@ class SettingsSurfaceTests(unittest.TestCase):
                 for card in self.window.weekly_group_cards:
                     self.assertGreaterEqual(card.width(), 240)
                 for editor in self.window.weekly_day_times:
-                    self.assertGreaterEqual(editor.width(), 132)
+                    self.assertGreaterEqual(editor.width(), 152)
                     left = editor.mapTo(
                         self.window.weekly_schedule_panel,
                         editor.rect().topLeft(),
@@ -370,6 +370,14 @@ class SettingsSurfaceTests(unittest.TestCase):
         self.assertTrue(self.window.weekend_quick_time.isVisible())
         self.assertTrue(self.window.weekly_custom_days.body.isHidden())
         self.assertTrue(self.window.weekly_preview_card.isVisible())
+
+    def test_updates_and_advanced_cards_use_content_height(self):
+        for index in range(self.window.settings_bottom_row.layout().count()):
+            widget = self.window.settings_bottom_row.layout().itemAt(index).widget()
+            self.assertEqual(
+                QSizePolicy.Policy.Maximum,
+                widget.sizePolicy().verticalPolicy(),
+            )
 
     def test_technical_details_start_collapsed(self):
         self.assertFalse(self.window.diagnostic_text.isVisible())

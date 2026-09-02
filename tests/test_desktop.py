@@ -11,7 +11,17 @@ from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QTime, Qt
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QStackedWidget
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import (
+    QApplication,
+    QAbstractSpinBox,
+    QDateTimeEdit,
+    QLabel,
+    QMessageBox,
+    QStackedWidget,
+    QStyle,
+    QStyleOptionSpinBox,
+)
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
@@ -486,6 +496,104 @@ class DesktopTests(unittest.TestCase):
         )
         self.assertEqual(expected, window.controller.settings.weekly_start_times)
         self.assertEqual(expected, window.controller.store.load().weekly_start_times)
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+
+    def test_schedule_times_use_native_section_aware_step_controls(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        editors = [
+            window.daily_time,
+            window.weekday_quick_time,
+            window.weekend_quick_time,
+            *window.weekly_day_times,
+        ]
+
+        for editor in editors:
+            with self.subTest(editor=editor.objectName()):
+                self.assertEqual("h:mm AP", editor.displayFormat())
+                self.assertEqual(
+                    QAbstractSpinBox.ButtonSymbols.UpDownArrows,
+                    editor.buttonSymbols(),
+                )
+                self.assertIn("hour, minute, or AM/PM", editor.toolTip())
+
+    def test_weekly_time_supports_keyboard_sections_and_midnight_noon(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        editor = window.weekday_quick_time
+        window.show()
+        editor.setFocus()
+        editor.setTime(QTime(11, 59))
+
+        editor.setCurrentSection(QDateTimeEdit.Section.HourSection)
+        QTest.keyClick(editor, Qt.Key.Key_Up)
+        self.assertEqual(QTime(12, 59), editor.time())
+
+        editor.setCurrentSection(QDateTimeEdit.Section.AmPmSection)
+        QTest.keyClick(editor, Qt.Key.Key_Down)
+        self.assertEqual(QTime(0, 59), editor.time())
+
+        editor.selectAll()
+        QTest.keyClicks(editor, "12:00 PM")
+        QTest.keyClick(editor, Qt.Key.Key_Return)
+        self.assertEqual(QTime(12, 0), editor.time())
+
+        editor.selectAll()
+        QTest.keyClicks(editor, "12:00 AM")
+        QTest.keyClick(editor, Qt.Key.Key_Return)
+        self.assertEqual(QTime(0, 0), editor.time())
+
+    def test_weekly_time_visible_mouse_step_increments_selected_section(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        editor = window.weekend_quick_time
+        window.show()
+        self.app.processEvents()
+        editor.setTime(QTime(5, 0))
+        editor.setCurrentSection(QDateTimeEdit.Section.MinuteSection)
+        option = QStyleOptionSpinBox()
+        editor.initStyleOption(option)
+        up_button = editor.style().subControlRect(
+            QStyle.ComplexControl.CC_SpinBox,
+            option,
+            QStyle.SubControl.SC_SpinBoxUp,
+            editor,
+        )
+
+        self.assertGreaterEqual(up_button.width(), 24)
+        self.assertGreaterEqual(up_button.height(), 10)
+        QTest.mouseClick(
+            editor,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            up_button.center(),
+        )
+        self.assertEqual(QTime(5, 1), editor.time())
+
+    def test_individual_time_edit_updates_persisted_schedule_and_preview(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        window.weekly_custom_days.toggle.setChecked(True)
+        self.app.processEvents()
+        before = window.weekly_preview_first_value.text()
+
+        with patch("sentinel.desktop.time.time", return_value=1_788_129_000):
+            window.weekly_day_times[0].setTime(QTime(7, 15))
+            self.app.processEvents()
+
+        self.assertEqual((7, 15), window.controller.settings.weekly_start_times[0])
+        self.assertEqual(
+            window.controller.settings.weekly_start_times,
+            window.controller.store.load().weekly_start_times,
+        )
+        self.assertNotEqual(before, window.weekly_preview_first_value.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
         self.assertEqual(0, provider.sync_calls)

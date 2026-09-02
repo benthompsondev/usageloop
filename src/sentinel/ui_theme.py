@@ -153,6 +153,31 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     }}
     QComboBox:hover, QTimeEdit:hover {{ border-color: {tokens.accent}; }}
     QComboBox:focus, QTimeEdit:focus {{ border: 1px solid {tokens.accent}; }}
+    QTimeEdit {{
+        min-width: 152px; padding: 8px 38px 8px 12px; font-weight: 680;
+        selection-background-color: {tokens.accent_deep};
+        selection-color: #F4FFFB;
+    }}
+    QTimeEdit::up-button, QTimeEdit::down-button {{
+        subcontrol-origin: border; width: 28px;
+        background: {tokens.surface_sunken};
+        border-left: 1px solid {tokens.border_strong};
+    }}
+    QTimeEdit::up-button {{
+        subcontrol-position: top right;
+        border-bottom: 1px solid {tokens.border};
+        border-top-right-radius: {tokens.radius_small}px;
+    }}
+    QTimeEdit::down-button {{
+        subcontrol-position: bottom right;
+        border-bottom-right-radius: {tokens.radius_small}px;
+    }}
+    QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {{
+        background: {tokens.surface_hover};
+    }}
+    QTimeEdit::up-button:pressed, QTimeEdit::down-button:pressed {{
+        background: {tokens.accent_deep};
+    }}
     QComboBox::drop-down {{ border: 0; width: 24px; }}
     QComboBox QAbstractItemView {{
         background: {tokens.surface_raised}; color: {tokens.text};

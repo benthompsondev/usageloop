@@ -21,7 +21,6 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QApplication,
-    QAbstractSpinBox,
     QComboBox,
     QFrame,
     QGridLayout,
@@ -36,7 +35,6 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStackedWidget,
     QSystemTrayIcon,
-    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -56,6 +54,7 @@ from .ui_components import (
     ProviderCard,
     ScheduleCard,
     StatusPill,
+    TimeEntry,
     ToggleSwitch,
     daily_schedule_example,
     make_surface_card,
@@ -592,16 +591,13 @@ class MainWindow(QMainWindow):
         self.daily_schedule_example.setWordWrap(True)
         time_copy.addWidget(self.daily_schedule_example)
         time_layout.addLayout(time_copy, 1)
-        self.daily_time = QTimeEdit(
+        self.daily_time = self._weekly_time_editor(
+            "dailyStartTime",
             QTime(
                 self.controller.settings.daily_start_hour,
                 self.controller.settings.daily_start_minute,
-            )
+            ),
         )
-        self.daily_time.setObjectName("dailyStartTime")
-        self.daily_time.setDisplayFormat("h:mm AP")
-        self.daily_time.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-        self.daily_time.setToolTip("Type a local time or use the keyboard arrow keys")
         time_layout.addWidget(self.daily_time)
         schedule_layout.addWidget(self.daily_time_row)
 
@@ -656,7 +652,7 @@ class MainWindow(QMainWindow):
         day_grid.setContentsMargins(0, 2, 0, 0)
         day_grid.setHorizontalSpacing(12)
         day_grid.setVerticalSpacing(8)
-        self.weekly_day_times: list[QTimeEdit] = []
+        self.weekly_day_times: list[TimeEntry] = []
         self.weekly_day_rows: list[QFrame] = []
         for index, day_name in enumerate(
             ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -765,6 +761,12 @@ class MainWindow(QMainWindow):
             updater, confirm_install=confirm_install, parent=self
         )
         self.update_panel.installer_launched.connect(self._exit_for_update)
+        self.update_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
+        )
+        technical_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
+        )
 
         self.settings_top_row = QWidget()
         top_layout = QHBoxLayout(self.settings_top_row)
@@ -779,8 +781,8 @@ class MainWindow(QMainWindow):
         bottom_layout = QHBoxLayout(self.settings_bottom_row)
         bottom_layout.setContentsMargins(0, 0, 0, 0)
         bottom_layout.setSpacing(14)
-        bottom_layout.addWidget(self.update_panel, 1)
-        bottom_layout.addWidget(technical_card, 1)
+        bottom_layout.addWidget(self.update_panel, 1, Qt.AlignmentFlag.AlignTop)
+        bottom_layout.addWidget(technical_card, 1, Qt.AlignmentFlag.AlignTop)
         root.addWidget(self.settings_bottom_row)
         root.addStretch()
         return page
@@ -1219,12 +1221,11 @@ class MainWindow(QMainWindow):
         self.refresh_clock()
 
     @staticmethod
-    def _weekly_time_editor(object_name: str) -> QTimeEdit:
-        editor = QTimeEdit()
+    def _weekly_time_editor(
+        object_name: str, initial_time: QTime | None = None
+    ) -> TimeEntry:
+        editor = TimeEntry(initial_time)
         editor.setObjectName(object_name)
-        editor.setDisplayFormat("h:mm AP")
-        editor.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-        editor.setToolTip("Type a local time or use the keyboard arrow keys")
         return editor
 
     @staticmethod

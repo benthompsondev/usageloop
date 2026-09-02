@@ -7,11 +7,12 @@ from datetime import datetime, timedelta, tzinfo
 import re
 import time
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QPointF, QSize, QTime, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
-    QCheckBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy,
-    QVBoxLayout, QWidget,
+    QAbstractSpinBox, QCheckBox, QFrame, QHBoxLayout, QLabel, QProgressBar,
+    QPushButton, QSizePolicy, QStyle, QStyleOptionSpinBox, QTimeEdit, QVBoxLayout,
+    QWidget,
 )
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
@@ -70,6 +71,66 @@ class ToggleSwitch(QCheckBox):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor("#F4FFFB" if self.isChecked() else TOKENS.text_muted))
         painter.drawEllipse(x, 4, diameter, diameter)
+
+
+class TimeEntry(QTimeEdit):
+    """A themed QTimeEdit that keeps Qt's native section-aware interaction."""
+
+    def __init__(
+        self,
+        value: QTime | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(value or QTime(0, 0), parent)
+        self.setDisplayFormat("h:mm AP")
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self.setAccelerated(True)
+        self.setWrapping(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setCorrectionMode(
+            QAbstractSpinBox.CorrectionMode.CorrectToNearestValue
+        )
+        self.setToolTip(
+            "Select the hour, minute, or AM/PM. Type a value or use the arrow controls."
+        )
+        self.setAccessibleDescription(
+            "Local time. Select the hour, minute, or AM/PM, then type or use arrow keys."
+        )
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+        option = QStyleOptionSpinBox()
+        self.initStyleOption(option)
+        color = (
+            TOKENS.text_faint
+            if not self.isEnabled()
+            else TOKENS.accent
+            if self.hasFocus()
+            else TOKENS.text_muted
+        )
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(QColor(color), 1.5))
+        for control, points_up in (
+            (QStyle.SubControl.SC_SpinBoxUp, True),
+            (QStyle.SubControl.SC_SpinBoxDown, False),
+        ):
+            rect = self.style().subControlRect(
+                QStyle.ComplexControl.CC_SpinBox,
+                option,
+                control,
+                self,
+            )
+            center = rect.center()
+            direction = -1 if points_up else 1
+            painter.drawLine(
+                QPointF(center.x() - 3.5, center.y() + 2 * direction),
+                QPointF(center.x(), center.y() - 2 * direction),
+            )
+            painter.drawLine(
+                QPointF(center.x(), center.y() - 2 * direction),
+                QPointF(center.x() + 3.5, center.y() + 2 * direction),
+            )
 
 
 @dataclass(frozen=True)
