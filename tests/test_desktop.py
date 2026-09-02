@@ -10,7 +10,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QTime, Qt
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QColor, QDesktopServices, QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
@@ -41,6 +41,7 @@ from sentinel.ui_components import (
     weekly_schedule_preview_details,
     weekly_schedule_preview,
 )
+from sentinel.ui_theme import TOKENS
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateError, VerifiedInstaller
 
 
@@ -462,6 +463,10 @@ class DesktopTests(unittest.TestCase):
             window.schedule_mode_title.text(),
         )
         self.assertEqual("Start time", window.daily_time_title.text())
+        self.assertIn(
+            "Choose continuous rollover, one daily start time, or a weekly routine.",
+            [label.text() for label in window.pages.widget(1).findChildren(QLabel)],
+        )
 
     def test_weekly_editor_seeds_once_and_supports_group_and_individual_times(self):
         state = ProviderViewState.waiting(
@@ -519,6 +524,55 @@ class DesktopTests(unittest.TestCase):
                     editor.buttonSymbols(),
                 )
                 self.assertIn("hour, minute, or AM/PM", editor.toolTip())
+
+    def test_time_entry_painted_chevrons_match_spinner_direction(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        window.show_page(1)
+        editor = window.weekday_quick_time
+        window.show()
+        editor.setFocus()
+        self.app.processEvents()
+
+        image = QImage(editor.size(), QImage.Format.Format_ARGB32)
+        image.fill(QColor("black"))
+        editor.render(image)
+        option = QStyleOptionSpinBox()
+        editor.initStyleOption(option)
+        accent = QColor(TOKENS.accent)
+
+        def edge_spans(control):
+            rect = editor.style().subControlRect(
+                QStyle.ComplexControl.CC_SpinBox,
+                option,
+                control,
+                editor,
+            )
+            center = rect.center()
+            rows = {}
+            for y in range(center.y() - 6, center.y() + 7):
+                matching = []
+                for x in range(center.x() - 6, center.x() + 7):
+                    pixel = image.pixelColor(x, y)
+                    distance = (
+                        abs(pixel.red() - accent.red())
+                        + abs(pixel.green() - accent.green())
+                        + abs(pixel.blue() - accent.blue())
+                    )
+                    if distance < 80:
+                        matching.append(x)
+                if matching:
+                    rows[y] = max(matching) - min(matching)
+            self.assertGreaterEqual(len(rows), 4)
+            return rows[min(rows)], rows[max(rows)]
+
+        up_top, up_bottom = edge_spans(QStyle.SubControl.SC_SpinBoxUp)
+        down_top, down_bottom = edge_spans(QStyle.SubControl.SC_SpinBoxDown)
+
+        self.assertLess(up_top, up_bottom)
+        self.assertGreater(down_top, down_bottom)
 
     def test_weekly_time_supports_keyboard_sections_and_midnight_noon(self):
         window, _provider = self.make_window(
@@ -594,6 +648,23 @@ class DesktopTests(unittest.TestCase):
             window.controller.store.load().weekly_start_times,
         )
         self.assertNotEqual(before, window.weekly_preview_first_value.text())
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+
+    def test_individual_day_override_resyncs_weekday_and_weekend_quick_sets(self):
+        window, provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        self.app.processEvents()
+
+        window.weekly_day_times[0].setTime(QTime(7, 15))
+        window.weekly_day_times[5].setTime(QTime(8, 45))
+        self.app.processEvents()
+
+        self.assertEqual(QTime(7, 15), window.weekday_quick_time.time())
+        self.assertEqual(QTime(8, 45), window.weekend_quick_time.time())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
         self.assertEqual(0, provider.sync_calls)

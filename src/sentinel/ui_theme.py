@@ -175,6 +175,11 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {{
         background: {tokens.surface_hover};
     }}
+    QTimeEdit:focus::up-button, QTimeEdit:focus::down-button {{
+        background: {tokens.surface_hover};
+        border-left-color: {tokens.accent_deep};
+    }}
+    QTimeEdit:focus::up-button {{ border-bottom-color: {tokens.accent_deep}; }}
     QTimeEdit::up-button:pressed, QTimeEdit::down-button:pressed {{
         background: {tokens.accent_deep};
     }}

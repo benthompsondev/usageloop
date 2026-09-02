@@ -549,7 +549,7 @@ class MainWindow(QMainWindow):
 
         schedule_card, schedule_layout = make_surface_card(
             "Schedule",
-            "Start each next window right after reset, or wait for a local time you choose.",
+            "Choose continuous rollover, one daily start time, or a weekly routine.",
         )
         schedule_row = QFrame()
         schedule_row.setObjectName("settingRow")
@@ -1273,6 +1273,8 @@ class MainWindow(QMainWindow):
         if not self.controller.set_weekly_start_times(values):
             self._sync_weekly_editor()
             self._show_persistence_warning()
+        else:
+            self._sync_weekly_editor()
         self.refresh_clock()
 
     def _apply_weekly_group(self, indices: range, selected: QTime) -> None:

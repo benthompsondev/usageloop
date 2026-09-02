@@ -122,7 +122,7 @@ class TimeEntry(QTimeEdit):
                 self,
             )
             center = rect.center()
-            direction = -1 if points_up else 1
+            direction = 1 if points_up else -1
             painter.drawLine(
                 QPointF(center.x() - 3.5, center.y() + 2 * direction),
                 QPointF(center.x(), center.y() - 2 * direction),
