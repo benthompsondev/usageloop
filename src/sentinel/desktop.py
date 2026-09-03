@@ -65,6 +65,8 @@ from .ui_components import (
     make_surface_card,
     present_provider_state,
     weekly_schedule_preview_details,
+    pause_until_text,
+    automatic_start_history_copy,
 )
 from .ui_theme import desktop_stylesheet
 from .update_ui import UpdatePanel
@@ -104,6 +106,8 @@ def tray_tooltip_text(
     prefix = f"{PRODUCT.display_name} · "
     if persistence_error is not None:
         return prefix + "Needs attention"
+    if settings.pause_active(now):
+        return prefix + f"Paused until {pause_until_text(settings.automation_paused_until)}"
     if state is not None and (not state.installed or state.status == "Needs attention"):
         return prefix + "Needs attention"
     if not settings.automation_enabled:
@@ -164,6 +168,7 @@ def tray_tooltip_text(
 class MainWindow(QMainWindow):
     PAGE_NAMES = ("Dashboard", "Settings", "About")
     tray_tooltip_changed = Signal(str)
+    presentation_changed = Signal()
 
     def __init__(
         self,
@@ -187,6 +192,7 @@ class MainWindow(QMainWindow):
         self.hide_on_close = False
         self.force_close = False
         self.current_tray_tooltip = PRODUCT.display_name
+        self._last_history_signature = None
 
         self.setWindowTitle(PRODUCT.display_name)
         self.setWindowIcon(make_app_icon())
@@ -216,6 +222,7 @@ class MainWindow(QMainWindow):
         self.dashboard_automation_toggle.toggled.connect(
             self._automation_toggled
         )
+        self.schedule_card.pause_button.clicked.connect(self.toggle_temporary_pause)
         self.startup_toggle.toggled.connect(self._startup_toggled)
         self.schedule_mode.currentIndexChanged.connect(self._schedule_mode_changed)
         self.daily_time.timeChanged.connect(self._daily_time_changed)
@@ -984,9 +991,21 @@ class MainWindow(QMainWindow):
     def refresh_clock(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
         enabled = self.controller.settings.automation_enabled
+        paused = self.controller.settings.pause_active(current)
         self._sync_automation_toggles(enabled)
         self.automation_state_label.set_status(
-            "ON" if enabled else "OFF", "success" if enabled else "neutral"
+            "PAUSED · ON" if paused else ("ON" if enabled else "OFF"),
+            "info" if paused else ("success" if enabled else "neutral"),
+        )
+        pause_button = self.schedule_card.pause_button
+        pause_button.setVisible(paused or self.controller.settings.schedule_mode in {DAILY, WEEKLY})
+        pause_button.setText("Resume automation" if paused else "Pause until tomorrow")
+        pause_button.setEnabled(enabled and not self.active_operations)
+        target = self.controller.settings.tomorrow_first_start(current)
+        pause_button.setToolTip(
+            "Wait for the current operation to finish." if self.active_operations else
+            ("Return to your saved schedule." if paused else
+             f"Pause until tomorrow's first start: {pause_until_text(target)}" if target is not None else "")
         )
         for provider_id, state in self.controller.states.items():
             card = self.provider_cards.get(provider_id)
@@ -997,6 +1016,7 @@ class MainWindow(QMainWindow):
                 card.action_button.setVisible(
                     provider_id == "codex"
                     and enabled
+                    and not paused
                     and state.installed
                     and state.automation_supported
                     and state.reset_at is None
@@ -1004,9 +1024,6 @@ class MainWindow(QMainWindow):
                 )
         codex = self.controller.states.get("codex")
         if codex is not None:
-            presented = present_provider_state(
-                codex, now=current, automation_enabled=enabled
-            )
             self.schedule_card.update_schedule(
                 self.controller.settings, codex, now=current
             )
@@ -1015,6 +1032,12 @@ class MainWindow(QMainWindow):
                 self.overall_title.setText("UsageLoop needs attention")
                 self.overall_detail.setText(
                     "A local setting could not be saved, so automatic starts are paused. See Technical details."
+                )
+            elif paused:
+                self._set_overall_icon("○", "info")
+                self.overall_title.setText("Automation is temporarily paused")
+                self.overall_detail.setText(
+                    f"Still enabled. Resumes {pause_until_text(self.controller.settings.automation_paused_until)}. Your routine is unchanged."
                 )
             elif not codex.installed:
                 self._set_overall_icon("!", "warning")
@@ -1067,7 +1090,8 @@ class MainWindow(QMainWindow):
                     "SAFE" if weekly_safe else "PROTECTED",
                     "success" if weekly_safe else "warning",
                 )
-            self.last_action_label.setText(presented.action)
+            self._refresh_last_automatic_start(now=current)
+            self.schedule_card.fit_wrapped_text()
         self._update_diagnostics(now=current)
         tooltip = tray_tooltip_text(
             self.controller.settings,
@@ -1078,6 +1102,44 @@ class MainWindow(QMainWindow):
         if tooltip != self.current_tray_tooltip:
             self.current_tray_tooltip = tooltip
             self.tray_tooltip_changed.emit(tooltip)
+        self.presentation_changed.emit()
+
+    def _refresh_last_automatic_start(self, *, now: float) -> None:
+        history = getattr(self.providers.get("codex"), "history", None)
+        if history is None:
+            self.last_action_label.setText("Last automatic start: None yet")
+            return
+        try:
+            stat = history.path.stat()
+        except FileNotFoundError:
+            self._last_history_signature = None
+            self.last_action_label.setText("Last automatic start: None yet")
+            return
+        except OSError:
+            self._last_history_signature = None
+            self.last_action_label.setText("Last automatic start: History unavailable")
+            return
+        # Clock ticks need no JSONL reread unless history or the displayed day changed.
+        signature = (stat.st_mtime_ns, stat.st_size, datetime.fromtimestamp(now).date())
+        if signature != self._last_history_signature:
+            self.last_action_label.setText(automatic_start_history_copy(history, now=now))
+            self._last_history_signature = signature
+
+    def toggle_temporary_pause(self, *, now: float | None = None) -> None:
+        current = time.time() if now is None else now
+        # A running worker may already be sending. Never promise a pause mid-flight.
+        if self.active_operations or not self.controller.settings.automation_enabled:
+            return
+        if self.controller.settings.pause_active(current):
+            saved = self.controller.resume_automation()
+        elif self.controller.settings.tomorrow_first_start(current) is not None:
+            saved = self.controller.pause_until_tomorrow(now=current)
+        else:
+            return
+        if not saved:
+            self._show_persistence_warning()
+        # Resume/expiry only removes the gate. The normal timer evaluates safety.
+        self.refresh_clock(now=current)
 
     def evaluate_automation(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
@@ -1091,7 +1153,11 @@ class MainWindow(QMainWindow):
                 self._start_operation(provider_id, "rollover")
 
     def start_bootstrap(self, provider_id: str) -> None:
+        if self.controller.settings.pause_active(time.time()):
+            return
         if provider_id in self.active_operations or not self.confirm_bootstrap():
+            return
+        if self.controller.settings.pause_active(time.time()):
             return
         self._start_operation(provider_id, "bootstrap")
 
@@ -1466,18 +1532,43 @@ class DesktopShell:
         self.tray.setToolTip(window.current_tray_tooltip)
         self.window.tray_tooltip_changed.connect(self.tray.setToolTip)
         menu = QMenu()
+        self.status_action = menu.addAction(window.current_tray_tooltip)
+        self.status_action.setEnabled(False)
+        self.pause_action = menu.addAction("Pause until tomorrow's first start")
+        self.pause_action.triggered.connect(window.toggle_temporary_pause)
+        menu.addSeparator()
         open_action = menu.addAction(f"Open {PRODUCT.display_name}")
         open_action.triggered.connect(self.restore_window)
         menu.addSeparator()
         quit_action = menu.addAction(f"Quit {PRODUCT.display_name}")
         quit_action.triggered.connect(self.quit)
         self.tray.setContextMenu(menu)
+        menu.aboutToShow.connect(self.refresh_menu)
+        self.window.presentation_changed.connect(self.refresh_menu)
+        self.refresh_menu()
         self.tray.activated.connect(self._tray_activated)
         self.window.hide_on_close = QSystemTrayIcon.isSystemTrayAvailable()
         application = QApplication.instance()
         if application is not None:
             application.aboutToQuit.connect(self.tray.hide)
         self.tray.show()
+
+    def refresh_menu(self, *, now: float | None = None) -> None:
+        current = time.time() if now is None else now
+        settings = self.window.controller.settings
+        paused = settings.pause_active(current)
+        self.status_action.setText(tray_tooltip_text(
+            settings, self.window.controller.states.get("codex"), now=current,
+            persistence_error=self.window.controller.persistence_error,
+        ))
+        target = settings.tomorrow_first_start(current)
+        self.pause_action.setVisible(paused or target is not None)
+        self.pause_action.setText(
+            "Resume automation" if paused else
+            f"Pause until {pause_until_text(target)}" if target is not None else
+            "Pause until tomorrow's first start"
+        )
+        self.pause_action.setEnabled(settings.automation_enabled and not self.window.active_operations)
 
     def hide_window(self) -> None:
         self.window.hide()

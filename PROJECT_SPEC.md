@@ -22,6 +22,19 @@ setup.
 
 ## Runtime flow
 
+Temporary pause is available for Weekly routine and Once each day. It captures
+tomorrow's configured local first-start timestamp using the existing DST rules.
+The saved timestamp survives restart and is not recalculated after schedule
+edits. While active, it gates desktop automation before provider operations.
+Expiry only removes that gate; the normal scheduler and all provider guards
+still decide what can run. Resume clears the pause without enabling automation.
+Turning automation off clears the pause and stays off. An in-flight operation
+must finish before the UI can accept a new pause.
+
+Dashboard and tray show the same saved resume timestamp. Last automatic start
+comes from existing rollover reservation/outcome history, not observation time.
+Manual Sync and explicit first-window bootstrap do not advance it.
+
 ```text
 local app-server observation
   -> eligibility and weekly checks

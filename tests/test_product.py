@@ -186,7 +186,7 @@ class ProductMetadataTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        for version in ("1.1.2", "1.1.3"):
+        for version in ("1.1.2", "1.1.3", "1.1.4"):
             with self.subTest(version=version):
                 self.assertIn(f"'{version}'", verifier)
                 self.assertIn(f'"{version}"', workflow)
@@ -195,7 +195,7 @@ class ProductMetadataTests(unittest.TestCase):
                 )
         self.assertIn("'recent-chain'", verifier)
         self.assertEqual(
-            2, workflow.count("'recent-chain' { @('1.1.2', '1.1.3') }")
+            2, workflow.count("'recent-chain' { @('1.1.2', '1.1.3', '1.1.4') }")
         )
 
     def test_readme_opens_with_the_payoff_and_one_dashboard_screenshot(self) -> None:

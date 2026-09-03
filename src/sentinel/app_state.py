@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ from .schedule import (
     WEEKLY,
     normalize_weekly_times,
     schedule_summary,
+    tomorrow_first_start,
 )
 
 
@@ -31,6 +33,24 @@ class AppSettings:
     daily_start_hour: int = 4
     daily_start_minute: int = 0
     weekly_start_times: tuple[tuple[int, int], ...] | None = None
+    automation_paused_until: float | None = None
+
+    def pause_active(self, now: float) -> bool:
+        return (
+            self.automation_enabled
+            and self.automation_paused_until is not None
+            and now < self.automation_paused_until
+        )
+
+    def tomorrow_first_start(self, now: float) -> float | None:
+        try:
+            return tomorrow_first_start(
+                self.schedule_mode, now=now,
+                hour=self.daily_start_hour, minute=self.daily_start_minute,
+                weekly_times=self.weekly_start_times,
+            )
+        except (OSError, OverflowError, ValueError):
+            return None
 
     def __post_init__(self) -> None:
         if self.compatible_runtime_identities is None:
@@ -115,9 +135,12 @@ def automation_decision(
     daily_minute: int = 0,
     weekly_times: tuple[tuple[int, int], ...] | None = None,
     timezone: Any = None,
+    paused_until: float | None = None,
 ) -> AutomationDecision:
     if not enabled:
         return AutomationDecision("NONE", "Automation is off.")
+    if paused_until is not None and now < paused_until:
+        return AutomationDecision("WAIT", "Automation is temporarily paused.")
     if not state.installed or not state.automation_supported:
         return AutomationDecision("NONE", "Provider automation is unavailable.")
     if state.status == "Needs attention":
@@ -284,8 +307,18 @@ class AppStateStore:
             )
         except ValueError:
             weekly_times = None
+        paused_until = settings.get("automation_paused_until")
+        invalid_pause = False
+        if paused_until is not None:
+            try:
+                if not _is_finite_number(paused_until) or paused_until <= 0:
+                    raise ValueError("invalid pause timestamp")
+                datetime.fromtimestamp(paused_until)
+            except (OSError, OverflowError, ValueError):
+                invalid_pause = True
+                paused_until = None
         return AppSettings(
-            automation_enabled=settings.get("automation_enabled") is True,
+            automation_enabled=settings.get("automation_enabled") is True and not invalid_pause,
             start_with_windows=settings.get("start_with_windows") is True,
             first_run_complete=settings.get("first_run_complete") is True,
             compatible_runtime_identities=safe_identities,
@@ -294,6 +327,7 @@ class AppStateStore:
             daily_start_hour=daily_hour,
             daily_start_minute=daily_minute,
             weekly_start_times=weekly_times,
+            automation_paused_until=paused_until,
         )
 
     def load_provider_cache(self) -> dict[str, ProviderViewState]:

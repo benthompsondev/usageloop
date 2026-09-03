@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
+from .history import SafeHistory, HistoryStateError
 from .schedule import (
     DAILY,
     FIVE_HOUR_WINDOW_SECONDS,
@@ -374,6 +375,9 @@ class ScheduleCard(QFrame):
         self.next_label.setObjectName("scheduleNext")
         self.next_label.setWordWrap(True)
         layout.addWidget(self.next_label)
+        self.pause_button = QPushButton("Pause until tomorrow")
+        self.pause_button.setObjectName("secondaryButton")
+        layout.addWidget(self.pause_button, 0, Qt.AlignmentFlag.AlignLeft)
         self.manage_button = QPushButton("Manage schedule")
         self.manage_button.setObjectName("secondaryButton")
         layout.addWidget(self.manage_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -381,6 +385,16 @@ class ScheduleCard(QFrame):
         self.last_action_label.setObjectName("lastAction")
         self.last_action_label.setWordWrap(True)
         layout.addWidget(self.last_action_label)
+
+    def fit_wrapped_text(self) -> None:
+        margins = self.layout().contentsMargins()
+        width = max(1, self.width() - margins.left() - margins.right())
+        for label in (self.detail_label, self.next_label, self.last_action_label):
+            label.setMinimumHeight(max(0, label.heightForWidth(width)))
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.fit_wrapped_text()
 
     def update_schedule(
         self,
@@ -413,6 +427,11 @@ class ScheduleCard(QFrame):
             self.next_label.setText("No automatic requests while automation is off")
             return
 
+        if settings.pause_active(now):
+            self.detail_label.setText("Automation stays on.\nYour routine is unchanged.")
+            self.next_label.setText(f"Resumes {pause_until_text(settings.automation_paused_until)}")
+            return
+
         if state.reset_at is None:
             self.next_label.setText("First window starts only when you ask")
             return
@@ -440,6 +459,33 @@ class ScheduleCard(QFrame):
             self.next_label.setText("Safety checks are due now")
         elif summary.next_action_at is not None:
             self.next_label.setText(_schedule_time(summary.next_action_at, now=now))
+
+
+def pause_until_text(timestamp: float) -> str:
+    return datetime.fromtimestamp(timestamp).strftime("%a, %b %d, %Y at %I:%M %p").replace(" 0", " ")
+
+
+def automatic_start_history_copy(history: SafeHistory | None, *, now: float) -> str:
+    """Use existing rollover records, never a quota-observation timestamp."""
+    if history is None:
+        return "Last automatic start: None yet"
+    try:
+        attempts = [item for item in history.trigger_attempts() if item.mode == "rollover"]
+    except (OSError, HistoryStateError):
+        return "Last automatic start: History unavailable"
+    if not attempts:
+        return "Last automatic start: None yet"
+    attempt = attempts[-1]
+    outcome = {
+        "reserved": "Preparing",
+        "launch_attempted": "Starting",
+        "request_possibly_sent": "Outcome unclear · No retry",
+        "verified": "Successful",
+        "failed_recoverable": "Stopped before sending",
+        "failed_guarded": "Not verified · No retry",
+    }[attempt.state]
+    when = _schedule_time(attempt.updated_at, now=now)
+    return f"Last automatic start: {when} · {outcome}"
 
 
 def _schedule_time(
@@ -588,8 +634,7 @@ def _automatic_action_copy(state: ProviderViewState, *, now: float) -> str:
         return "Last automatic start: None yet"
     outcome = re.sub(r"[^A-Z0-9]+", "_", action.upper()).strip("_")
     if outcome == "ANCHOR_VERIFIED":
-        when = _friendly_time(state.last_verified_at, now=now)
-        return f"Last automatic start: {when} · Successful"
+        return "Last automatic start: Successful"
     if outcome in CHAIN_OUTCOME_COPY:
         return f"Last automatic start: {CHAIN_OUTCOME_COPY[outcome]}"
     normalized = action.casefold()
@@ -600,8 +645,7 @@ def _automatic_action_copy(state: ProviderViewState, *, now: float) -> str:
     if "preparing" in normalized or "starting" in normalized:
         return "Automatic start in progress"
     if "verified" in normalized or "successful" in normalized:
-        when = _friendly_time(state.last_verified_at, now=now)
-        return f"Last automatic start: {when} · Successful"
+        return "Last automatic start: Successful"
     return "Last automatic start: Action recorded · See Technical details"
 
 

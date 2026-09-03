@@ -61,6 +61,22 @@ If you want something simpler, the other two choices are still there:
 **Continuous** starts a new window as soon as the current one resets, and
 **Once each day** uses a single daily start time.
 
+### Take a day off without losing your routine
+
+Choose **Pause until tomorrow** on the Dashboard, or right-click
+the tray icon and choose **Pause until** the displayed date and time. This works
+with **Weekly routine** and **Once each day**, not **Continuous**. The pause ends
+at tomorrow's configured first-start time.
+
+Automation stays enabled, but automatic starts wait until that exact time.
+Your routine stays unchanged, and the pause survives restarting the app or PC.
+Changing your schedule does not move an existing pause. **Resume automation**
+ends it early; turning Automation off cancels it and leaves automation off.
+Pause is unavailable while an operation is already running.
+
+At the resume time, the normal scheduler and safety checks take over. It is not
+a promise that a request will be sent at that moment.
+
 ## Install
 
 ### Windows

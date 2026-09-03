@@ -160,8 +160,21 @@ class ApplicationController:
             self.settings,
             automation_enabled=bool(enabled),
             first_run_complete=True,
+            automation_paused_until=(self.settings.automation_paused_until if enabled else None),
         )
         return self._save_settings(candidate)
+
+    def pause_until_tomorrow(self, *, now: float) -> bool:
+        if not self.settings.automation_enabled or self.settings.pause_active(now):
+            return False
+        target = self.settings.tomorrow_first_start(now)
+        if target is None:
+            return False
+        return self._save_settings(replace(self.settings, automation_paused_until=target))
+
+    def resume_automation(self) -> bool:
+        # Removing a pause never turns the main automation switch on.
+        return self._save_settings(replace(self.settings, automation_paused_until=None))
 
     def set_start_with_windows(self, enabled: bool) -> bool:
         return self._save_settings(
@@ -224,6 +237,7 @@ class ApplicationController:
                 daily_hour=self.settings.daily_start_hour,
                 daily_minute=self.settings.daily_start_minute,
                 weekly_times=self.settings.weekly_start_times,
+                paused_until=self.settings.automation_paused_until,
             )
             for provider_id, state in self.states.items()
         }

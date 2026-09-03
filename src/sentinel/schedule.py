@@ -66,6 +66,24 @@ def next_daily_start_after(
     return max(candidate, earliest)
 
 
+def tomorrow_first_start(
+    mode: str,
+    *,
+    now: float,
+    hour: int = 4,
+    minute: int = 0,
+    weekly_times: Sequence[tuple[int, int]] | None = None,
+    timezone: tzinfo | None = None,
+) -> float | None:
+    """Capture tomorrow's local first start, not today's next due action."""
+    tomorrow = datetime.fromtimestamp(now, timezone).date() + timedelta(days=1)
+    if mode == WEEKLY:
+        hour, minute = normalize_weekly_times(weekly_times)[tomorrow.weekday()]
+    elif mode != DAILY:
+        return None
+    return _local_candidate(tomorrow, hour, minute, timezone)
+
+
 def normalize_weekly_times(
     weekly_times: Sequence[tuple[int, int]] | None,
 ) -> tuple[tuple[int, int], ...]:
