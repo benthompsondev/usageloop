@@ -577,6 +577,7 @@ class MainWindow(QMainWindow):
         automation_copy.addWidget(automation_hint)
         automation_row_layout.addLayout(automation_copy, 1)
         self.automation_toggle = ToggleSwitch()
+        self.automation_toggle.setAccessibleName("Keep my 5-hour windows ready")
         self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
         automation_row_layout.addWidget(self.automation_toggle)
         automation_layout.addWidget(automation_row)
@@ -600,6 +601,7 @@ class MainWindow(QMainWindow):
         schedule_row_layout.addLayout(mode_copy, 1)
         self.schedule_mode = QComboBox()
         self.schedule_mode.setObjectName("scheduleModePicker")
+        self.schedule_mode.setAccessibleName("When should the next 5-hour window start?")
         self.schedule_mode.addItem("Continuous", "continuous")
         self.schedule_mode.addItem("Once each day", "daily")
         self.schedule_mode.addItem("Weekly routine", "weekly")
@@ -632,6 +634,7 @@ class MainWindow(QMainWindow):
                 self.controller.settings.daily_start_minute,
             ),
         )
+        self.daily_time.setAccessibleName("Once each day start time")
         time_layout.addWidget(self.daily_time)
         schedule_layout.addWidget(self.daily_time_row)
 
@@ -768,6 +771,7 @@ class MainWindow(QMainWindow):
         row_layout.addLayout(row_copy)
         row_layout.addStretch()
         self.startup_toggle = ToggleSwitch()
+        self.startup_toggle.setAccessibleName(f"Start {PRODUCT.display_name} with Windows")
         self.startup_toggle.setChecked(bool(self.startup_manager.is_enabled()))
         row_layout.addWidget(self.startup_toggle)
         startup_layout.addWidget(startup_row)

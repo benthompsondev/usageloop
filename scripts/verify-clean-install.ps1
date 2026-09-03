@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', 'legacy-chain', 'broken-registration')]
+    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', '1.1.2', '1.1.3', 'recent-chain', 'legacy-chain', 'broken-registration')]
     [string]$Scenario = 'fresh',
     [string[]]$PreviousInstallers = @(),
     [switch]$SkipDesktopActivation
@@ -27,19 +27,40 @@ $shortcutDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$($
 $shortcut = Join-Path $shortcutDir "$($product.display_name).lnk"
 $legacyStartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$($product.legacy_install_folder)"
 $fixtureMarker = 'windows_install_acceptance_fixture'
+$evidenceDir = Join-Path $repoRoot 'artifacts\install-acceptance'
+
+# This destructive acceptance test belongs on an empty disposable Windows user.
+if ((Test-Path -LiteralPath $canonicalDir) -or
+    (Test-Path -LiteralPath $legacyDir) -or
+    (Test-Path -LiteralPath $stateDir) -or
+    (Test-Path -LiteralPath $uninstallKey)) {
+    throw 'Use a disposable Windows environment with no existing UsageLoop installation or state.'
+}
+New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
 
 function Invoke-Installer([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "Installer is missing: $Path"
     }
-    $process = Start-Process -FilePath $Path -ArgumentList @(
+    $version = (Get-Item -LiteralPath $Path).VersionInfo.ProductVersion.Trim()
+    $log = Join-Path $evidenceDir "install-$version.log"
+    $process = Start-Process -FilePath $Path -WindowStyle Hidden -ArgumentList @(
         '/VERYSILENT',
         '/SUPPRESSMSGBOXES',
         '/NORESTART',
-        '/CLOSEAPPLICATIONS'
+        '/CLOSEAPPLICATIONS',
+        ('/LOG="{0}"' -f $log)
     ) -Wait -PassThru
     if ($process.ExitCode -ne 0) {
         throw "Installer $Path exited with code $($process.ExitCode)."
+    }
+    $registration = Get-ItemProperty -LiteralPath $uninstallKey
+    $installedExe = Join-Path $registration.InstallLocation.TrimEnd('\') $product.executable_name
+    $exeVersion = (Get-Item -LiteralPath $installedExe).VersionInfo.ProductVersion.Trim()
+    Write-Output "Installed $version : executable=$exeVersion; DisplayVersion=$($registration.DisplayVersion)"
+    if ($Scenario -in @('1.1.2', '1.1.3', 'recent-chain') -and
+        ($exeVersion -ne $version -or $registration.DisplayVersion -ne $version)) {
+        throw "Version registration mismatch after installing $version. See $log."
     }
 }
 
@@ -143,6 +164,9 @@ foreach ($previous in $PreviousInstallers) {
     Invoke-Installer $previous
 }
 
+$savedStateHash = (Get-FileHash -LiteralPath $stateFile -Algorithm SHA256).Hash
+$savedHistoryHash = (Get-FileHash -LiteralPath $historyFile -Algorithm SHA256).Hash
+
 if ($PreviousInstallers.Count -gt 0) {
     $previousEntry = Get-ItemProperty -LiteralPath $uninstallKey
     $previousExe = Join-Path $previousEntry.InstallLocation.TrimEnd('\') $product.executable_name
@@ -177,6 +201,12 @@ if ($Scenario -eq 'legacy-chain') {
 }
 
 Invoke-Installer $installer
+
+if ((Get-FileHash -LiteralPath $stateFile -Algorithm SHA256).Hash -ne $savedStateHash -or
+    (Get-FileHash -LiteralPath $historyFile -Algorithm SHA256).Hash -ne $savedHistoryHash) {
+    throw 'The installer changed existing UsageLoop state or history bytes.'
+}
+Write-Output 'Existing UsageLoop state and history preserved byte-for-byte.'
 
 if (-not (Test-Path -LiteralPath $canonicalExe)) { throw 'Canonical executable was not installed.' }
 if (Test-Path -LiteralPath $legacyDir) { throw 'Legacy install directory was not removed.' }
@@ -213,6 +243,7 @@ if ($uninstallEntries.Count -ne 1) { throw "Expected one UsageLoop uninstall ent
 $entry = $uninstallEntries[0]
 if ($entry.DisplayName -ne 'UsageLoop') { throw "DisplayName was '$($entry.DisplayName)'." }
 if ($entry.DisplayVersion -ne $product.version) { throw "DisplayVersion was '$($entry.DisplayVersion)'." }
+Write-Output "Verified Windows metadata: executable=$installedVersion; DisplayVersion=$($entry.DisplayVersion)"
 if ($entry.Publisher -ne 'UsageLoop') { throw "Publisher was '$($entry.Publisher)'." }
 if ($entry.InstallLocation.TrimEnd('\') -ne $canonicalDir.TrimEnd('\')) {
     throw "InstallLocation points at the wrong folder: $($entry.InstallLocation)"

@@ -10,7 +10,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QTime, Qt
-from PySide6.QtGui import QColor, QDesktopServices, QImage
+from PySide6.QtGui import QAccessible, QColor, QDesktopServices, QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
@@ -467,6 +467,57 @@ class DesktopTests(unittest.TestCase):
             "Choose continuous rollover, one daily start time, or a weekly routine.",
             [label.text() for label in window.pages.widget(1).findChildren(QLabel)],
         )
+
+    def test_settings_primary_controls_have_accessible_names(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+
+        self.assertEqual(
+            "Keep my 5-hour windows ready",
+            window.automation_toggle.accessibleName(),
+        )
+        self.assertEqual(
+            "Start UsageLoop with Windows",
+            window.startup_toggle.accessibleName(),
+        )
+        self.assertEqual(
+            "When should the next 5-hour window start?",
+            window.schedule_mode.accessibleName(),
+        )
+        self.assertEqual(
+            "Once each day start time",
+            window.daily_time.accessibleName(),
+        )
+        for control in (
+            window.automation_toggle,
+            window.startup_toggle,
+            window.schedule_mode,
+            window.daily_time,
+        ):
+            with self.subTest(control=control.accessibleName()):
+                interface = QAccessible.queryAccessibleInterface(control)
+                self.assertIsNotNone(interface)
+                self.assertEqual(
+                    control.accessibleName(), interface.text(QAccessible.Text.Name)
+                )
+
+    def test_readme_first_run_and_schedule_use_the_visible_mode_names(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True)
+        )
+        readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(
+            encoding="utf-8"
+        )
+        sections = (
+            readme.split("Automation has three local schedule choices:", 1)[1].split("##", 1)[0],
+            readme.split("## First run", 1)[1].split("##", 1)[0],
+        )
+        for section in sections:
+            for index in range(window.schedule_mode.count()):
+                name = window.schedule_mode.itemText(index)
+                with self.subTest(mode=name, section=section[:40]):
+                    self.assertIn(f"**{name}**", section)
 
     def test_weekly_editor_seeds_once_and_supports_group_and_individual_times(self):
         state = ProviderViewState.waiting(

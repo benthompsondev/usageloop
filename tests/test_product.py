@@ -177,6 +177,27 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("verify-packaged-activation.ps1", verifier)
         self.assertIn("-SkipDesktopActivation", workflow)
 
+    def test_recent_predecessors_are_in_the_upgrade_acceptance_matrix(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        verifier = (root / "scripts" / "verify-clean-install.ps1").read_text(
+            encoding="utf-8"
+        )
+        workflow = (root / ".github" / "workflows" / "verify.yml").read_text(
+            encoding="utf-8"
+        )
+
+        for version in ("1.1.2", "1.1.3"):
+            with self.subTest(version=version):
+                self.assertIn(f"'{version}'", verifier)
+                self.assertIn(f'"{version}"', workflow)
+                self.assertGreaterEqual(
+                    workflow.count(f"'{version}' {{ @('{version}') }}"), 2
+                )
+        self.assertIn("'recent-chain'", verifier)
+        self.assertEqual(
+            2, workflow.count("'recent-chain' { @('1.1.2', '1.1.3') }")
+        )
+
     def test_readme_opens_with_the_payoff_and_one_dashboard_screenshot(self) -> None:
         root = Path(__file__).resolve().parents[1]
         readme = (root / "README.md").read_text(encoding="utf-8")
@@ -201,8 +222,8 @@ class ProductMetadataTests(unittest.TestCase):
 
         self.assertIn("three local schedule choices", flat)
         for mode in (
-            "As soon as the current one resets",
-            "At a set time each day",
+            "Continuous",
+            "Once each day",
             "Weekly routine",
         ):
             self.assertIn(mode, flat)

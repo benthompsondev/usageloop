@@ -17,9 +17,9 @@ UsageLoop does not add quota or bypass limits. It starts the normal next window
 you were going to receive anyway, earlier. It is a local-first Windows app, with
 a Linux beta available for testing.
 
-**[Download for Windows — Stable](https://github.com/benthompsondev/usageloop/releases/download/v1.1.3/UsageLoop-Setup.exe)**
+**[Download for Windows — Stable](https://github.com/benthompsondev/usageloop/releases/download/v1.1.4/UsageLoop-Setup.exe)**
 · **[Download for Linux — Beta](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1)**
-· [Windows release notes](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.3)
+· [Windows release notes](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.4)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
@@ -58,8 +58,8 @@ resets. It stops starting new windows in the evening so the next morning begins
 on the time you chose rather than drifting later each day.
 
 If you want something simpler, the other two choices are still there:
-**As soon as the current one resets** for continuous rollover, and
-**At a set time each day** for a single daily start.
+**Continuous** starts a new window as soon as the current one resets, and
+**Once each day** uses a single daily start time.
 
 ## Install
 
@@ -70,10 +70,10 @@ You need:
 - an x64-compatible Windows PC;
 - the Codex desktop app or Codex CLI installed and already signed in.
 
-Download the stable v1.1.3 per-user installer:
+Download the stable v1.1.4 per-user installer:
 
-- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/download/v1.1.3/UsageLoop-Setup.exe)
-- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.1.3/UsageLoop-Setup.exe.sha256)
+- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/download/v1.1.4/UsageLoop-Setup.exe)
+- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.1.4/UsageLoop-Setup.exe.sha256)
 
 The installer does not need administrator rights or change the global PATH.
 
@@ -139,10 +139,9 @@ The dashboard shows:
 
 Automation has three local schedule choices:
 
-- **As soon as the current one resets** starts the next window after the reset
-  and safety buffer, so windows roll continuously.
-- **At a set time each day** waits until your chosen local time after a window
-  ends.
+- **Continuous** starts the next window after the reset and safety buffer, so
+  windows roll continuously.
+- **Once each day** waits until your chosen local time after a window ends.
 - **Weekly routine** uses a first-start time per day, with quick weekday and
   weekend groups and optional per-day overrides. Windows keep rolling after the
   first start and pause overnight so the next day begins on schedule. See
@@ -164,9 +163,9 @@ weekly snapshots. It never selects a model or starts a Codex turn.
 
 1. Open UsageLoop and confirm Codex is detected.
 2. Review the cached five-hour and weekly state.
-3. In Settings, choose **As soon as the current one resets**, **At a set time
-   each day**, or **Weekly routine**, then turn on **Keep my 5-hour windows
-   ready**. Weekly routine gives each day its own first-start time: set the
+3. In Settings, choose **Continuous**, **Once each day**, or **Weekly routine**,
+   then turn on **Keep my 5-hour windows ready**. Weekly routine gives each day
+   its own first-start time: set the
    weekday and weekend times, then check the **Next routine** card before you
    leave.
 4. On a true first run, choose **Start my first window now**. This explicit
