@@ -215,7 +215,30 @@ class ApplyTests(unittest.TestCase):
         self.assertIn("--wait-for-pid", command)
         self.assertEqual(str(os.getpid()), command[command.index("--wait-for-pid") + 1])
         self.assertIn("--relaunch", command)
+        # The launcher location travels with the prefix. Leaving it to the
+        # inherited environment let one real run write a launcher pointing at
+        # a different installation entirely.
+        self.assertIn("--data-home", command)
         self.assertEqual(staged.bundle, cwd)
+        self.assertTrue(command[0].endswith("bash"), command[0])
+
+    def test_the_installer_runs_under_bash_not_plain_sh(self) -> None:
+        # install.sh uses [[ ]] and BASH_SOURCE. Under dash, which is /bin/sh on
+        # Debian and Ubuntu, it resolved its own directory wrongly and copied
+        # from the wrong place.
+        directory = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(directory, ignore_errors=True))
+        root = Path(directory)
+        archive = build_archive(root / "bundle.tar.gz", good_bundle)
+        staged = stage_update(archive, version="9.9.9", staging_root=root)
+        calls = []
+        apply_update(
+            staged,
+            prefix=root / "installed",
+            launcher=lambda command, cwd, stream: calls.append(command),
+        )
+        self.assertTrue(calls[0][0].endswith("bash"), calls[0][0])
+        self.assertNotEqual("/bin/sh", calls[0][0])
 
     def test_a_missing_installer_refuses_to_launch_anything(self) -> None:
         directory = tempfile.mkdtemp()

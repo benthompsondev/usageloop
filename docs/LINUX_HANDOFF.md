@@ -144,9 +144,42 @@ Only things that are genuinely unverified. Everything above was run.
 - **ARM64.** Nothing in the app blocks it. It has never been built or tested, so
   there is no artifact. `build-linux.sh` refuses unless
   `USAGELOOP_ALLOW_ANY_ARCH=1`.
+- **A real update between two published releases.** The check, download,
+  checksum verification, staging and the swap-and-relaunch were all proven on
+  this desktop against the real 62 MB archive, but there is no published Linux
+  release to update *from* yet. The first Linux release makes that testable.
 - **The website.** `docs/index.html` is still Windows-only: its schema.org
   `operatingSystem`, the meta descriptions, the hero, and the download section
   all say Windows. It was left alone deliberately rather than half-updated.
+
+## Updates on Linux
+
+Settings has the same user-initiated flow Windows has: check GitHub on button
+press, installed and available versions, concise notes, download, SHA-256
+verification, install. The differences are the artifact and the last step.
+
+- Windows looks for the fixed `UsageLoop-Setup.exe` pair. Linux looks for
+  `UsageLoop-<version>-linux-x86_64.tar.gz` and its `.sha256`, whose names come
+  from `product.linux_archive_name` so the build script and the updater cannot
+  spell them differently. Publish both platforms' pairs in the same release.
+- A release with only one platform's assets reports "no download yet" to the
+  other, not an error. Every release published so far is Windows-only, so that
+  is what a Linux user sees today.
+- Installing reuses `install.sh`: the verified archive is unpacked under the
+  app's own member validation, then the installer that shipped inside it waits
+  for the app to exit, replaces the install, and relaunches. No root, nothing
+  outside XDG directories.
+- Only an install at `${XDG_DATA_HOME:-~/.local/share}/usageloop` is replaced in
+  place. A copy running from an extracted tarball is shown the exact command
+  instead, so an update cannot quietly create a second installation.
+
+Two bugs here were found only by running it on a real desktop, not offscreen:
+the installer was being invoked with `/bin/sh`, which is dash on Ubuntu and
+mis-resolved its own directory; and the launcher was written against the
+inherited `XDG_DATA_HOME` rather than the install prefix, so one run wrote a
+launcher pointing at a different installation. Both are fixed and covered by
+tests, and `install.sh` now re-execs itself under bash and refuses to remove an
+existing install until the replacement is staged and runnable.
 
 ## What to run before release
 

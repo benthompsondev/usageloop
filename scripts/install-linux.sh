@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # Per-user install of an extracted UsageLoop Linux bundle. No root, no PATH
 # changes, nothing written outside the current user's XDG directories.
+
+# This script is bash, not POSIX sh: it uses [[ ]] and BASH_SOURCE. Under dash,
+# which is /bin/sh on Debian and Ubuntu, those degrade into a script that
+# resolves its own directory wrongly. Re-exec rather than misbehave.
+if [ -z "${BASH_VERSION:-}" ]; then
+  exec bash "$0" "$@"
+fi
+
 set -euo pipefail
 
 usage() {
   cat >&2 <<'USAGE'
-Usage: install-linux.sh [--uninstall] [--prefix DIR]
+Usage: install-linux.sh [--uninstall] [--prefix DIR] [--data-home DIR]
                        [--wait-for-pid PID] [--relaunch]
 
 Installs the bundle sitting beside this script into
@@ -16,9 +24,13 @@ and adds a launcher to
 --uninstall removes both, plus the autostart entry. It leaves your settings and
 start history in ${XDG_STATE_HOME:-~/.local/state}/usageloop untouched.
 
+--data-home decides where the launcher and icon go, and defaults to
+XDG_DATA_HOME. Pass it with --prefix so the two cannot point at different
+places; the in-app updater always passes both.
+
 --wait-for-pid waits for a running UsageLoop to exit before replacing anything,
 and --relaunch starts the new copy afterwards. UsageLoop's in-app updater passes
-both; you do not need them when installing by hand.
+all of these; you do not need any of them when installing by hand.
 USAGE
   exit 2
 }
@@ -34,6 +46,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --uninstall) uninstall=1; shift ;;
     --prefix) prefix="${2:-}"; [[ -n "$prefix" ]] || usage; shift 2 ;;
+    --data-home) data_home="${2:-}"; [[ -n "$data_home" ]] || usage; shift 2 ;;
     --wait-for-pid) wait_for_pid="${2:-}"; [[ "$wait_for_pid" =~ ^[0-9]+$ ]] || usage; shift 2 ;;
     --relaunch) relaunch=1; shift ;;
     -h|--help) usage ;;
@@ -41,6 +54,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Computed after parsing, so --data-home decides where the launcher lands
+# rather than whatever XDG_DATA_HOME the caller happened to inherit.
 launcher="$data_home/applications/usageloop.desktop"
 autostart="$config_home/autostart/usageloop.desktop"
 
@@ -82,13 +97,22 @@ if [[ -n "$wait_for_pid" ]]; then
 fi
 
 # Replace atomically enough that a failed copy cannot leave a half-installed
-# app the launcher already points at.
+# app the launcher already points at. The existing install is removed only
+# after the replacement is fully staged and verified to be runnable, so a copy
+# that fails part way leaves the working install exactly where it was.
 staging="$prefix.incoming.$$"
+cleanup() { rm -rf "$staging"; }
+trap cleanup EXIT
 rm -rf "$staging"
 mkdir -p "$(dirname "$prefix")"
 cp -a "$payload" "$staging"
+if [[ ! -x "$staging/UsageLoop" ]]; then
+  echo "The staged copy is not runnable; leaving the current install alone." >&2
+  exit 1
+fi
 rm -rf "$prefix"
 mv "$staging" "$prefix"
+trap - EXIT
 
 mkdir -p "$data_home/applications" "$data_home/icons/hicolor/256x256/apps"
 [[ -f "$prefix/_internal/usageloop.png" ]] &&

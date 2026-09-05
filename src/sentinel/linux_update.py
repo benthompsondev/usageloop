@@ -184,11 +184,17 @@ def apply_update(
         stream = log.open("wb")
     except OSError:
         stream = subprocess.DEVNULL
+    # Explicitly bash: the installer is a bash script, and /bin/sh is dash on
+    # Debian and Ubuntu, where it would resolve its own directory wrongly.
     command = [
-        "/bin/sh",
+        _bash_path(),
         os.fspath(staged.installer),
         "--prefix",
         os.fspath(target),
+        # Passed explicitly so the launcher can never be written against a
+        # different XDG_DATA_HOME than the one this install lives under.
+        "--data-home",
+        os.fspath(xdg_data_home()),
         "--wait-for-pid",
         str(os.getpid()),
         "--relaunch",
@@ -201,6 +207,17 @@ def apply_update(
     finally:
         if stream is not subprocess.DEVNULL:
             stream.close()
+
+
+def _bash_path() -> str:
+    from shutil import which
+
+    found = which("bash")
+    if found is None:
+        raise LinuxUpdateError(
+            "bash is required to install the update and was not found."
+        )
+    return found
 
 
 def _spawn_detached(command: list[str], cwd: Path, stream) -> None:
