@@ -476,6 +476,9 @@ class MainWindow(QMainWindow):
             card.sync_button.clicked.connect(
                 lambda checked=False, key=provider_id: self.start_usage_sync(key)
             )
+            card.update_button.clicked.connect(
+                lambda checked=False: self._check_updates_for_model_support()
+            )
             self.provider_cards[provider_id] = card
             provider_row.addWidget(card, 1)
         self.schedule_card = ScheduleCard()
@@ -989,6 +992,10 @@ class MainWindow(QMainWindow):
             button.setProperty("active", button_index == index)
             button.style().unpolish(button)
             button.style().polish(button)
+
+    def _check_updates_for_model_support(self) -> None:
+        self.show_page(1)
+        self.update_panel.start_model_support_check()
 
     def refresh_clock(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now

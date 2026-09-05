@@ -68,6 +68,7 @@ class UpdatePanel(QFrame):
         self.release: ReleaseInfo | None = None
         self.installer: VerifiedInstaller | None = None
         self.state = "idle"
+        self._checking_model_support = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
@@ -122,6 +123,10 @@ class UpdatePanel(QFrame):
         worker.signals.completed.connect(self._operation_completed)
         worker.signals.failed.connect(self._operation_failed)
         self.thread_pool.start(worker)
+
+    def start_model_support_check(self) -> None:
+        self._checking_model_support = True
+        self.start_check()
 
     def start_download(self) -> None:
         if self.release is None:
@@ -179,9 +184,15 @@ class UpdatePanel(QFrame):
                 return
             if result.status == "latest":
                 self.release = None
+                message = f"You are on the latest version ({PRODUCT.version})."
+                if self._checking_model_support:
+                    message += (
+                        " Support for the changed Codex model lineup may require "
+                        "a future UsageLoop update."
+                    )
                 self._set_state(
                     "latest",
-                    f"You are on the latest version ({PRODUCT.version}).",
+                    message,
                     status="success",
                 )
                 self.action_button.setText("Check again")
@@ -234,6 +245,7 @@ class UpdatePanel(QFrame):
         self.action_button.setEnabled(True)
 
     def reset(self) -> None:
+        self._checking_model_support = False
         self.release = None
         self.installer = None
         self.notes_label.clear()
