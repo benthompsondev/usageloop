@@ -31,7 +31,7 @@ your account has no five-hour window, this scheduling feature does not apply.
 
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
 
-Screenshots show v1.3.0 on Windows with synthetic usage data. The Linux build
+Screenshots show v1.3.3 on Windows with synthetic usage data. The Linux build
 runs the same UI.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
@@ -340,6 +340,13 @@ observations showing a fixed reset timestamp.
 If a request may have been sent, UsageLoop never retries it automatically.
 
 ## Get help and share feedback
+
+If a Codex update or temporary connection failure pauses compatibility, use
+**Settings > Codex connection > Recheck Codex compatibility**. A shortcut also
+appears on the Dashboard when a check is needed. Allow about 30 seconds. This
+reads usage and supported models without sending a model request, changing your
+routine, or retrying an uncertain start. If the check fails, fix the reported
+problem and recheck when ready. UsageLoop does not repeatedly retry it for you.
 
 - [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml)

@@ -200,6 +200,12 @@ def present_provider_state(
             "Nothing was retried. Diagnostics has the technical reason.",
             verified, usage, weekly, action,
         )
+    if state.status == "Checking":
+        return ProviderPresentation(
+            "CHECKING CONNECTION", "info", "Checking Codex compatibility", reset,
+            "Reading usage and supported models. No model request is sent.",
+            verified, usage, weekly, action,
+        )
     if state.status == "Starting":
         return ProviderPresentation(
             "STARTING NEXT WINDOW", "info", "Starting the next reset clock", reset,
@@ -342,7 +348,7 @@ class ProviderCard(QFrame):
         messages = {
             "idle": "",
             "syncing": "Syncing…",
-            "updated": "Updated just now",
+            "updated": "Sync complete",
             "inconclusive": "Couldn’t confirm Codex usage",
             "unavailable": "Codex not available",
         }
