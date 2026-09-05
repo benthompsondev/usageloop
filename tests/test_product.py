@@ -243,7 +243,7 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("Plan when your Codex day starts.", index)
         self.assertIn('id="weekly"', index)
         self.assertIn("screenshots/settings-weekly-expanded.png", index)
-        self.assertIn("screenshots/dashboard-1280x720.png", index)
+        self.assertIn("screenshots/dashboard-1600x900.png", index)
         for weekly_term in ("Apply Mon", "Customize individual days", "Next routine"):
             self.assertIn(weekly_term, index)
         self.assertIn("does not add quota or bypass limits", index)
