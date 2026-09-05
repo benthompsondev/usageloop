@@ -31,7 +31,7 @@ does not apply.
 
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
 
-Screenshots show v1.2.0 with synthetic usage data.
+Screenshots show v1.3.0 with synthetic usage data.
 
 - Native x64-compatible Windows app with a quiet system tray mode
 - Free and open source under the MIT license
@@ -85,6 +85,23 @@ Pause is unavailable while an operation is already running.
 
 At the resume time, the normal scheduler and safety checks take over. It is not
 a promise that a request will be sent at that moment.
+
+### Check what happened while you were away
+
+Open **Recent starts** from the Dashboard or tray to see the last ten window-start
+attempts. Each entry shows when it happened, whether it was automatic or a manual
+first start, and whether Codex confirmed the new reset clock.
+
+![Recent starts showing a confirmed start and an earlier unconfirmed attempt](docs/screenshots/recent-starts.png)
+
+An uncertain outcome stays **Not confirmed**, with an explanation of why
+UsageLoop will not retry it. **Not sent** means no start request reached Codex.
+**Refresh history** only rereads local records; it does not sync usage or send a
+request. Your existing history is available after upgrading.
+
+This is a record of start attempts, not a list of missed appointments. It does
+not invent entries for pauses, Sync, or time when the app was closed or the PC
+was asleep. A confirmed start does not guarantee that quota is still available.
 
 ## Install
 

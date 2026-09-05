@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QDateTimeEdit, QScrollArea, QWidget
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow
+from sentinel.history import SafeHistory
 from sentinel.product import PRODUCT
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult
 
@@ -65,6 +66,7 @@ def save(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
+    parser.add_argument("--interactive", action="store_true", help="Keep the synthetic app open; no provider traffic.")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
@@ -79,6 +81,14 @@ def main() -> int:
     )
     with tempfile.TemporaryDirectory() as directory:
         provider = PreviewProvider(codex)
+        provider.history = SafeHistory(Path(directory) / "history.jsonl")
+        for offset, outcome in ((-86400, "failed_guarded"), (-3 * 3600, "verified")):
+            attempt = provider.history.reserve_trigger(
+                mode="rollover", idempotency_key=f"preview:{abs(offset)}", boundary_reset_at=None,
+                model="preview", reasoning_effort="low", now=now + offset,
+            )
+            provider.history.transition_trigger(attempt.attempt_id, "launch_attempted", now=now + offset + 1)
+            provider.history.transition_trigger(attempt.attempt_id, outcome, now=now + offset + 30)
         controller = ApplicationController(
             [provider], AppStateStore(Path(directory) / "state.json")
         )
@@ -98,6 +108,13 @@ def main() -> int:
         )
         window._sync_weekly_editor()
         window.refresh_clock(now=now)
+        if args.interactive:
+            window.resize(1040, 750)
+            window.show()
+            return app.exec()
+        window.show_recent_starts()
+        save(window.recent_starts_dialog, args.output / "recent-starts.png", app)
+        window.recent_starts_dialog.close()
         for width, height in (
             (1024, 768),
             (1280, 720),

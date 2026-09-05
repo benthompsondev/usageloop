@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from .app_controller import ApplicationController
+from .activity import RecentStartsDialog
 from .app_state import (
     AppSettings,
     ProviderViewState,
@@ -481,6 +482,7 @@ class MainWindow(QMainWindow):
         self.dashboard_automation_toggle = self.schedule_card.automation_toggle
         self.schedule_card.manage_button.clicked.connect(lambda: self.show_page(1))
         self.last_action_label = self.schedule_card.last_action_label
+        self.schedule_card.history_button.clicked.connect(self.show_recent_starts)
         provider_row.addWidget(self.schedule_card, 1)
         root.addLayout(provider_row)
 
@@ -1104,6 +1106,15 @@ class MainWindow(QMainWindow):
             self.tray_tooltip_changed.emit(tooltip)
         self.presentation_changed.emit()
 
+    def show_recent_starts(self) -> None:
+        if not hasattr(self, "recent_starts_dialog"):
+            history = getattr(self.providers.get("codex"), "history", None)
+            self.recent_starts_dialog = RecentStartsDialog(history, self)
+        self.recent_starts_dialog.refresh()
+        self.recent_starts_dialog.show()
+        self.recent_starts_dialog.raise_()
+        self.recent_starts_dialog.activateWindow()
+
     def _refresh_last_automatic_start(self, *, now: float) -> None:
         history = getattr(self.providers.get("codex"), "history", None)
         if history is None:
@@ -1539,6 +1550,8 @@ class DesktopShell:
         menu.addSeparator()
         open_action = menu.addAction(f"Open {PRODUCT.display_name}")
         open_action.triggered.connect(self.restore_window)
+        self.history_action = menu.addAction("Recent starts")
+        self.history_action.triggered.connect(window.show_recent_starts)
         menu.addSeparator()
         quit_action = menu.addAction(f"Quit {PRODUCT.display_name}")
         quit_action.triggered.connect(self.quit)
