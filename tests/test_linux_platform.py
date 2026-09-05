@@ -100,7 +100,7 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
                         path_value="", known_candidates=candidates
                     )
 
-        self.assertEqual((install,), roots)
+        self.assertEqual((install.resolve(),), roots)
         self.assertEqual(bundled.resolve(), found)
 
     def test_a_launcher_that_is_something_else_is_ignored(self):
@@ -239,7 +239,7 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
 
     def test_path_is_still_searched_when_nothing_is_installed_natively(self):
         with tempfile.TemporaryDirectory() as directory:
-            shim = make_executable(Path(directory) / "codex")
+            shim = make_executable(Path(directory) / ("codex.exe" if os.name == "nt" else "codex"))
             found = find_codex_executable(path_value=directory, known_candidates=())
         self.assertEqual(shim.resolve(), found)
 
@@ -254,7 +254,7 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
             Path("/usr/lib/chatgpt/resources/codex"), "app-server", "--stdio"
         )
         self.assertEqual(
-            ["/usr/lib/chatgpt/resources/codex", "app-server", "--stdio"], command
+            [str(Path("/usr/lib/chatgpt/resources/codex")), "app-server", "--stdio"], command
         )
 
 
@@ -305,7 +305,8 @@ class XdgAutostartTests(unittest.TestCase):
 
             self.assertTrue(normalized)
             self.assertTrue(manager.is_enabled())
-            self.assertIn(str(new), manager.path.read_text(encoding="utf-8"))
+            self.assertIn(manager.command, manager.path.read_text(encoding="utf-8"))
+            self.assertEqual(str(new.resolve()), manager.executable)
 
     def test_a_stale_entry_is_removed_when_the_saved_preference_is_off(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -391,9 +392,10 @@ class HostHelperTests(unittest.TestCase):
         self.assertEqual(Path("/fallback"), resolved)
 
     def test_an_absolute_xdg_value_is_honored(self):
-        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/custom/config"}):
+        absolute = Path("custom/config").resolve()
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(absolute)}):
             resolved = xdg_home("XDG_CONFIG_HOME", Path("/fallback"))
-        self.assertEqual(Path("/custom/config"), resolved)
+        self.assertEqual(absolute, resolved)
 
     def test_a_missing_runtime_dir_is_reported_as_missing(self):
         with mock.patch.dict(os.environ, {}, clear=False):

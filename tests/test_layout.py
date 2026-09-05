@@ -61,6 +61,8 @@ def build_window(tmp_path, *, platform_name="Windows"):
     measured separately by `LinuxSettingsSurfaceTests`.
     """
     app = QApplication.instance() or QApplication([])
+    if app.style().objectName().lower() != "fusion":
+        app.setStyle("Fusion")  # Match the desktop entry point on both hosts.
     states = [ProviderViewState.waiting("codex", "Codex", installed=True)]
     providers = [StubProvider(state) for state in states]
     controller = ApplicationController(providers, AppStateStore(tmp_path / "state.json"))
@@ -288,7 +290,8 @@ class LargerUiFontTests(unittest.TestCase):
         self.settle(720, 560)
         controls = self.window.header_controls
         if self.window.trust_chip.isVisible():
-            self.assertGreaterEqual(controls.width(), controls.sizeHint().width())
+            for child in [*self.window.nav_buttons, self.window.trust_chip]:
+                self.assertTrue(controls.rect().contains(child.geometry()))
         # Whether it hid or fitted, navigation must survive either way.
         for button in self.window.nav_buttons:
             self.assertTrue(button.isVisible())
@@ -440,9 +443,17 @@ class LinuxSettingsSurfaceTests(unittest.TestCase):
                     self.window.settings_top_row,
                     self.window.settings_bottom_row,
                 ):
-                    self.assertLessEqual(
-                        row.sizeHint().width(), self.window.width()
-                    )
+                    # A word-wrapped label's preferred width is not its
+                    # rendered width, and varies with the host's fonts.
+                    self.assertLessEqual(row.width(), self.window.pages.widget(1).viewport().width())
+                    for index in range(row.layout().count()):
+                        card = row.layout().itemAt(index).widget()
+                        self.assertTrue(row.rect().contains(card.geometry()))
+                        for label in card.findChildren(QLabel):
+                            if label.isVisible():
+                                position = label.mapTo(card, label.rect().topLeft())
+                                self.assertGreaterEqual(position.x(), 0)
+                                self.assertLessEqual(position.x() + label.width(), card.width())
 
 
 class FooterTests(unittest.TestCase):
