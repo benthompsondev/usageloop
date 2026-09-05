@@ -346,6 +346,19 @@ class ProviderAdapterTests(unittest.TestCase):
         self.assertFalse(result.compatible)
         self.assertEqual("Needs attention", result.status)
 
+    def test_missing_lightweight_model_explains_that_no_request_was_sent(self):
+        result = CompatibilityResult.from_capabilities(
+            runtime_identity="codex-file:new", initialized=True,
+            rate_limits_available=True, model_catalog_available=True,
+            suitable_model_available=False,
+        )
+
+        self.assertFalse(result.compatible)
+        self.assertIn("Automatic starts are paused", result.detail)
+        self.assertIn("No Codex request was sent", result.detail)
+        self.assertIn("will not use a higher-cost model", result.detail)
+        self.assertIn("Check for updates", result.detail)
+
 
 if __name__ == "__main__":
     unittest.main()

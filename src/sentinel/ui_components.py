@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
 from .history import SafeHistory, HistoryStateError
+from .providers import LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL
 from .schedule import (
     DAILY,
     FIVE_HOUR_WINDOW_SECONDS,
@@ -188,6 +189,12 @@ def present_provider_state(
         verified = "Not checked yet"
 
     if state.status == "Needs attention":
+        if state.detail == LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL:
+            return ProviderPresentation(
+                "AUTOMATIC STARTS PAUSED", "error",
+                "No supported lightweight Codex model", reset,
+                state.detail, verified, usage, weekly, action,
+            )
         return ProviderPresentation(
             "NEEDS ATTENTION", "error", "A safe check needs attention", reset,
             "Nothing was retried. Diagnostics has the technical reason.",
@@ -278,6 +285,10 @@ class ProviderCard(QFrame):
         self.detail_label.setObjectName("detail")
         self.detail_label.setWordWrap(True)
         layout.addWidget(self.detail_label)
+        self.update_button = QPushButton("Check for updates")
+        self.update_button.setObjectName("secondaryButton")
+        self.update_button.setVisible(False)
+        layout.addWidget(self.update_button, 0, Qt.AlignmentFlag.AlignLeft)
 
         rule = QFrame()
         rule.setObjectName("cardRule")
@@ -320,6 +331,9 @@ class ProviderCard(QFrame):
         self.countdown_label.setText(presented.headline)
         self.reset_label.setText(presented.reset)
         self.detail_label.setText(presented.detail)
+        self.update_button.setVisible(
+            state.detail == LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL
+        )
         self.metadata_label.setText(presented.verified)
         self.usage_label.setText(presented.usage)
         self.usage_bar.setValue(int(state.used_percent or 0))

@@ -44,7 +44,13 @@ from sentinel.ui_components import (
     weekly_schedule_preview,
 )
 from sentinel.ui_theme import TOKENS
-from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateError, VerifiedInstaller
+from sentinel.updates import (
+    ReleaseAsset,
+    ReleaseInfo,
+    UpdateCheckResult,
+    UpdateError,
+    VerifiedInstaller,
+)
 
 
 class FakeProvider:
@@ -1060,6 +1066,59 @@ class DesktopTests(unittest.TestCase):
         self.assertIn("XDG state", window.update_notice_label.text())
         # The card still occupies the same slot, so Settings keeps its layout.
         self.assertEqual(2, window.settings_bottom_row.layout().count())
+
+    def test_missing_lightweight_model_surfaces_manual_update_check(self):
+        class CurrentUpdater:
+            def __init__(self):
+                self.check_calls = 0
+
+            def check(self):
+                self.check_calls += 1
+                return UpdateCheckResult("latest")
+
+        state = ProviderViewState(
+            "codex", "Codex", True, False, "Needs attention",
+            "No supported lightweight trigger model and reasoning level are available. "
+            "Automatic starts are paused. No Codex request was sent because UsageLoop "
+            "will not use a higher-cost model. Check for updates because Codex's model "
+            "lineup may have changed.",
+            runtime_identity="runtime:changed",
+        )
+        updater = CurrentUpdater()
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        provider = FakeProvider(state)
+        controller = ApplicationController(
+            [provider], AppStateStore(Path(temporary.name) / "state.json")
+        )
+        controller.start()
+        window = MainWindow(
+            controller,
+            {state.provider_id: provider},
+            FakeStartup(),
+            updater=updater,
+            confirm_enable=lambda: True,
+            confirm_bootstrap=lambda: True,
+            platform_name="Windows",
+        )
+        self.addCleanup(window.close)
+        window.update_panel.thread_pool = FakeThreadPool()
+
+        card = window.provider_cards["codex"]
+        self.assertEqual("AUTOMATIC STARTS PAUSED", card.status_label.text())
+        self.assertIn("No Codex request was sent", card.detail_label.text())
+        self.assertFalse(card.update_button.isHidden())
+
+        card.update_button.click()
+        self.assertEqual(1, window.pages.currentIndex())
+        self.assertEqual(1, len(window.update_panel.thread_pool.workers))
+        window.update_panel.thread_pool.workers[0].run()
+        self.app.processEvents()
+
+        self.assertEqual(1, updater.check_calls)
+        self.assertIn("future UsageLoop update", window.update_panel.state_label.text())
+        self.assertEqual(0, provider.probe_calls)
+        self.assertEqual(0, provider.action_calls)
 
     def _prepare_install(self, window, updater):
         window.update_panel.updater = updater

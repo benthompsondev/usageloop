@@ -172,6 +172,16 @@ class UpdatePanelTests(unittest.TestCase):
         self.assertEqual("Try again", panel.action_button.text())
         self.assertIn("GitHub could not be reached", panel.state_label.text())
 
+    def test_model_support_check_does_not_promise_a_future_update(self) -> None:
+        panel = self.make_panel()
+        with patch.object(panel, "start_check") as start_check:
+            panel.start_model_support_check()
+        start_check.assert_called_once_with()
+        panel._operation_completed("check", UpdateCheckResult("latest"))
+
+        self.assertIn("may require a future UsageLoop update", panel.state_label.text())
+        self.assertNotIn("will require", panel.state_label.text())
+
 
 if __name__ == "__main__":
     unittest.main()

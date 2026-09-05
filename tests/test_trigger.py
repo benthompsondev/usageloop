@@ -72,75 +72,52 @@ def rejected(code):
 
 
 class ModelSelectionTests(unittest.TestCase):
-    def test_selects_visible_default_model_and_its_advertised_effort(self):
-        choice = select_trigger_model(LIVE_CATALOG)
-        self.assertEqual(ModelChoice("gpt-5.6-sol", "low", True), choice)
+    def test_prefers_luna_over_astra_default_and_catalog_order(self):
+        catalog = [catalog_entry("gpt-6-astra", default=True)] + LIVE_CATALOG
+        self.assertEqual(ModelChoice("gpt-5.6-luna", "low", False), select_trigger_model(catalog))
+        self.assertEqual(select_trigger_model(catalog), select_trigger_model(list(reversed(catalog))))
 
-    def test_excludes_superseded_models_carrying_an_upgrade_pointer(self):
-        catalog = [
-            catalog_entry("gpt-5.4-mini", default=True, upgrade="gpt-5.6-luna"),
-            catalog_entry("gpt-5.6-luna", default=True),
-        ]
-        choice = select_trigger_model(catalog)
-        self.assertIsNotNone(choice)
-        self.assertEqual("gpt-5.6-luna", choice.model)
+    def test_defaults_are_irrelevant_even_when_multiple_or_missing(self):
+        for default in (False, True):
+            catalog = [catalog_entry("gpt-6-astra", default=default), catalog_entry("gpt-5.6-luna", default=default)]
+            self.assertEqual("gpt-5.6-luna", select_trigger_model(catalog).model)
 
-    def test_excludes_hidden_models(self):
-        catalog = [
-            catalog_entry("hidden-default", default=True, hidden=True),
-            catalog_entry("visible", default=True),
-        ]
-        self.assertEqual("visible", select_trigger_model(catalog).model)
+    def test_only_falls_back_to_current_visible_mini(self):
+        for problem in ({"hidden": True}, {"upgrade": "gpt-7-unknown"}, {"upgradeInfo": {"model": "gpt-7-unknown"}}):
+            luna = catalog_entry("gpt-5.6-luna") | problem
+            catalog = [luna, catalog_entry("gpt-5.4-mini"), catalog_entry("gpt-6-astra", default=True)]
+            self.assertEqual("gpt-5.4-mini", select_trigger_model(catalog).model)
+        self.assertIsNone(select_trigger_model([catalog_entry("gpt-5.4-mini", upgrade="gpt-5.6-luna")]))
 
-    def test_refuses_to_guess_when_no_model_is_marked_default(self):
-        catalog = [catalog_entry("first"), catalog_entry("second")]
-        self.assertIsNone(select_trigger_model(catalog))
+    def test_never_follows_unknown_successor_or_expensive_default(self):
+        for catalog in (
+            [catalog_entry("gpt-6-astra", default=True)],
+            [catalog_entry("gpt-5.6-sol", default=True)],
+            [catalog_entry("gpt-5.6-luna", upgrade="gpt-7-luna"), catalog_entry("gpt-7-luna", default=True)],
+        ):
+            self.assertIsNone(select_trigger_model(catalog))
 
-    def test_refuses_ambiguous_multiple_default_models(self):
-        catalog = [
-            catalog_entry("first", default=True),
-            catalog_entry("second", default=True),
-        ]
-        self.assertIsNone(select_trigger_model(catalog))
+    def test_minimum_advertised_effort_not_catalog_order_or_default(self):
+        for efforts, expected in ((("high", "none", "low"), "none"), (("low", "minimal"), "minimal"), (("high", "medium"), "medium"), (("low", "medium"), "low")):
+            entry = catalog_entry("gpt-5.6-luna", efforts=efforts, default_effort="high")
+            self.assertEqual(expected, select_trigger_model([entry]).reasoning_effort)
 
-    def test_returns_none_when_every_model_is_superseded_or_hidden(self):
-        catalog = [
-            catalog_entry("old", default=True, upgrade="new"),
-            catalog_entry("secret", hidden=True),
-        ]
-        self.assertIsNone(select_trigger_model(catalog))
+    def test_ambiguous_or_missing_effort_fails_closed(self):
+        for efforts in ([], [{"reasoningEffort": "future"}], "low", None):
+            entry = catalog_entry("gpt-5.6-luna")
+            entry["supportedReasoningEfforts"] = efforts
+            self.assertIsNone(select_trigger_model([entry]))
+        self.assertIsNone(select_trigger_model([catalog_entry("gpt-5.6-luna")] * 2))
 
-    def test_effort_falls_back_when_default_effort_is_not_advertised(self):
-        catalog = [catalog_entry("m", default=True, efforts=("medium",), default_effort="low")]
-        self.assertEqual("medium", select_trigger_model(catalog).reasoning_effort)
+    def test_text_support_and_model_slug_are_checked(self):
+        entry = catalog_entry("picker-luna") | {"model": "gpt-5.6-luna", "inputModalities": ["text"]}
+        self.assertEqual("gpt-5.6-luna", select_trigger_model([entry]).model)
+        entry["inputModalities"] = ["image"]
+        self.assertIsNone(select_trigger_model([entry]))
 
-    def test_prefers_low_effort_when_runtime_default_is_higher(self):
-        catalog = [catalog_entry("m", default=True, efforts=("low", "medium"), default_effort="medium")]
-        self.assertEqual("low", select_trigger_model(catalog).reasoning_effort)
-
-    def test_effort_is_none_when_runtime_advertises_none(self):
-        catalog = [catalog_entry("m", default=True, efforts=(), default_effort=None)]
-        self.assertIsNone(select_trigger_model(catalog).reasoning_effort)
-
-    def test_omits_effort_instead_of_guessing_from_changed_order(self):
-        catalog = [
-            catalog_entry(
-                "m",
-                default=True,
-                efforts=("high", "medium"),
-                default_effort=None,
-            )
-        ]
-        self.assertIsNone(select_trigger_model(catalog).reasoning_effort)
-
-    def test_ignores_malformed_catalog_entries(self):
-        catalog = [
-            "nonsense",
-            {"id": 5},
-            {"id": "bad name!"},
-            catalog_entry("good", default=True),
-        ]
-        self.assertEqual("good", select_trigger_model(catalog).model)
+    def test_ignores_malformed_entries(self):
+        catalog = [None, "nonsense", {"id": 5}, {"id": "bad name!"}, catalog_entry("gpt-5.6-luna")]
+        self.assertEqual("gpt-5.6-luna", select_trigger_model(catalog).model)
 
 
 class TriggerParameterTests(unittest.TestCase):
@@ -163,7 +140,8 @@ class TriggerParameterTests(unittest.TestCase):
                 "approvalPolicy": "never",
                 "cwd": str(self.workspace),
                 "config": {"mcp_servers": {}},
-                "model": "gpt-5.6-sol",
+                "model": "gpt-5.6-luna",
+                "serviceTier": "default",
             },
             client.thread_params,
         )
@@ -177,20 +155,21 @@ class TriggerParameterTests(unittest.TestCase):
         client = FakeClient()
         self.trigger(client).run()
         self.assertEqual("thread-1", client.turn_params["threadId"])
-        self.assertEqual([{"type": "text", "text": "ok"}], client.turn_params["input"])
+        self.assertEqual([{"type": "text", "text": "Reply only OK. Do not use tools."}], client.turn_params["input"])
         self.assertEqual("low", client.turn_params["effort"])
         self.assertEqual("codex-window-sentinel", client.turn_params["turnTrigger"])
 
-    def test_turn_omits_effort_when_runtime_advertises_none(self):
-        client = FakeClient(catalog=[catalog_entry("m", default=True, efforts=(), default_effort=None)])
+    def test_unknown_effort_refuses_before_thread_or_turn(self):
+        client = FakeClient(catalog=[catalog_entry("gpt-5.6-luna", default=True, efforts=(), default_effort=None)])
         self.trigger(client).run()
-        self.assertNotIn("effort", client.turn_params)
+        self.assertIsNone(client.thread_params)
+        self.assertEqual(0, client.turn_calls)
 
     def test_description_reports_resolved_model_not_a_persisted_name(self):
         client = FakeClient()
         description = self.trigger(client).describe()
         self.assertEqual("app_server_turn", description.mechanism)
-        self.assertEqual("gpt-5.6-sol", description.model)
+        self.assertEqual("gpt-5.6-luna", description.model)
         self.assertEqual("low", description.reasoning_effort)
 
     def test_description_never_leaks_prompt_contents(self):

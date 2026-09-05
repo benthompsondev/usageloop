@@ -154,9 +154,9 @@ def _describe_trigger_model(session: RuntimeSession) -> str:
     except Exception:
         return "unavailable (model/list failed)"
     if choice is None:
-        return "none usable (every visible model is superseded)"
+        return "none usable (no supported lightweight model/effort; no default fallback)"
     effort = choice.reasoning_effort or "provider default"
-    return f"{choice.model} / {effort}"
+    return f"{choice.model} / {effort} / standard service (lightweight preference; no default fallback)"
 
 
 def run_status(*, json_output: bool) -> int:
@@ -418,7 +418,8 @@ def _format_chain(result: ChainResult) -> str:
         f"Request possibly sent: {'yes' if result.request_possibly_sent else 'no'}",
         f"Classifier: {result.classification.state} ({result.classification.confidence})",
         "Trigger: one app-server turn (thread/start + turn/start)",
-        f"Model/reasoning: {description.model} / {description.reasoning_effort} (resolved from model/list)",
+        f"Model/reasoning: {description.model} / {description.reasoning_effort} (live lightweight preference; no default fallback)",
+        "Service: standard (no Fast mode)",
         f"Minimal input: {description.prompt_characters} characters (contents are not logged)",
     ]
     if result.terminal_outcome is not None:

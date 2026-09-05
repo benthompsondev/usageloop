@@ -27,7 +27,7 @@ UNRESOLVED_MODEL = "unresolved"
 
 @dataclass(frozen=True)
 class TriggerConfig:
-    prompt: str = "ok"
+    prompt: str = "Reply only OK. Do not use tools."
     turn_timeout_seconds: float = 90.0
     turn_trigger: str = "codex-window-sentinel"
 
@@ -101,7 +101,7 @@ class AppServerTrigger:
     def thread_parameters(self, choice: ModelChoice) -> dict:
         # `allowProviderModelFallback` is deliberately absent: it requires the
         # `experimentalApi` capability that Sentinel opts out of, and the
-        # resolved model is already a current non-superseded default.
+        # resolved model is already a current non-superseded lightweight model.
         return {
             "ephemeral": True,
             "sandbox": "read-only",
@@ -109,6 +109,7 @@ class AppServerTrigger:
             "cwd": str(self.workspace),
             "config": {"mcp_servers": {}},
             "model": choice.model,
+            "serviceTier": "default",
         }
 
     def turn_parameters(self, thread_id: str, choice: ModelChoice) -> dict:

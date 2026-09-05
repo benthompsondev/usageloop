@@ -20,6 +20,13 @@ ExecutableFinder = Callable[[], Path | None]
 IdentityReader = Callable[[Path], str]
 VersionReader = Callable[[Path], str | None]
 
+LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL = (
+    "No supported lightweight trigger model and reasoning level are available. "
+    "Automatic starts are paused. No Codex request was sent because UsageLoop "
+    "will not use a higher-cost model. Check for updates because Codex's model "
+    "lineup may have changed."
+)
+
 
 @dataclass(frozen=True)
 class CompatibilityResult:
@@ -49,6 +56,13 @@ class CompatibilityResult:
                 True,
                 "Waiting",
                 "Compatibility check passed. The guarded Codex path will be used.",
+                runtime_identity,
+            )
+        if initialized and rate_limits_available is True and model_catalog_available and not suitable_model_available:
+            return cls(
+                False,
+                "Needs attention",
+                LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL,
                 runtime_identity,
             )
         return cls(

@@ -87,6 +87,8 @@ class TriggerAttempt:
     state: str
     created_at: float
     updated_at: float
+    model: str | None = None
+    reasoning_effort: str | None = None
 
 
 class SafeHistory:
@@ -175,6 +177,8 @@ class SafeHistory:
             state="reserved",
             created_at=float(now),
             updated_at=float(now),
+            model=model if _SAFE_MODEL.fullmatch(model) else "unknown",
+            reasoning_effort=reasoning_effort if _SAFE_REASONING.fullmatch(reasoning_effort) else "unknown",
         )
         self._append(
             {
@@ -187,10 +191,8 @@ class SafeHistory:
                 "idempotency_key": idempotency_key,
                 "boundary_reset_at": attempt.boundary_reset_at,
                 "state": "reserved",
-                "model": model if _SAFE_MODEL.fullmatch(model) else "unknown",
-                "reasoning_effort": (
-                    reasoning_effort if _SAFE_REASONING.fullmatch(reasoning_effort) else "unknown"
-                ),
+                "model": attempt.model,
+                "reasoning_effort": attempt.reasoning_effort,
             }
         )
         return attempt
@@ -266,6 +268,8 @@ class SafeHistory:
                     state,
                     float(occurred_at),
                     float(occurred_at),
+                    _optional_safe_text(row.get("model"), _SAFE_MODEL),
+                    _optional_safe_text(row.get("reasoning_effort"), _SAFE_REASONING),
                 )
             elif attempt_id not in attempts:
                 raise HistoryIntegrityError()
@@ -409,6 +413,10 @@ class SafeHistory:
             elif strict:
                 raise HistoryIntegrityError()
         return rows
+
+
+def _optional_safe_text(value: Any, pattern: re.Pattern) -> str | None:
+    return value if isinstance(value, str) and pattern.fullmatch(value) else None
 
 
 def default_history_path() -> Path:

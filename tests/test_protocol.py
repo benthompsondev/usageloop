@@ -53,6 +53,30 @@ def messages():
 
 
 class AppServerProtocolTests(unittest.TestCase):
+    def test_model_list_reads_all_pages_without_starting_a_turn(self):
+        transport = MemoryTransport([
+            messages()["initialize_result"],
+            {"id": 2, "result": {"data": [{"id": "gpt-6-astra"}], "nextCursor": "second"}},
+            {"id": 3, "result": {"data": [{"id": "gpt-5.6-luna"}], "nextCursor": None}},
+        ])
+        client = AppServerClient(transport, client_version="test")
+        client.initialize()
+        self.assertEqual(["gpt-6-astra", "gpt-5.6-luna"], [m["id"] for m in client.list_models()])
+        self.assertEqual({"cursor": "second"}, transport.sent[-1]["params"])
+        self.assertEqual(["initialize", "initialized", "model/list", "model/list"], [m["method"] for m in transport.sent])
+
+    def test_model_list_rejects_repeated_or_malformed_cursor(self):
+        for cursor in ("second", 3, ""):
+            transport = MemoryTransport([
+                messages()["initialize_result"],
+                {"id": 2, "result": {"data": [], "nextCursor": "second"}},
+                {"id": 3, "result": {"data": [], "nextCursor": cursor}},
+            ])
+            client = AppServerClient(transport, client_version="test")
+            client.initialize()
+            with self.assertRaises(AppServerProtocolError):
+                client.list_models()
+
     def test_initialization_uses_current_handshake_and_redacts_codex_home(self):
         fixture = messages()
         transport = MemoryTransport([fixture["initialize_result"]])
