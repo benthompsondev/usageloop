@@ -85,9 +85,14 @@ def _safe_member_path(name: str) -> Path:
 
 
 def _check_symlink(member: tarfile.TarInfo, relative: Path) -> None:
-    """Allow the Qt library aliases, refuse anything that leaves the bundle."""
+    """Allow the Qt library aliases, refuse anything that leaves the bundle.
+
+    Tar member paths are POSIX whatever host reads them, so a leading slash is
+    tested directly. `Path.is_absolute` would answer False for "/etc/passwd" on
+    Windows and classify it as a traversal instead of what it is.
+    """
     target = member.linkname
-    if not target or Path(target).is_absolute():
+    if not target or target.startswith("/") or Path(target).is_absolute():
         raise _rejected("it contained an absolute link")
     resolved = os.path.normpath(os.path.join(str(relative.parent), target))
     if resolved.startswith("..") or os.path.isabs(resolved):

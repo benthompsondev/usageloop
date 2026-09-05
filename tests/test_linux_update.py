@@ -30,6 +30,11 @@ from sentinel.product import PRODUCT
 BUNDLE = PRODUCT.linux_bundle_name("9.9.9")
 
 
+def _is_bash(command: str) -> bool:
+    """Git for Windows resolves bash to bash.EXE, so compare on the stem."""
+    return Path(command).stem.lower() == "bash"
+
+
 def add_file(archive: tarfile.TarFile, name: str, data: bytes = b"x", mode: int = 0o644) -> None:
     info = tarfile.TarInfo(name)
     info.size = len(data)
@@ -75,7 +80,8 @@ class ExtractionHardeningTests(unittest.TestCase):
         bundle = self.extract(good_bundle)
         executable = bundle / PRODUCT.dist_folder_name / PRODUCT.dist_folder_name
         self.assertTrue(executable.is_file())
-        self.assertTrue(os.access(executable, os.X_OK))
+        if os.name != "nt":
+            self.assertTrue(os.access(executable, os.X_OK))
         link = bundle / PRODUCT.dist_folder_name / "_internal" / "libQt6Core.so.6"
         self.assertTrue(link.is_symlink())
         self.assertEqual("PySide6/Qt/lib/libQt6Core.so.6", os.readlink(link))
@@ -167,7 +173,9 @@ class StagingTests(unittest.TestCase):
         staged = self.stage(good_bundle)
         self.assertTrue(staged.executable.is_file())
         self.assertTrue(staged.installer.is_file())
-        self.assertTrue(os.stat(staged.installer).st_mode & stat.S_IXUSR)
+        if os.name != "nt":
+            # Windows has no execute bit for the chmod to set.
+            self.assertTrue(os.stat(staged.installer).st_mode & stat.S_IXUSR)
 
     def test_a_bundle_without_a_runnable_app_is_refused(self) -> None:
         def populate(archive):
@@ -220,7 +228,7 @@ class ApplyTests(unittest.TestCase):
         # a different installation entirely.
         self.assertIn("--data-home", command)
         self.assertEqual(staged.bundle, cwd)
-        self.assertTrue(command[0].endswith("bash"), command[0])
+        self.assertTrue(_is_bash(command[0]), command[0])
 
     def test_the_installer_runs_under_bash_not_plain_sh(self) -> None:
         # install.sh uses [[ ]] and BASH_SOURCE. Under dash, which is /bin/sh on
@@ -237,7 +245,7 @@ class ApplyTests(unittest.TestCase):
             prefix=root / "installed",
             launcher=lambda command, cwd, stream: calls.append(command),
         )
-        self.assertTrue(calls[0][0].endswith("bash"), calls[0][0])
+        self.assertTrue(_is_bash(calls[0][0]), calls[0][0])
         self.assertNotEqual("/bin/sh", calls[0][0])
 
     def test_a_missing_installer_refuses_to_launch_anything(self) -> None:
