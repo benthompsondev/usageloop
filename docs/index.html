@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UsageLoop for Codex | Plan when your Codex day starts</title>
-  <meta name="description" content="UsageLoop is a local-first Windows app that starts your next Codex 5-hour window on a schedule you choose, including separate weekday and weekend times. It does not add quota or bypass limits.">
+  <meta name="description" content="UsageLoop is a local-first desktop app for Windows and Linux that starts your next Codex 5-hour window on a schedule you choose, including separate weekday and weekend times. It does not add quota or bypass limits.">
   <link rel="canonical" href="https://benthompsondev.github.io/usageloop/">
   <meta name="theme-color" content="#08131f">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="UsageLoop">
   <meta property="og:title" content="UsageLoop for Codex">
-  <meta property="og:description" content="Plan when your Codex day starts. Set weekday and weekend first-start times, keep windows rolling, and pause overnight. Local-first for Windows, no API key or telemetry.">
+  <meta property="og:description" content="Plan when your Codex day starts. Set weekday and weekend first-start times, keep windows rolling, and pause overnight. Local-first for Windows and Linux, no API key or telemetry.">
   <meta property="og:url" content="https://benthompsondev.github.io/usageloop/">
   <meta property="og:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1600x900.png">
   <meta property="og:image:width" content="1600">
@@ -19,7 +19,7 @@
   <meta property="og:image:alt" content="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="UsageLoop for Codex">
-  <meta name="twitter:description" content="Plan when your Codex day starts. Weekday and weekend start times, rolling windows, overnight pause. Local-first, no API key or telemetry.">
+  <meta name="twitter:description" content="Plan when your Codex day starts. Weekday and weekend start times, rolling windows, overnight pause. Local-first for Windows and Linux, no API key or telemetry.">
   <meta name="twitter:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1600x900.png">
 
   <link rel="icon" href="favicon.ico" sizes="any">
@@ -31,13 +31,13 @@
     "@type": "SoftwareApplication",
     "name": "UsageLoop",
     "alternateName": "UsageLoop for Codex",
-    "description": "A local-first Windows app that starts your next Codex 5-hour window on a schedule you choose, including separate weekday and weekend first-start times, with rolling daytime windows and an overnight pause. It does not add quota or bypass limits.",
+    "description": "A local-first desktop app for Windows and Linux that starts your next Codex 5-hour window on a schedule you choose, including separate weekday and weekend first-start times, with rolling daytime windows and an overnight pause. It does not add quota or bypass limits.",
     "applicationCategory": "UtilitiesApplication",
-    "operatingSystem": "Windows",
+    "operatingSystem": ["Windows", "Linux"],
     "isAccessibleForFree": true,
     "license": "https://github.com/benthompsondev/usageloop/blob/main/LICENSE",
     "url": "https://benthompsondev.github.io/usageloop/",
-    "downloadUrl": "https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe",
+    "downloadUrl": "https://github.com/benthompsondev/usageloop/releases/latest",
     "codeRepository": "https://github.com/benthompsondev/usageloop",
     "image": "https://benthompsondev.github.io/usageloop/screenshots/dashboard-1600x900.png",
     "author": {
@@ -68,15 +68,15 @@
   <main id="main">
     <section class="hero" id="top" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow">Local-first Codex window scheduler for Windows</p>
+        <p class="eyebrow">Local-first Codex window scheduler for Windows and Linux</p>
         <h1 id="hero-title">Plan when your Codex day starts.</h1>
         <p class="lede">If your Codex account has a 5-hour usage window, UsageLoop can start its next reset clock with one small request at a time you choose. Set weekday and weekend times so the clock is already running when you sit down.</p>
         <p class="boundary"><strong>It does not add quota or bypass limits.</strong> It starts the normal next window you were going to receive anyway.</p>
         <div class="hero-actions">
-          <a class="button primary" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download for Windows</a>
+          <a class="button primary" href="#download">Download</a>
           <a class="button secondary" href="https://github.com/benthompsondev/usageloop">View on GitHub</a>
         </div>
-        <p class="small">Free, open source. Requires signed-in Codex and an awake PC with UsageLoop running. The installer is unsigned; <a href="#download">read the download guidance</a>.</p>
+        <p class="small">Free and open source, for Windows and Linux. Requires signed-in Codex and an awake computer with UsageLoop running. <a href="#download">Pick your download</a>.</p>
         <ul class="trust-list" aria-label="UsageLoop trust highlights">
           <li>No API key</li>
           <li>No telemetry</li>
@@ -110,7 +110,7 @@
         <li>Shows the current 5-hour countdown, reset time, and last-known usage.</li>
         <li>Shows weekly usage and blocks automatic starts when the weekly limit is nearly exhausted.</li>
         <li>Starts the next window one of three ways: <strong>as soon as the current one resets</strong>, <strong>at a set time each day</strong>, or on a <strong>weekly routine</strong> with its own time per day.</li>
-        <li>Catches up once after sleep, restart, or your next Windows sign-in.</li>
+        <li>Catches up once after sleep, restart, or your next sign-in.</li>
       </ul>
     </section>
 
@@ -144,7 +144,7 @@
       <div class="boundary-grid">
         <p><strong>No quota tricks.</strong><br>It cannot add quota, bypass a limit, or make Codex ignore one.</p>
         <p><strong>No private-data access.</strong><br>It does not read credentials, prompts, responses, conversations, or account identifiers.</p>
-        <p><strong>No hidden service.</strong><br>It does not need an API key, administrator rights, a cloud account, or a Windows service.</p>
+        <p><strong>No hidden service.</strong><br>It does not need an API key, administrator rights, root, a cloud account, or a background system service.</p>
         <p><strong>No tracking.</strong><br>It does not scrape the Codex interface, upload local data, or send telemetry.</p>
       </div>
     </section>
@@ -152,17 +152,31 @@
     <section class="section download" id="download" aria-labelledby="download-title">
       <div>
         <p class="section-number">05</p>
-        <h2 id="download-title">Download for Windows</h2>
-        <p>UsageLoop needs an x64-compatible Windows PC and the Codex desktop app or CLI already installed and signed in.</p>
+        <h2 id="download-title">Download</h2>
+        <p>Either build needs the Codex desktop app or CLI already installed and signed in. Both are 64-bit Intel or AMD.</p>
       </div>
-      <div class="download-panel">
-        <a class="button primary wide" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download UsageLoop</a>
-        <div class="download-links">
-          <a href="https://github.com/benthompsondev/usageloop/releases/latest">Release notes</a>
-          <a href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256">SHA-256 checksum</a>
+      <div class="download-choices">
+        <div class="download-panel">
+          <p class="panel-title">Windows</p>
+          <p class="panel-note">An x64-compatible Windows PC. The installer is per-user and needs no administrator rights.</p>
+          <a class="button primary wide" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download the installer</a>
+          <div class="download-links">
+            <a href="https://github.com/benthompsondev/usageloop/releases/latest">Release notes</a>
+            <a href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256">SHA-256 checksum</a>
+          </div>
+          <p class="small"><strong>The installer is currently unsigned.</strong> Windows may show “Unknown publisher.” Download it only from the GitHub release and verify the checksum. If your organization blocks unsigned software, do not bypass that policy.</p>
         </div>
-        <p class="small"><strong>The installer is currently unsigned.</strong> Windows may show “Unknown publisher.” Download it only from the GitHub release and verify the checksum. If your organization blocks unsigned software, do not bypass that policy.</p>
-        <p class="small"><a href="https://github.com/benthompsondev/usageloop#install">Checksum commands and installation steps</a>. Already installed? Open Settings, scroll to Updates, and choose Check for updates. Updates are manual.</p>
+        <div class="download-panel">
+          <p class="panel-title">Linux</p>
+          <p class="panel-note">An x86_64 Linux desktop with a graphical session. Installing is per-user and needs no root.</p>
+          <a class="button primary wide" href="https://github.com/benthompsondev/usageloop/releases/latest">Get the Linux archive</a>
+          <div class="download-links">
+            <a href="https://github.com/benthompsondev/usageloop/releases/latest">Release notes</a>
+            <a href="https://github.com/benthompsondev/usageloop#linux">Install steps</a>
+          </div>
+          <p class="small">The archive is named <code>UsageLoop-&lt;version&gt;-linux-x86_64.tar.gz</code> with its <code>.sha256</code> beside it, so the download link goes to the release rather than a fixed filename. Verify the checksum, extract, then run <code>./install.sh</code> to add it to your application menu, or run it straight from the extracted folder.</p>
+          <p class="small">Tested on Ubuntu with GNOME. Other desktops should work but have not been checked. There is no ARM64 build.</p>
+        </div>
       </div>
     </section>
 
@@ -173,8 +187,8 @@
         <h2 id="privacy-title">Local-first by design</h2>
       </div>
       <div class="prose">
-        <p>Codex owns authentication and network communication. UsageLoop talks to the installed Codex app-server locally and stores only the timing, usage, reset, and safe state needed to do its job.</p>
-        <p>Automation and Windows startup are off on a new install. The source is public, releases include a checksum, and the Windows test and packaging workflow is visible on GitHub.</p>
+        <p>Codex owns authentication and network communication. UsageLoop talks to the installed Codex app-server locally and stores only the timing, usage, reset, and safe state needed to do its job. On Windows that state lives in your local app data, on Linux in your XDG state directory.</p>
+        <p>Automation and start-at-sign-in are off on a new install. The source is public, every release includes a checksum, and the test and packaging workflows for both platforms are visible on GitHub.</p>
         <p><a href="https://github.com/benthompsondev/usageloop#privacy-and-trust">Read the privacy and trust details</a> or <a href="https://github.com/benthompsondev/usageloop/security">report a vulnerability privately</a>.</p>
       </div>
     </section>
@@ -199,7 +213,7 @@
       <div class="faq-list">
         <details>
           <summary>Who is this useful for?</summary>
-          <p>Windows Codex users whose account shows a 5-hour window and who want its next reset earlier in their workday. If your account only shows a weekly limit, the 5-hour scheduling feature does not apply. OpenAI controls the limits and can change their behavior.</p>
+          <p>Codex users on Windows or Linux whose account shows a 5-hour window and who want its next reset earlier in their workday. If your account only shows a weekly limit, the 5-hour scheduling feature does not apply. OpenAI controls the limits and can change their behavior.</p>
         </details>
         <details>
           <summary>Does starting a window use my allowance?</summary>
@@ -210,12 +224,20 @@
           <p>No. It cannot add quota or bypass either limit. It can only start the normal next 5-hour window after the current one ends.</p>
         </details>
         <details>
+          <summary>How do updates work?</summary>
+          <p>Only when you ask. Open Settings, choose Check for updates, and UsageLoop asks GitHub once, shows what changed, downloads the file for your platform, and checks its SHA-256 against the published checksum before installing anything. Checking and updating never send a Codex request. On Linux, a copy installed with <code>install.sh</code> can update itself in place; a portable copy you run from an extracted folder is left alone and shown the command to run instead.</p>
+        </details>
+        <details>
+          <summary>Does it need root or administrator rights on Linux?</summary>
+          <p>No. The Linux install is per-user: the app goes in your XDG data directory, the launcher in your own application menu, and nothing outside your home directory is touched. Removing it is <code>./install.sh --uninstall</code>, which leaves your settings and start history in place.</p>
+        </details>
+        <details>
           <summary>Does it need my API key or Codex credentials?</summary>
           <p>No. UsageLoop uses your installed, already signed-in Codex app and never reads its auth files or tokens.</p>
         </details>
         <details>
-          <summary>What happens if my PC is asleep or turned off?</summary>
-          <p>UsageLoop cannot act while the PC is unavailable. It catches up after wake, restart, or the next time you sign in.</p>
+          <summary>What happens if my computer is asleep or turned off?</summary>
+          <p>UsageLoop cannot act while the computer is unavailable. It catches up after wake, restart, or the next time you sign in.</p>
         </details>
         <details>
           <summary>Why does Windows warn about the installer?</summary>
@@ -230,7 +252,7 @@
         <h2 id="links-title">Try it, inspect it, or tell me what broke</h2>
       </div>
       <div class="final-links">
-        <a class="button primary" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download for Windows</a>
+        <a class="button primary" href="#download">Download</a>
         <a class="button secondary" href="https://github.com/benthompsondev/usageloop">GitHub source</a>
         <a href="https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml">Report a problem</a>
         <a href="https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml">Request a feature</a>
