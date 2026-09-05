@@ -27,10 +27,9 @@ configuration is never changed.
 
 ## Linux
 
-The next shared release should be **1.4.0**: Linux support adds a product
-capability after the immutable Windows v1.3.0 tag. Candidate archives from
-`linux-1.3.0` must not be attached to that existing release. Keep the PR open
-until the real automatic-start check passes and the candidate is accepted.
+Version **1.3.4** is the first shared Windows and Linux x86_64 release. The
+natural Linux rollover was confirmed on September 5, 2026; see
+[the acceptance record](1.3.4-validation.md).
 
 From a clean `main` checkout on an x86_64 Linux desktop:
 
@@ -112,7 +111,8 @@ For a release:
 4. Attach each platform's artifact and its checksum without renaming either.
 5. Install the uploaded artifacts on a clean machine of each platform shipped.
 6. Confirm `/releases/latest` returns the tag and every exact asset.
-7. Check the live README and website download, checksum, and release-note links.
+7. Update versioned Linux download links in README and `docs/index.html`, and
+   the structured-data version on the site. Check the live README and website download, checksum, and release-note links.
    Stable links should use `/releases/latest`; keep prereleases pinned
    separately. Refresh the screenshots used by those pages when the visible
    workflow changes, and check the installed Windows app's manual updater.
@@ -135,4 +135,5 @@ The Windows updater reads the latest GitHub Release for
 `benthompsondev/usageloop`. It rejects missing assets, untrusted
 download hosts, older versions, and checksum mismatches. Repository and asset
 names are therefore compatibility contracts for already-installed copies. The
-Linux build has no in-app updater, so its archive name may carry the version.
+Linux updater also matches its versioned archive and checksum names. Keep the
+Windows installer filenames stable so existing installations can upgrade.

@@ -6,7 +6,20 @@ cross-platform verification instead of redoing the investigation.
 Written after building and running UsageLoop 1.3.0 on Ubuntu 26.04, GNOME on
 Wayland, x86_64, against a real signed-in Codex install.
 
-## September 5 refresh: 1.3.4 candidate
+## September 5 natural rollover: accepted
+
+The installed 1.3.4 build recorded exactly one natural automatic start at
+16:19:53 EDT on September 5, 2026, using `gpt-5.6-luna / low`. At 16:20:31,
+post-trigger observations confirmed the fixed reset at 21:19:51. The attempt
+followed reserved, launch attempted, possibly sent, and verified states without
+a duplicate. Compatibility remains passed and the provider is Ready.
+
+This closes the Linux automatic-start acceptance gap described below. No
+runtime patch was needed after inspecting the successful run. Raw state and
+journal evidence are preserved locally. See [1.3.4 validation](1.3.4-validation.md)
+for the public release record. Older sections below are historical notes.
+
+## September 5 refresh: 1.3.4 candidate (historical)
 
 PR #1 now includes main v1.3.3 (`170c7e3`) and its existing **Recheck Codex
 compatibility** action. The candidate version is **1.3.4**. This supersedes the

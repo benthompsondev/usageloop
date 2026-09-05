@@ -1,6 +1,6 @@
 # UsageLoop
 
-[![Latest release](https://img.shields.io/github/v/release/benthompsondev/usageloop?sort=semver)](https://github.com/benthompsondev/usageloop/releases/latest) [![Windows verification](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml/badge.svg)](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/benthompsondev/usageloop?sort=semver)](https://github.com/benthompsondev/usageloop/releases/latest) [![Windows and Linux verification](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml/badge.svg)](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Plan when your Codex day starts.**
 
@@ -19,7 +19,7 @@ you were going to receive anyway, earlier. It is a local-first desktop app for
 Windows and Linux, built from one shared core.
 
 **[Download for Windows](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
-· **Linux: release candidate on this branch**
+· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.3.4/UsageLoop-1.3.4-linux-x86_64.tar.gz)**
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
@@ -31,14 +31,14 @@ your account has no five-hour window, this scheduling feature does not apply.
 
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
 
-Screenshots show v1.3.3 on Windows with synthetic usage data. The Linux build
-runs the same UI.
+Screenshots use synthetic usage data: v1.3.3 on Windows and v1.3.4 on Linux.
+Both platforms use the same interface.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
 - Free and open source under the MIT license
 - No API key, telemetry, cloud account, or administrator rights
 - Never reads Codex credentials, prompts, responses, or conversations
-- Automation and Windows startup are off by default
+- Automation and start at sign-in are off by default
 
 [Website](https://benthompsondev.github.io/usageloop/) ·
 [Set your weekly routine](#set-your-weekly-routine) · [Install](#install) ·
@@ -155,16 +155,21 @@ app's own launcher to wherever it is installed, then falls back to `codex` on
 `PATH`. The desktop app puts no `codex` on `PATH` at all, so searching `PATH`
 alone would report Codex as missing on a machine that clearly has it.
 
-The current Linux candidate is built from this branch; it is not attached to
-the Windows v1.3.0 release. Build it using the source instructions below,
-then verify, extract, and run the resulting archive:
+Download the archive and matching checksum:
+
+- [UsageLoop-1.3.4-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.3.4/UsageLoop-1.3.4-linux-x86_64.tar.gz)
+- [UsageLoop-1.3.4-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.3.4/UsageLoop-1.3.4-linux-x86_64.tar.gz.sha256)
+
+From the folder containing both downloads:
 
 ```bash
-sha256sum -c UsageLoop-*-linux-x86_64.tar.gz.sha256
-tar -xzf UsageLoop-*-linux-x86_64.tar.gz
-cd UsageLoop-*-linux-x86_64
+sha256sum -c UsageLoop-1.3.4-linux-x86_64.tar.gz.sha256
+tar -xzf UsageLoop-1.3.4-linux-x86_64.tar.gz
+cd UsageLoop-1.3.4-linux-x86_64
 ./UsageLoop/UsageLoop
 ```
+
+The checksum must report `OK` before you extract or run the app.
 
 To add it to your application menu, run the bundled per-user installer. It needs
 no root, touches no system files, and changes no `PATH`:
@@ -179,8 +184,8 @@ entry. It leaves your settings and start history alone.
 ![UsageLoop Settings on Linux showing the Linux startup card with a per-user autostart toggle](docs/screenshots/settings-linux.png)
 
 The Dashboard, schedule, Pause, and Recent starts are the same as the Windows
-screenshots above. Only two things differ: the startup card names your desktop
-session instead of Windows, and there is no in-app updater.
+screenshots above. The startup card names your desktop session, and updates use the Linux archive
+instead of the Windows installer.
 
 ARM64 is not built yet. Nothing in the app blocks it, it just has not been built
 or tested, so there is no artifact to download.
@@ -264,7 +269,7 @@ weekly snapshots. It never selects a model or starts a Codex turn.
    leave.
 4. On a true first run, choose **Start my first window now**. This explicit
    action uses the same evidence and weekly checks as an automatic start.
-5. Leave UsageLoop in the tray. Automation and Windows startup stay off until
+5. Leave UsageLoop in the tray. Automation and start at sign-in stay off until
    you enable them.
 
 Windows startup runs UsageLoop in your signed-in desktop session. If the PC
@@ -272,7 +277,7 @@ sleeps, the app catches up after wake. If it is powered off or you are signed
 out, it catches up the next time you sign in. UsageLoop does not install a
 Windows service or store your Windows password.
 
-Settings contains the schedule, Windows startup, manual updates, and collapsed
+Settings contains the schedule, start at sign-in, manual updates, and collapsed
 technical diagnostics. Update checks contact GitHub only after a button click
 and never affect quota.
 
@@ -290,11 +295,11 @@ installed `codex app-server` locally, but it does not:
 
 Safe local history contains only timestamps, window duration, usage, reset
 times, classifier evidence, attempt states, and sanitized error categories.
-Automation and Windows startup are both off on a new install. While automation
+Automation and start at sign-in are both off on a new install. While automation
 is off, UsageLoop performs no provider-triggering work.
 
-The source is public, releases include a SHA-256 checksum, and the Windows test
-and packaging workflow is visible in [GitHub Actions](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml).
+The source is public, releases include SHA-256 checksums, and the Windows and
+Linux test and packaging workflow is visible in [GitHub Actions](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml).
 The installer is still unsigned, so the checksum and public build process are
 useful verification signals, not a substitute for a trusted code-signing
 identity.
@@ -351,7 +356,7 @@ problem and recheck when ready. UsageLoop does not repeatedly retry it for you.
 - [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml)
 
-Bug reports can include the privacy-safe summary from **Settings → Advanced →
+Bug reports can include the privacy-safe summary from **Settings → Codex connection → Technical details →
 Copy this summary**. Do not paste credentials, Codex prompts or responses,
 conversations, account information, auth files, or unrelated logs.
 
