@@ -15,6 +15,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractSpinBox,
+    QComboBox,
     QDateTimeEdit,
     QLabel,
     QMessageBox,
@@ -32,6 +33,7 @@ from sentinel.desktop import (
     tray_tooltip_text,
 )
 from sentinel.provider_runtime import CHAIN_RESULT_OUTCOMES, ProviderOperationResult
+from sentinel.host import is_windows, platform_label
 from sentinel.product import PRODUCT
 from sentinel.providers import CompatibilityResult
 from sentinel.ui_components import (
@@ -287,7 +289,7 @@ class DesktopTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def make_window(self, state):
+    def make_window(self, state, *, platform_name=None):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         provider = FakeProvider(state)
@@ -301,6 +303,7 @@ class DesktopTests(unittest.TestCase):
             FakeStartup(),
             confirm_enable=lambda: True,
             confirm_bootstrap=lambda: True,
+            platform_name=platform_name,
         )
         self.addCleanup(window.close)
         return window, provider
@@ -479,7 +482,7 @@ class DesktopTests(unittest.TestCase):
             window.automation_toggle.accessibleName(),
         )
         self.assertEqual(
-            "Start UsageLoop with Windows",
+            f"Start UsageLoop with {platform_label()}",
             window.startup_toggle.accessibleName(),
         )
         self.assertEqual(
@@ -499,9 +502,17 @@ class DesktopTests(unittest.TestCase):
             with self.subTest(control=control.accessibleName()):
                 interface = QAccessible.queryAccessibleInterface(control)
                 self.assertIsNotNone(interface)
-                self.assertEqual(
-                    control.accessibleName(), interface.text(QAccessible.Text.Name)
-                )
+                reported = interface.text(QAccessible.Text.Name)
+                if isinstance(control, QComboBox) and not is_windows():
+                    # Qt's Linux accessibility bridge reports a combo box by its
+                    # current value rather than its accessibleName. The name is
+                    # still set on the widget, so assistive tech that reads the
+                    # property gets it; assert both facts instead of pretending
+                    # the platforms behave identically.
+                    self.assertTrue(reported)
+                    self.assertTrue(control.accessibleName())
+                    continue
+                self.assertEqual(control.accessibleName(), reported)
 
     def test_readme_first_run_and_schedule_use_the_visible_mode_names(self):
         window, _provider = self.make_window(
@@ -1026,10 +1037,29 @@ class DesktopTests(unittest.TestCase):
             updater=updater,
             confirm_enable=lambda: True,
             confirm_bootstrap=lambda: True,
+            platform_name="Windows",
         )
         self.addCleanup(window.close)
         self.assertEqual(0, updater.check_calls)
         self.assertEqual("Check for updates", window.update_panel.action_button.text())
+
+    def test_linux_replaces_the_windows_updater_with_an_honest_notice(self):
+        window, _provider = self.make_window(
+            ProviderViewState.waiting("codex", "Codex", installed=True),
+            platform_name="Linux",
+        )
+
+        # No half-working update button: there is no Linux installer to launch.
+        self.assertIsNone(window.update_panel)
+        copy = " ".join(
+            label.text() for label in window.updates_widget.findChildren(QLabel)
+        )
+        self.assertIn("Updates", copy)
+        self.assertIn("GitHub Releases", copy)
+        self.assertIn("does not update itself on Linux", copy)
+        self.assertIn("XDG state", window.update_notice_label.text())
+        # The card still occupies the same slot, so Settings keeps its layout.
+        self.assertEqual(2, window.settings_bottom_row.layout().count())
 
     def _prepare_install(self, window, updater):
         window.update_panel.updater = updater
@@ -1049,7 +1079,8 @@ class DesktopTests(unittest.TestCase):
 
     def test_successful_installer_start_schedules_exit_without_provider_traffic(self):
         window, provider = self.make_window(
-            ProviderViewState.waiting("codex", "Codex", installed=True)
+            ProviderViewState.waiting("codex", "Codex", installed=True),
+            platform_name="Windows",
         )
         updater = FakeInstallerUpdater()
         self._prepare_install(window, updater)
@@ -1066,7 +1097,8 @@ class DesktopTests(unittest.TestCase):
 
     def test_failed_installer_start_keeps_app_open(self):
         window, provider = self.make_window(
-            ProviderViewState.waiting("codex", "Codex", installed=True)
+            ProviderViewState.waiting("codex", "Codex", installed=True),
+            platform_name="Windows",
         )
         updater = FakeInstallerUpdater(fail=True)
         self._prepare_install(window, updater)
@@ -1083,7 +1115,8 @@ class DesktopTests(unittest.TestCase):
 
     def test_shutdown_handoff_failure_is_visible_and_keeps_app_open(self):
         window, provider = self.make_window(
-            ProviderViewState.waiting("codex", "Codex", installed=True)
+            ProviderViewState.waiting("codex", "Codex", installed=True),
+            platform_name="Windows",
         )
         updater = FakeInstallerUpdater()
         self._prepare_install(window, updater)

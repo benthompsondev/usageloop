@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from .app_state import AppSettings, ProviderViewState
+from .host import is_windows, platform_label
 from .product import PRODUCT
 
 
@@ -39,7 +40,12 @@ def provider_health(
             state.display_name,
             "Not found",
             "neutral",
-            f"{state.display_name} is not installed on this PC, so it is being skipped.",
+            (
+                f"{state.display_name} is not installed on this PC, so it is being skipped."
+                if is_windows()
+                else f"{state.display_name} was not found in $CODEX_HOME, in a Codex "
+                "desktop installation, or on PATH, so it is being skipped."
+            ),
         )
     if state.status == "Needs attention":
         return HealthRow(
@@ -189,15 +195,16 @@ def local_state_health(
 
 
 def startup_health(enabled: bool) -> HealthRow:
+    label = f"{platform_label()} startup"
     if enabled:
         return HealthRow(
-            "Windows startup",
+            label,
             "Enabled",
             "success",
             f"{PRODUCT.display_name} opens in the tray when you sign in.",
         )
     return HealthRow(
-        "Windows startup",
+        label,
         "Disabled",
         "neutral",
         f"{PRODUCT.display_name} only runs when you open it.",
@@ -288,12 +295,18 @@ def technical_summary(
     because this text is meant to be pasted into a bug report.
     """
     compatible = settings.compatible_runtime_identities or {}
+    local_data = (
+        rf"%LOCALAPPDATA%\{PRODUCT.app_data_folder}"
+        if is_windows()
+        else "${XDG_STATE_HOME:-~/.local/state}/" + PRODUCT.app_data_folder.lower()
+    )
     lines = [
-        f"{PRODUCT.display_name} {app_version}",
-        rf"Local data: %LOCALAPPDATA%\{PRODUCT.app_data_folder}",
+        f"{PRODUCT.display_name} {app_version} on {platform_label()}",
+        f"Local data: {local_data}",
         f"Local state: {'Needs attention' if persistence_error else 'Healthy'}",
         "",
         "Codex support",
+        f"  Discovery: {_discovery_order()}",
         "  Observation: local app-server account/rateLimits/read",
         "  Start: ephemeral thread/start + turn/start with read-only sandbox",
         "  Verification: repeated fixed-reset observations are authoritative",
@@ -327,3 +340,14 @@ def technical_summary(
         ]
     )
     return "\n".join(lines)
+
+
+def _discovery_order() -> str:
+    """Name where UsageLoop looks for Codex, symbolically and in order.
+
+    This is a fixed description of the search, not a report of what was found,
+    so it adds no state and expands no path from the user's home directory.
+    """
+    if is_windows():
+        return "installed Codex app binary, then PATH"
+    return "$CODEX_HOME/plugins, then a Codex desktop install, then PATH"

@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 
 from sentinel.app_state import AppSettings, ProviderViewState
+from sentinel.host import is_windows, platform_label
 from sentinel.diagnostics import (
     STALE_AFTER_SECONDS,
     build_health_rows,
@@ -44,7 +45,11 @@ class ProviderHealthTests(unittest.TestCase):
         row = self.health(state(installed=False))
         self.assertEqual("Not found", row.status)
         self.assertEqual("neutral", row.tone)
-        self.assertIn("not installed", row.detail)
+        self.assertIn("skipped", row.detail)
+        # Missing Codex is the one failure a user can act on, so the row says
+        # where UsageLoop looked rather than only that it looked.
+        expected = "not installed" if is_windows() else "$CODEX_HOME"
+        self.assertIn(expected, row.detail)
 
     def test_needs_attention_is_an_error_and_says_nothing_was_retried(self):
         row = self.health(state(status="Needs attention"))
@@ -173,7 +178,14 @@ class SummaryTests(unittest.TestCase):
         rows = self.rows(states={"codex": state()})
         labels = [row.label for row in rows]
         self.assertEqual(
-            ["Codex installed", "5-hour window", "Weekly allowance", "Automation", "Local state", "Windows startup"],
+            [
+                "Codex installed",
+                "5-hour window",
+                "Weekly allowance",
+                "Automation",
+                "Local state",
+                f"{platform_label()} startup",
+            ],
             labels,
         )
 
@@ -246,8 +258,26 @@ class TechnicalSummaryTests(unittest.TestCase):
         self.assertIn("UsageLoop", self.summary().splitlines()[0])
 
     def test_summary_names_canonical_local_data_without_expanding_the_user_path(self):
+        # The summary is pasted into public bug reports, so the location is
+        # named symbolically on both hosts and the real home path never leaks.
         text = self.summary()
-        self.assertIn(r"Local data: %LOCALAPPDATA%\UsageLoop", text)
+        expected = (
+            r"Local data: %LOCALAPPDATA%\UsageLoop"
+            if is_windows()
+            else "Local data: ${XDG_STATE_HOME:-~/.local/state}/usageloop"
+        )
+        self.assertIn(expected, text)
+        self.assertNotIn(str(Path.home()), text)
+
+    def test_summary_names_the_host_it_was_captured_on(self):
+        self.assertIn(platform_label(), self.summary().splitlines()[0])
+
+    def test_summary_names_where_codex_is_looked_for(self):
+        # The first question on a "Codex not found" report is where it looked.
+        text = self.summary()
+        expected = "installed Codex app binary" if is_windows() else "$CODEX_HOME/plugins"
+        self.assertIn(f"Discovery: ", text)
+        self.assertIn(expected, text)
         self.assertNotIn(str(Path.home()), text)
 
     def test_summary_reports_confirmed_compatibility(self):

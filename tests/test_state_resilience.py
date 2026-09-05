@@ -17,11 +17,25 @@ from sentinel.app_state import (
     ProviderViewState,
     app_data_root,
     automation_decision,
+    posix_app_data_root,
+    windows_app_data_root,
     format_countdown,
 )
 from sentinel.app_controller import ApplicationController
 from sentinel.history import SafeHistory
 from sentinel.product import PRODUCT
+
+
+def app_data_root_for(directory: str) -> Path:
+    """The directory `app_data_root()` resolves to on the running host."""
+    if os.name == "nt":
+        return Path(directory) / PRODUCT.app_data_folder
+    return Path(directory) / PRODUCT.app_data_folder.lower()
+
+
+def environment_for(directory: str):
+    variable = "LOCALAPPDATA" if os.name == "nt" else "XDG_STATE_HOME"
+    return mock.patch.dict(os.environ, {variable: directory})
 
 
 VALID = {
@@ -124,7 +138,7 @@ class AppDataMigrationTests(unittest.TestCase):
             legacy.mkdir()
             (legacy / "history.jsonl").write_text("guard", encoding="utf-8")
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
-                root = app_data_root()
+                root = windows_app_data_root()
             self.assertEqual(Path(directory) / PRODUCT.app_data_folder, root)
             self.assertEqual("guard", (root / "history.jsonl").read_text(encoding="utf-8"))
             self.assertFalse(legacy.exists())
@@ -138,7 +152,7 @@ class AppDataMigrationTests(unittest.TestCase):
             current.mkdir()
             (current / "marker").write_text("new", encoding="utf-8")
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
-                root = app_data_root()
+                root = windows_app_data_root()
             self.assertEqual(current, root)
             self.assertEqual("new", (root / "marker").read_text(encoding="utf-8"))
             self.assertTrue(legacy.exists())
@@ -149,28 +163,81 @@ class AppDataMigrationTests(unittest.TestCase):
             legacy.mkdir()
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
                 with mock.patch.object(Path, "rename", side_effect=OSError("locked")):
-                    root = app_data_root()
+                    root = windows_app_data_root()
             # Falling back preserves the guards rather than silently starting fresh.
             self.assertEqual(legacy, root)
 
     def test_no_legacy_folder_uses_the_new_name(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
-                root = app_data_root()
+                root = windows_app_data_root()
             self.assertEqual(Path(directory) / PRODUCT.app_data_folder, root)
 
     def test_default_state_and_history_share_the_canonical_packaged_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            current = Path(directory) / PRODUCT.app_data_folder
-            current.mkdir()
-            legacy = Path(directory) / PRODUCT.legacy_app_data_folder
-            legacy.mkdir()
-            with mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}):
+            root = app_data_root_for(directory)
+            root.mkdir(parents=True)
+            with environment_for(directory):
                 store = AppStateStore()
                 history = SafeHistory()
 
-            self.assertEqual(current / "app-state.json", store.path)
-            self.assertEqual(current / "sentinel.jsonl", history.path)
+            self.assertEqual(root / "app-state.json", store.path)
+            self.assertEqual(root / "sentinel.jsonl", history.path)
+
+
+class PosixStateLocationTests(unittest.TestCase):
+    """The Linux state directory follows XDG rather than the Windows layout."""
+
+    def test_absolute_xdg_state_home_is_honored(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": directory}):
+                root = posix_app_data_root()
+            self.assertEqual(Path(directory) / PRODUCT.app_data_folder.lower(), root)
+
+    def test_relative_xdg_state_home_is_rejected_for_the_default(self) -> None:
+        # A relative XDG value is undefined. Resolving it against the working
+        # directory would scatter state wherever UsageLoop was launched from.
+        with mock.patch.dict(os.environ, {"XDG_STATE_HOME": "relative/state"}):
+            root = posix_app_data_root()
+        self.assertTrue(root.is_absolute())
+        self.assertEqual(Path.home() / ".local" / "state" / PRODUCT.app_data_folder.lower(), root)
+
+    def test_a_pre_xdg_linux_folder_is_adopted_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_home = Path(directory) / "share"
+            state_home = Path(directory) / "state"
+            legacy = data_home / PRODUCT.app_data_folder
+            legacy.mkdir(parents=True)
+            (legacy / "sentinel.jsonl").write_text("guard", encoding="utf-8")
+            environment = {
+                "XDG_DATA_HOME": str(data_home),
+                "XDG_STATE_HOME": str(state_home),
+            }
+            with mock.patch.dict(os.environ, environment):
+                root = posix_app_data_root()
+            self.assertEqual(state_home / PRODUCT.app_data_folder.lower(), root)
+            self.assertEqual("guard", (root / "sentinel.jsonl").read_text(encoding="utf-8"))
+            self.assertFalse(legacy.exists())
+
+    def test_an_existing_xdg_folder_is_never_overwritten_by_the_legacy_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_home = Path(directory) / "share"
+            state_home = Path(directory) / "state"
+            legacy = data_home / PRODUCT.app_data_folder
+            legacy.mkdir(parents=True)
+            (legacy / "marker").write_text("old", encoding="utf-8")
+            current = state_home / PRODUCT.app_data_folder.lower()
+            current.mkdir(parents=True)
+            (current / "marker").write_text("new", encoding="utf-8")
+            environment = {
+                "XDG_DATA_HOME": str(data_home),
+                "XDG_STATE_HOME": str(state_home),
+            }
+            with mock.patch.dict(os.environ, environment):
+                root = posix_app_data_root()
+            self.assertEqual(current, root)
+            self.assertEqual("new", (root / "marker").read_text(encoding="utf-8"))
+            self.assertTrue(legacy.exists())
 
 
 class RecordingProvider:

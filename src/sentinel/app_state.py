@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .host import is_windows, xdg_data_home, xdg_state_home
 from .product import PRODUCT
 from .schedule import (
     CONTINUOUS,
@@ -373,22 +374,44 @@ class AppStateStore:
 
 
 def app_data_root() -> Path:
-    """Return the local state directory, migrating the pre-rebrand folder once.
+    """Return the local state directory, migrating a legacy folder once.
 
-    The folder holds the one-shot provider guards. Abandoning it during a rename
-    would silently reset those guards, so a legacy folder is moved when the new
-    name is still free, and is used in place if the move cannot happen.
+    The folder holds the one-shot provider guards. Abandoning it during a move
+    would silently reset those guards, so a legacy folder is renamed when the
+    new name is still free, and is used in place if the rename cannot happen.
     """
-    root = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
-    current = root / PRODUCT.app_data_folder
-    legacy = root / PRODUCT.legacy_app_data_folder
+    return windows_app_data_root() if is_windows() else posix_app_data_root()
+
+
+def windows_app_data_root() -> Path:
+    root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    return _adopt_legacy_root(
+        root / PRODUCT.app_data_folder, root / PRODUCT.legacy_app_data_folder
+    )
+
+
+def posix_app_data_root() -> Path:
+    """XDG state, not data: durable local evidence a user does not hand-manage.
+
+    Earlier Linux copies fell through to the Windows branch and wrote under the
+    data directory, so that folder is adopted once rather than abandoned.
+    """
+    return _adopt_legacy_root(
+        xdg_state_home() / PRODUCT.app_data_folder.lower(),
+        xdg_data_home() / PRODUCT.app_data_folder,
+    )
+
+
+def _adopt_legacy_root(current: Path, legacy: Path) -> Path:
     if current.exists() or legacy == current or not legacy.is_dir():
         return current
     try:
+        current.parent.mkdir(parents=True, exist_ok=True)
         legacy.rename(current)
     except OSError:
-        # Renaming can fail while another copy holds a file open. Keeping the
-        # legacy folder preserves the guards; the next start retries.
+        # Renaming can fail while another copy holds a file open, or across a
+        # filesystem boundary. Keeping the legacy folder preserves the guards;
+        # the next start retries.
         return legacy
     return current
 

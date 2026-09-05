@@ -16,7 +16,7 @@ from .history import SafeHistory
 from .product import PRODUCT
 from .providers import CodexProvider
 from .single_instance import ActivationChannel, InstanceCoordinator, SingleInstanceGuard
-from .startup import StartupManager, reconcile_startup_preference
+from .startup import create_startup_manager, reconcile_startup_preference
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         providers, AppStateStore(), error_history=history
     )
     controller.start()
-    startup = StartupManager(str(Path(sys.executable).resolve()))
+    startup = create_startup_manager(str(Path(sys.executable).resolve()))
     try:
         normalized_startup = reconcile_startup_preference(
             controller.settings.start_with_windows, startup
@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
                 startup.set_enabled(durable_startup)
     except OSError:
         # Startup registration is optional. The Settings control remains the
-        # visible recovery path if Windows temporarily denies registry access.
+        # visible recovery path if the session temporarily denies access.
         pass
     window = MainWindow(
         controller,

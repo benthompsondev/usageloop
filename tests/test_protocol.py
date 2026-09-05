@@ -14,6 +14,8 @@ from sentinel.protocol import (
     merge_sparse_rate_limits,
 )
 from sentinel.transport import (
+    _linux_known_candidates,
+    _windows_known_candidates,
     AppServerUnavailableError,
     CodexNotFoundError,
     CodexProcessTransport,
@@ -267,7 +269,9 @@ class NativePreferenceTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": str(local_app_data)}):
                 with mock.patch.object(Path, "stat", replacement_race):
                     try:
-                        found = find_codex_executable(path_value="")
+                        found = find_codex_executable(
+                            path_value="", known_candidates=_windows_known_candidates()
+                        )
                     except OSError as exc:
                         self.fail(f"one stale candidate aborted discovery: {type(exc).__name__}")
 

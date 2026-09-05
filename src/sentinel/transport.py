@@ -45,6 +45,10 @@ def find_codex_executable(
     depends on evolving app-server behavior, so it must not silently run the
     stale one: a locally installed shim measured five minor versions behind the
     native executable it shadowed on PATH.
+
+    The same rule decides Linux. A Codex desktop install ships its own
+    `codex` and puts nothing on PATH, so a PATH-only search reports "not
+    installed" on a machine that plainly has Codex.
     """
     candidates = _default_known_candidates() if known_candidates is None else tuple(known_candidates)
     for candidate in candidates:
@@ -198,18 +202,115 @@ def _creation_flags() -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
 
 
+#: Names the Codex desktop app puts on PATH. Measured: the `chatgpt` package
+#: installs `/usr/bin/chatgpt` as a symlink into its own installation.
+_LINUX_DESKTOP_LAUNCHERS = ("chatgpt",)
+
+#: The one install prefix that has actually been measured, kept only so a
+#: session with a stripped PATH still finds an installed desktop app. Guessing
+#: further prefixes would imply coverage that has never been verified; a Codex
+#: installed anywhere else is reached through `CODEX_EXECUTABLE_ENV`.
+_LINUX_DESKTOP_PREFIXES = ("/usr/lib/chatgpt",)
+
+#: Last-resort override for a Codex this module cannot derive, such as a Nix,
+#: Flatpak or hand-built layout. Automatic discovery is the normal path; this
+#: is read, never written, and never required when Codex is installed normally.
+CODEX_EXECUTABLE_ENV = "USAGELOOP_CODEX_EXECUTABLE"
+
+
 def _default_known_candidates() -> tuple[Path, ...]:
+    if os.name == "nt":
+        return _windows_known_candidates()
+    return _linux_known_candidates()
+
+
+def _windows_known_candidates() -> tuple[Path, ...]:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:
         return ()
     bin_root = Path(local_app_data) / "OpenAI" / "Codex" / "bin"
     if not bin_root.is_dir():
         return ()
+    return _newest_first(bin_root.glob("*/codex.exe"))
+
+
+def _linux_known_candidates(*, path_value: str | None = None) -> tuple[Path, ...]:
+    """Return an explicit override first, then installed binaries, newest first.
+
+    Both supported Linux installs expose the same executable, byte for byte.
+    The Codex CLI manages one under `CODEX_HOME`, and the Codex desktop app
+    ships an identical one inside its package. Neither is guaranteed to be on
+    PATH under the name `codex`, so PATH alone is not a sufficient search.
+    """
+    override = os.environ.get(CODEX_EXECUTABLE_ENV, "").strip()
+    leading: tuple[Path, ...] = ()
+    if override:
+        candidate = Path(override).expanduser()
+        if candidate.is_file():
+            leading = (candidate,)
+
+    codex_home = os.environ.get("CODEX_HOME", "").strip()
+    home = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
+    discovered = [home / "plugins" / ".plugin-appserver" / "codex"]
+    discovered.extend(
+        root / "resources" / "codex"
+        for root in _linux_desktop_app_roots(path_value=path_value)
+    )
+    discovered.extend(
+        Path(prefix) / "resources" / "codex" for prefix in _LINUX_DESKTOP_PREFIXES
+    )
+    return leading + _newest_first(discovered)
+
+
+def _linux_desktop_app_roots(*, path_value: str | None = None) -> tuple[Path, ...]:
+    """Locate a Codex desktop installation the way its own launcher does.
+
+    The launcher the package puts on PATH is a symlink into the installation,
+    and the script it points at resolves itself to find its own directory:
+
+        exec "$(dirname "$(readlink -f "$0")")/ChatGPT" "$@"
+
+    Following that same symlink is therefore a derivation from what is actually
+    installed, not a guess at an install prefix, and it keeps working wherever
+    the app is installed. A `chatgpt` on PATH that is something else simply has
+    no `resources/codex` beside it and drops out of the candidate list.
+    """
+    search_path = os.environ.get("PATH", "") if path_value is None else path_value
+    roots: list[Path] = []
+    for name in _LINUX_DESKTOP_LAUNCHERS:
+        for directory in search_path.split(os.pathsep):
+            if not directory:
+                continue
+            launcher = Path(directory.strip('"')) / name
+            try:
+                if not launcher.is_file():
+                    continue
+                root = launcher.resolve().parent
+            except OSError:
+                continue
+            if root not in roots:
+                roots.append(root)
+    return tuple(roots)
+
+
+def _newest_first(candidates: Iterable[Path]) -> tuple[Path, ...]:
+    """Rank existing candidates newest first, keeping each real file once.
+
+    A derived desktop root and the measured fallback prefix can name the same
+    binary, so candidates are collapsed by resolved path rather than by the
+    spelling that found them.
+    """
     measured: list[tuple[float, Path]] = []
-    for candidate in bin_root.glob("*/codex.exe"):
+    seen: set[Path] = set()
+    for candidate in candidates:
         try:
-            measured.append((candidate.stat().st_mtime, candidate))
+            resolved = candidate.resolve()
+            if resolved in seen:
+                continue
+            mtime = candidate.stat().st_mtime
         except OSError:
             continue
+        seen.add(resolved)
+        measured.append((mtime, candidate))
     measured.sort(key=lambda item: item[0], reverse=True)
     return tuple(candidate for _mtime, candidate in measured)

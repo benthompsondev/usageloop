@@ -53,7 +53,13 @@ class StubUpdater:
         raise AssertionError("layout tests must not contact GitHub")
 
 
-def build_window(tmp_path):
+def build_window(tmp_path, *, platform_name="Windows"):
+    """Build the measured window.
+
+    These cases measure the published Windows surface at the sizes the
+    screenshots use, so the host is pinned rather than inherited. Linux is
+    measured separately by `LinuxSettingsSurfaceTests`.
+    """
     app = QApplication.instance() or QApplication([])
     states = [ProviderViewState.waiting("codex", "Codex", installed=True)]
     providers = [StubProvider(state) for state in states]
@@ -67,6 +73,7 @@ def build_window(tmp_path):
         confirm_enable=lambda: False,
         confirm_bootstrap=lambda: False,
         confirm_install=lambda _v: False,
+        platform_name=platform_name,
     )
     return app, window
 
@@ -392,6 +399,50 @@ class SettingsSurfaceTests(unittest.TestCase):
         clipboard = QApplication.clipboard()
         self.assertEqual(self.window.diagnostic_text.text(), clipboard.text())
         self.assertEqual("Copied", self.window.copy_summary_button.text())
+
+
+class LinuxSettingsSurfaceTests(unittest.TestCase):
+    """The Linux Settings page keeps the same shape as the Windows one."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.app, self.window = build_window(
+            Path(self._dir.name), platform_name="Linux"
+        )
+        self.addCleanup(self.window.close)
+        self.window.show_page(1)
+        self.window.resize(1366, 768)
+        self.window.show()
+        for _ in range(4):
+            self.app.processEvents()
+
+    def test_settings_keeps_two_balanced_rows_without_the_windows_updater(self):
+        self.assertIsNone(self.window.update_panel)
+        self.assertEqual(2, self.window.settings_top_row.layout().count())
+        self.assertEqual(2, self.window.settings_bottom_row.layout().count())
+
+    def test_startup_control_is_named_for_the_linux_session(self):
+        self.assertEqual(
+            "Start UsageLoop with Linux", self.window.startup_toggle.accessibleName()
+        )
+
+    def test_settings_does_not_overflow_the_smallest_supported_width(self):
+        for width, height in ((1024, 768), (1366, 768)):
+            with self.subTest(size=f"{width}x{height}"):
+                self.window.resize(width, height)
+                for _ in range(4):
+                    self.app.processEvents()
+                for row in (
+                    self.window.settings_top_row,
+                    self.window.settings_bottom_row,
+                ):
+                    self.assertLessEqual(
+                        row.sizeHint().width(), self.window.width()
+                    )
 
 
 class FooterTests(unittest.TestCase):

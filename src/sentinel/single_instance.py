@@ -1,14 +1,17 @@
-"""Per-user Windows guard that keeps one UsageLoop scheduler alive at a time."""
+"""Per-user guard that keeps one UsageLoop scheduler alive at a time."""
 
 from __future__ import annotations
 
 import ctypes
 import hashlib
 import os
+from pathlib import Path
 from ctypes import wintypes
 
 from PySide6.QtCore import QIODevice, QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
+
+from .host import xdg_home, xdg_runtime_dir
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -17,16 +20,17 @@ ACTIVATION_ACK = b"\x06"
 
 
 class SingleInstanceGuard:
-    def __init__(self, name: str):
+    def __init__(self, name: str, *, lock_root: Path | None = None):
         self.name = name
         self._handle: int | None = None
+        self._lock_file = None
+        self._lock_root = lock_root
 
     def acquire(self) -> bool:
         if self._handle is not None:
             return True
         if os.name != "nt":
-            self._handle = 1
-            return True
+            return self._acquire_file_lock()
 
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         create_mutex = kernel32.CreateMutexW
@@ -47,6 +51,32 @@ class SingleInstanceGuard:
         self._handle = int(handle)
         return True
 
+    def _acquire_file_lock(self) -> bool:
+        """Hold an advisory lock the kernel releases even on an abrupt exit.
+
+        A stale lock file is harmless: authority is the live `flock`, not the
+        file's existence, so a killed copy never blocks the next start.
+        """
+        import fcntl
+
+        root = self._lock_root or _posix_lock_root()
+        try:
+            root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            digest = hashlib.sha256(self.name.encode("utf-8")).hexdigest()[:24]
+            lock_file = (root / f"{digest}.lock").open("a+b")
+        except OSError as exc:
+            # IPC only restores a window; it cannot grant scheduler authority.
+            # Never run automation without the kernel lock.
+            raise OSError("UsageLoop cannot acquire its per-user instance lock.") from exc
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            lock_file.close()
+            return False
+        self._lock_file = lock_file
+        self._handle = lock_file.fileno()
+        return True
+
     def close(self) -> None:
         if self._handle is None:
             return
@@ -56,6 +86,9 @@ class SingleInstanceGuard:
             close_handle.argtypes = (wintypes.HANDLE,)
             close_handle.restype = wintypes.BOOL
             close_handle(self._handle)
+        elif self._lock_file is not None:
+            self._lock_file.close()
+            self._lock_file = None
         self._handle = None
 
     def __enter__(self) -> "SingleInstanceGuard":
@@ -171,8 +204,9 @@ class InstanceCoordinator:
         self.channel = channel
 
     def claim(self, *, background: bool) -> bool:
-        # The Windows mutex owns scheduler authority. ActivationChannel only
-        # communicates with and restores the process that already owns it.
+        # The per-user mutex or file lock owns scheduler authority.
+        # ActivationChannel only communicates with and restores the process
+        # that already owns it.
         if self.guard.acquire():
             # Failure to expose activation IPC must never allow a second
             # scheduler. The mutex remains authoritative and the primary runs.
@@ -181,3 +215,11 @@ class InstanceCoordinator:
         if not background:
             self.channel.activate_existing()
         return False
+
+
+def _posix_lock_root() -> Path:
+    """Prefer the session runtime dir so the lock dies with the login session."""
+    runtime = xdg_runtime_dir()
+    if runtime is not None:
+        return runtime / "usageloop"
+    return xdg_home("XDG_CACHE_HOME", Path.home() / ".cache") / "usageloop" / "runtime"
