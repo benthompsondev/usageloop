@@ -200,6 +200,7 @@ class DesktopTests(unittest.TestCase):
         window.controller.update_provider_state(
             state.with_reset(20_000, verified_at=100)
         )
+        window.controller.set_automation_enabled(True)
         window.refresh_clock(now=1_000)
         self.assertEqual("success", window.overall_icon.property("tone"))
         self.assertEqual("✓", window.overall_icon.text())
@@ -966,7 +967,84 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(0, provider.action_calls)
         self.assertEqual(12, window.controller.states["codex"].used_percent)
         self.assertEqual(20, window.controller.states["codex"].weekly_used_percent)
-        self.assertIn("Updated just now", window.provider_cards["codex"].sync_status.text())
+        self.assertIn("Sync complete", window.provider_cards["codex"].sync_status.text())
+
+    def test_explicit_recheck_recovers_failed_compatibility_without_a_turn(self):
+        state = ProviderViewState(
+            "codex", "Codex", True, False, "Needs attention", "Transient failure.",
+            runtime_identity="runtime:1", reset_at=2_000_000_000,
+            automation_blocked_until=2_000_000_100, last_action="Uncertain start",
+        )
+        window, provider = self.make_window(state)
+        pool = FakeThreadPool()
+        window.thread_pool = pool
+        failed = CompatibilityResult(False, "Needs attention", "Transient failure.", "runtime:1")
+        window.controller.apply_compatibility("codex", failed)
+        window.refresh_clock()
+        self.assertFalse(window.recheck_dashboard_button.isHidden())
+        with patch.object(provider, "probe", return_value=CompatibilityResult(
+            True, "Waiting", "Compatibility confirmed.", "runtime:1"
+        )) as probe:
+            window.recheck_button.click()
+            window.recheck_compatibility()
+            self.assertEqual(1, len(pool.workers))
+            self.assertFalse(window.recheck_button.isEnabled())
+            self.assertEqual("CHECKING CONNECTION", window.provider_cards["codex"].status_label.text())
+            self.assertIn("No model request", window.overall_detail.text())
+            pool.workers[0].run()
+            self.app.processEvents()
+        probe.assert_called_once()
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+        self.assertFalse(window.controller.settings.automation_enabled)
+        saved = window.controller.store.load()
+        self.assertEqual("runtime:1", saved.compatible_runtime_identities["codex"])
+        recovered = window.controller.states["codex"]
+        self.assertEqual(2_000_000_100, recovered.automation_blocked_until)
+        self.assertEqual("Uncertain start", recovered.last_action)
+        self.assertTrue(window.recheck_dashboard_button.isHidden())
+        self.assertEqual("Automation is off", window.overall_title.text())
+
+    def test_failed_explicit_recheck_stays_paused_and_can_be_rechecked(self):
+        state = ProviderViewState.waiting("codex", "Codex", installed=True, runtime_identity="runtime:1")
+        window, provider = self.make_window(state)
+        pool = FakeThreadPool()
+        window.thread_pool = pool
+        with patch.object(provider, "probe", return_value=CompatibilityResult(
+            False, "Needs attention", "Sign in to Codex, then recheck.", "runtime:1"
+        )):
+            window.recheck_compatibility()
+            pool.workers[0].run()
+            self.app.processEvents()
+        self.assertFalse(window.controller.states["codex"].automation_supported)
+        self.assertTrue(window.recheck_button.isEnabled())
+        self.assertIn("Sign in", window.compatibility_status.text())
+        self.assertEqual(0, provider.action_calls)
+
+    def test_recheck_cannot_overlap_any_active_operation(self):
+        window, provider = self.make_window(ProviderViewState.waiting("codex", "Codex", installed=True))
+        window.thread_pool = FakeThreadPool()
+        for action in ("sync", "rollover", "bootstrap", "probe"):
+            window.active_operations["codex"] = action
+            window.recheck_compatibility()
+        self.assertEqual([], window.thread_pool.workers)
+        self.assertEqual(0, provider.action_calls)
+
+    def test_usage_sync_cannot_hide_a_failed_compatibility_check(self):
+        window, provider = self.make_window(ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        ))
+        window.controller.apply_compatibility("codex", CompatibilityResult(
+            False, "Needs attention", "Compatibility failed.", "runtime:1"
+        ))
+        window.thread_pool = FakeThreadPool()
+        window.start_usage_sync("codex")
+        window.thread_pool.workers[0].run()
+        self.app.processEvents()
+        window.refresh_clock(now=100)
+        self.assertEqual("UsageLoop stopped safely", window.overall_title.text())
+        self.assertFalse(window.recheck_dashboard_button.isHidden())
+        self.assertEqual(0, provider.action_calls)
 
     def test_repeated_sync_presses_cannot_overlap_sampling(self):
         state = ProviderViewState.waiting(

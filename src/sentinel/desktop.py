@@ -117,7 +117,7 @@ def tray_tooltip_text(
         return prefix + "waiting for Codex status"
     if state.reset_at is not None and state.reset_at > now:
         return prefix + f"{format_countdown(state.reset_at, now)} left"
-    if state.status == "Starting":
+    if state.status in {"Starting", "Checking"}:
         return prefix + "checking Codex status"
     decision = automation_decision(
         settings.automation_enabled,
@@ -460,6 +460,10 @@ class MainWindow(QMainWindow):
         self.overall_detail.setWordWrap(True)
         overall_copy.addWidget(self.overall_title)
         overall_copy.addWidget(self.overall_detail)
+        self.recheck_dashboard_button = QPushButton("Recheck Codex compatibility")
+        self.recheck_dashboard_button.setObjectName("secondaryButton")
+        self.recheck_dashboard_button.clicked.connect(self.recheck_compatibility)
+        overall_copy.addWidget(self.recheck_dashboard_button, 0, Qt.AlignmentFlag.AlignLeft)
         overall_layout.addLayout(overall_copy, 1)
         self.automation_state_label = StatusPill()
         self.automation_state_label.setFixedHeight(28)
@@ -789,9 +793,16 @@ class MainWindow(QMainWindow):
         startup_layout.addWidget(startup_row)
 
         technical_card, technical_layout = make_surface_card(
-            "Advanced",
-            "Compatibility and diagnostic information for troubleshooting.",
+            "Codex connection",
+            "After updating or signing back in to Codex, recheck here. This reads usage and supported models without sending a model request.",
         )
+        self.compatibility_status = QLabel()
+        self.compatibility_status.setWordWrap(True)
+        technical_layout.addWidget(self.compatibility_status)
+        self.recheck_button = QPushButton("Recheck Codex compatibility")
+        self.recheck_button.setObjectName("secondaryButton")
+        self.recheck_button.clicked.connect(self.recheck_compatibility)
+        technical_layout.addWidget(self.recheck_button)
         technical = Disclosure("Technical details")
         self.diagnostic_text = QLabel()
         self.diagnostic_text.setObjectName("diagnosticValue")
@@ -1029,10 +1040,27 @@ class MainWindow(QMainWindow):
                     and state.installed
                     and state.automation_supported
                     and state.reset_at is None
-                    and state.status != "Starting"
+                    and state.status not in {"Starting", "Checking"}
                 )
         codex = self.controller.states.get("codex")
         if codex is not None:
+            checking = self.active_operations.get("codex") == "probe"
+            needs_check = (
+                not codex.automation_supported
+                or self.controller.settings.compatible_runtime_identities.get("codex") != codex.runtime_identity
+            )
+            self.recheck_dashboard_button.setVisible(codex.installed and needs_check)
+            for button in (self.recheck_button, self.recheck_dashboard_button):
+                button.setEnabled(codex.installed and not self.active_operations and self.controller.persistence_error is None)
+                button.setText("Checking Codex…" if checking else "Recheck Codex compatibility")
+            self.compatibility_status.setText(
+                "Checking usage and models. Allow about 30 seconds. No model request is sent."
+                if checking else
+                "Codex is not detected. Install and open Codex, then reopen UsageLoop."
+                if not codex.installed else
+                codex.detail if needs_check else
+                "Compatibility confirmed. Your saved schedule and safety checks still apply."
+            )
             self.schedule_card.update_schedule(
                 self.controller.settings, codex, now=current
             )
@@ -1054,12 +1082,25 @@ class MainWindow(QMainWindow):
                 self.overall_detail.setText(
                     "Install and sign in to Codex before UsageLoop can observe a reset clock."
                 )
-            elif codex.status == "Needs attention":
+            elif checking:
+                self._set_overall_icon("○", "info")
+                self.overall_title.setText("Checking the Codex connection")
+                self.overall_detail.setText("Reading usage and supported models. No model request is sent. Allow about 30 seconds.")
+            elif codex.status == "Needs attention" or (
+                needs_check
+                and self.controller.settings.checked_runtime_identities.get("codex") == codex.runtime_identity
+            ):
                 self._set_overall_icon("!", "warning")
                 self.overall_title.setText("UsageLoop stopped safely")
                 self.overall_detail.setText(
-                    "No request was retried. Open Technical details for the reason."
+                    "Use Recheck Codex compatibility below after fixing the connection. No model request is sent."
+                    if needs_check else
+                    "No request was retried. Open Settings > Codex connection > Technical details for the reason."
                 )
+            elif not enabled:
+                self._set_overall_icon("○", "info")
+                self.overall_title.setText("Automation is off")
+                self.overall_detail.setText("No automatic starts. Your saved routine will be used when you enable automation.")
             elif codex.reset_at is not None and codex.reset_at > current:
                 self._set_overall_icon("✓", "success")
                 self.overall_title.setText("Everything is set")
@@ -1200,13 +1241,24 @@ class MainWindow(QMainWindow):
         worker.signals.failed.connect(self._operation_failed)
         self.thread_pool.start(worker)
 
+    def recheck_compatibility(self) -> None:
+        """One explicit read-only probe; never enable automation or run a turn."""
+        if self.active_operations or self.controller.persistence_error is not None:
+            return
+        self.controller.refresh_local_states()
+        state = self.controller.states.get("codex")
+        if state is None or not state.installed:
+            self.refresh_clock()
+            return
+        self._start_operation("codex", "probe")
+
     def _start_operation(self, provider_id: str, action: str) -> None:
         provider = self.providers.get(provider_id)
         if provider is None:
             return
         state = self.controller.states[provider_id]
         saved = self.controller.update_provider_state(
-            replace(state, status="Starting", detail="Checking Codex safely.")
+            replace(state, status="Checking" if action == "probe" else "Starting", detail="Checking Codex safely.")
         )
         if not saved:
             self.refresh_clock()

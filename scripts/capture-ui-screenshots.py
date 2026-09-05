@@ -16,6 +16,7 @@ from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow
 from sentinel.history import SafeHistory
 from sentinel.product import PRODUCT
+from sentinel.providers import CompatibilityResult
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult
 
 
@@ -27,6 +28,9 @@ class PreviewProvider:
 
     def detect(self) -> ProviderViewState:
         return self.state
+
+    def probe(self) -> CompatibilityResult:
+        return CompatibilityResult(True, "Waiting", "Compatibility confirmed.", self.state.runtime_identity)
 
 
 class PreviewStartup:
@@ -67,6 +71,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
     parser.add_argument("--interactive", action="store_true", help="Keep the synthetic app open; no provider traffic.")
+    parser.add_argument("--compatibility-failure", action="store_true", help="Preview a failed read-only check and its recovery.")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
@@ -85,7 +90,7 @@ def main() -> int:
         for offset, outcome in ((-86400, "failed_guarded"), (-3 * 3600, "verified")):
             attempt = provider.history.reserve_trigger(
                 mode="rollover", idempotency_key=f"preview:{abs(offset)}", boundary_reset_at=None,
-                model="preview", reasoning_effort="low", now=now + offset,
+                model="gpt-5.6-luna", reasoning_effort="low", now=now + offset,
             )
             provider.history.transition_trigger(attempt.attempt_id, "launch_attempted", now=now + offset + 1)
             provider.history.transition_trigger(attempt.attempt_id, outcome, now=now + offset + 30)
@@ -107,6 +112,13 @@ def main() -> int:
             ((4, 0), (4, 0), (4, 0), (4, 0), (4, 0), (5, 0), (5, 0))
         )
         window._sync_weekly_editor()
+        controller.apply_compatibility("codex", CompatibilityResult(
+            not args.compatibility_failure,
+            "Needs attention" if args.compatibility_failure else "Ready",
+            "The Codex compatibility check failed safely. No automatic request was sent."
+            if args.compatibility_failure else "Compatibility confirmed.",
+            codex.runtime_identity,
+        ))
         window.refresh_clock(now=now)
         if args.interactive:
             window.resize(1040, 750)
