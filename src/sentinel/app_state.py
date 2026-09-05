@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
+import errno
+import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any
 
 from .host import is_windows, xdg_data_home, xdg_state_home
@@ -408,11 +412,57 @@ def _adopt_legacy_root(current: Path, legacy: Path) -> Path:
     try:
         current.parent.mkdir(parents=True, exist_ok=True)
         legacy.rename(current)
-    except OSError:
-        # Renaming can fail while another copy holds a file open, or across a
-        # filesystem boundary. Keeping the legacy folder preserves the guards;
-        # the next start retries.
+    except OSError as exc:
+        if exc.errno == errno.EXDEV:
+            return _copy_legacy_root(current, legacy)
+        # Keep using the original guards if adoption is unavailable.
         return legacy
+    return current
+
+
+def _state_tree_digest(root: Path) -> dict[str, str]:
+    if root.is_symlink():
+        raise OSError("State migration cannot follow symbolic links.")
+    result = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise OSError("State migration cannot follow symbolic links.")
+        key = str(path.relative_to(root))
+        if path.is_dir():
+            result[key] = "directory"
+        elif path.is_file():
+            result[key] = hashlib.sha256(path.read_bytes()).hexdigest()
+        else:
+            raise OSError("State migration requires regular files.")
+    return result
+
+
+def _copy_legacy_root(current: Path, legacy: Path) -> Path:
+    """Publish a complete copy on the target filesystem, retaining the source.
+
+    A failed or interrupted copy must never leave a partial authoritative state
+    directory. The desktop holds its instance lock before resolving state paths.
+    """
+    try:
+        before = _state_tree_digest(legacy)
+        with tempfile.TemporaryDirectory(
+            prefix=f".{current.name}-migration-", dir=current.parent
+        ) as directory:
+            staged = Path(directory) / "state"
+            shutil.copytree(legacy, staged, symlinks=True)
+            if before != _state_tree_digest(staged) or before != _state_tree_digest(legacy):
+                raise OSError("State changed during migration.")
+            for path in staged.rglob("*"):
+                if path.is_file():
+                    with path.open("rb") as stream:
+                        os.fsync(stream.fileno())
+            # Do not merge into or replace a destination created in the meantime.
+            if current.exists():
+                return current
+            staged.rename(current)
+    except OSError:
+        return legacy
+    # Leave the old folder intact as a backup. Future starts select current.
     return current
 
 

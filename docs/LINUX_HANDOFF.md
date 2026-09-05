@@ -6,7 +6,53 @@ cross-platform verification instead of redoing the investigation.
 Written after building and running UsageLoop 1.3.0 on Ubuntu 26.04, GNOME on
 Wayland, x86_64, against a real signed-in Codex install.
 
-## Branch and source
+## September 5 refresh: 1.3.4 candidate
+
+PR #1 now includes main v1.3.3 (`170c7e3`) and its existing **Recheck Codex
+compatibility** action. The candidate version is **1.3.4**. This supersedes the
+older version recommendation and automatic-start status below.
+
+The installed Linux rollover failed before a trigger reservation. The saved
+runtime was checked but did not match the compatible identity, leaving automation
+unsupported even with the main switch enabled. Startup restores that failure,
+and the scheduler stops before rollover. A later usage Sync replaced the failure
+message with a fixed-reset message but left the compatibility gate closed.
+
+The preserved journal contains observations only: no trigger reservations or
+send records, and no observation at the missed boundary. The original probe
+failure reason was not logged and its displayed detail was overwritten, so the
+initial transport or capability failure remains unknown. The new fixed reset
+seen later is not evidence of a UsageLoop start.
+
+Recovery was tested against a byte-for-byte copy of the installed failure using
+the inherited Recheck button and the real Linux app-server. Compatibility passed
+and survived a reload. Automation stayed enabled, the journal's original bytes
+were preserved, and trigger attempts stayed at zero. An RPC allowlist permitted
+only initialization, usage reads, and model listing. Doctor passed with
+`gpt-5.6-luna / low / standard service`. The installed app was left untouched.
+Raw state, timestamps, hashes, the diagnostic harness, and its output are retained
+locally rather than committed to the repository.
+
+Cross-filesystem XDG adoption now stages a complete copy on the destination
+filesystem, verifies it against the unchanged source, flushes copied files, then
+renames the staged directory. The legacy folder remains a backup. Copy failure
+keeps the legacy state authoritative; no partial target is published. Existing
+XDG state is never merged with the old folder. A real separate-filesystem test
+covers saved compatibility identities and a reserved trigger, alongside copy
+failure and source-change regressions.
+
+The full Linux suite passed: 530 tests run, 7 expected Windows-only skips.
+The new regression recreates the saved compatibility mismatch with synthetic
+values and proves Recheck itself does not start an action. Trigger selection,
+idempotency, weekly checks, and standard-service policy are unchanged.
+
+Before release, install the reviewed 1.3.4 candidate, use Recheck, confirm
+Compatibility passed, and observe one natural eligible rollover outside an
+active coding session. Recent starts must record one verified Luna/low attempt
+with fixed-reset evidence. No real automatic Linux start has been proven by
+this refresh. Keep PR #1 open; do not merge, tag, or publish yet.
+
+## Branch and source (original port)
 
 Branch `linux-1.3.0`, based on `main` at `9b61774`. The release candidate
 combines the Linux port and hardening into one reviewed change. Original local
@@ -234,13 +280,7 @@ new and ARM64 is not built yet. That is honest and does not block on the site.
 
 ## Next release version
 
-Use **1.4.0** for the next shared Windows and Linux release. Linux desktop
-support is a new product capability, and this source differs from immutable
-`v1.3.0`. Until the release is approved, the branch retains 1.3.0 as its internal
-base version; identify every local candidate by commit and checksum. Do not
-attach these Linux archives to v1.3.0, tag, merge, or publish during candidate
-validation. Bump the shared version to 1.4.0 when preparing the accepted release.
-
-The remaining deliberate runtime check is one automatic Linux start with an
-eligible five-hour window, followed by a verified entry in Recent starts. Do
-that outside an active coding session.
+The reviewed candidate is **1.3.4**, as requested for this refresh. Build from
+the recorded candidate commit and verify its checksum. Do not attach the archive
+to an existing release or merge, tag, or publish until the natural Linux rollover
+has passed and release approval is given.

@@ -1016,6 +1016,48 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(window.recheck_dashboard_button.isHidden())
         self.assertEqual("Automation is off", window.overall_title.text())
 
+    def test_linux_saved_checked_but_incompatible_state_recovers_read_only(self):
+        # Synthetic values reproduce the installed failure: Sync left Ready
+        # copy behind, but the checked and compatible runtime identities differ.
+        from dataclasses import replace
+        state = ProviderViewState(
+            "codex", "Codex", True, False, "Ready",
+            "Codex usage was updated from a fixed reset clock.",
+            runtime_identity="runtime:new", reset_at=100, usage_checked_at=90,
+            weekly_used_percent=16, weekly_reset_at=900_000,
+        )
+        window, provider = self.make_window(state, platform_name="Linux")
+        provider.state = replace(state, automation_supported=True)
+        window.automation_timer.stop()
+        window.clock_timer.stop()
+        settings = replace(
+            window.controller.settings, automation_enabled=True,
+            checked_runtime_identities={"codex": "runtime:new"},
+            compatible_runtime_identities={"codex": "runtime:old"},
+        )
+        window.controller.store.save(settings, {"codex": state})
+        window.controller.start()
+        self.assertEqual("Needs attention", window.controller.states["codex"].status)
+        self.assertEqual("NONE", window.controller.decisions(now=200)["codex"].action)
+        window.thread_pool = FakeThreadPool()
+        window.evaluate_automation(now=200)
+        self.assertEqual([], window.thread_pool.workers)
+        with patch.object(provider, "probe", return_value=CompatibilityResult(
+            True, "Waiting", "Compatibility confirmed.", "runtime:new"
+        )):
+            window.recheck_compatibility()
+            window.thread_pool.workers[0].run()
+            self.app.processEvents()
+        self.assertEqual(0, provider.action_calls)
+        self.assertEqual(0, provider.sync_calls)
+        self.assertEqual(1, len(window.thread_pool.workers))
+        self.assertTrue(window.controller.settings.automation_enabled)
+        self.assertEqual(100, window.controller.states["codex"].reset_at)
+        self.assertIn("Compatibility: passed", window.diagnostic_text.text())
+        window.controller.start()
+        self.assertTrue(window.controller.states["codex"].automation_supported)
+        self.assertEqual("runtime:new", window.controller.settings.compatible_runtime_identities["codex"])
+
     def test_failed_explicit_recheck_stays_paused_and_can_be_rechecked(self):
         state = ProviderViewState.waiting("codex", "Codex", installed=True, runtime_identity="runtime:1")
         window, provider = self.make_window(state)
