@@ -13,14 +13,14 @@
   <meta property="og:title" content="UsageLoop for Codex">
   <meta property="og:description" content="Plan when your Codex day starts. Set weekday and weekend first-start times, keep windows rolling, and pause overnight. Local-first for Windows, no API key or telemetry.">
   <meta property="og:url" content="https://benthompsondev.github.io/usageloop/">
-  <meta property="og:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png">
-  <meta property="og:image:width" content="1280">
-  <meta property="og:image:height" content="720">
+  <meta property="og:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1600x900.png">
+  <meta property="og:image:width" content="1600">
+  <meta property="og:image:height" content="900">
   <meta property="og:image:alt" content="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="UsageLoop for Codex">
   <meta name="twitter:description" content="Plan when your Codex day starts. Weekday and weekend start times, rolling windows, overnight pause. Local-first, no API key or telemetry.">
-  <meta name="twitter:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png">
+  <meta name="twitter:image" content="https://benthompsondev.github.io/usageloop/screenshots/dashboard-1600x900.png">
 
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="stylesheet" href="styles.css">
@@ -39,7 +39,7 @@
     "url": "https://benthompsondev.github.io/usageloop/",
     "downloadUrl": "https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe",
     "codeRepository": "https://github.com/benthompsondev/usageloop",
-    "image": "https://benthompsondev.github.io/usageloop/screenshots/dashboard-1280x720.png",
+    "image": "https://benthompsondev.github.io/usageloop/screenshots/dashboard-1600x900.png",
     "author": {
       "@type": "Person",
       "name": "Ben Thompson",
@@ -70,12 +70,13 @@
       <div class="hero-copy">
         <p class="eyebrow">Local-first Codex window scheduler for Windows</p>
         <h1 id="hero-title">Plan when your Codex day starts.</h1>
-        <p class="lede">Your Codex 5-hour window only begins when you actually use Codex. UsageLoop starts the next one on a schedule you choose, with separate weekday and weekend times, so the clock is already running when you sit down.</p>
+        <p class="lede">If your Codex account has a 5-hour usage window, UsageLoop can start its next reset clock with one small request at a time you choose. Set weekday and weekend times so the clock is already running when you sit down.</p>
         <p class="boundary"><strong>It does not add quota or bypass limits.</strong> It starts the normal next window you were going to receive anyway.</p>
         <div class="hero-actions">
           <a class="button primary" href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe">Download for Windows</a>
           <a class="button secondary" href="https://github.com/benthompsondev/usageloop">View on GitHub</a>
         </div>
+        <p class="small">Free, open source. Requires signed-in Codex and an awake PC with UsageLoop running. The installer is unsigned; <a href="#download">read the download guidance</a>.</p>
         <ul class="trust-list" aria-label="UsageLoop trust highlights">
           <li>No API key</li>
           <li>No telemetry</li>
@@ -83,8 +84,8 @@
           <li>Open source</li>
         </ul>
       </div>
-      <a class="hero-shot" href="screenshots/dashboard-1280x720.png" aria-label="Open the full UsageLoop dashboard screenshot">
-        <img src="screenshots/dashboard-1280x720.png" width="1280" height="720" alt="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
+      <a class="hero-shot" href="screenshots/dashboard-1600x900.png" aria-label="Open the full UsageLoop dashboard screenshot">
+        <img src="screenshots/dashboard-1600x900.png" width="1600" height="900" alt="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
       </a>
     </section>
 
@@ -94,9 +95,9 @@
         <h2 id="why-title">Why the 5-hour window matters</h2>
       </div>
       <div class="prose">
-        <p>Your Codex 5-hour window starts when you actually use Codex. If the current window ends while you are away, the next reset clock normally waits until you come back and use Codex again.</p>
+        <p>On accounts with a 5-hour window, the next reset clock normally starts with the first request after the previous window ends. If that happens while you are away, the clock waits until you use Codex again.</p>
         <p>Say your window ends at 1:00 AM and UsageLoop starts the next one at 4:00 AM. When you sit down at 7:00 AM that clock has already run for three hours, so your next full reset arrives around <strong>9:00 AM instead of noon</strong>.</p>
-        <p>The quota does not change. The clock simply starts earlier, so more of the waiting happens while you are asleep instead of while you are trying to work.</p>
+        <p>You can work at 7:00 AM in either case if you have allowance left. Starting earlier brings the next reset forward if you use up that window. The start request uses some subscription allowance, and the weekly limit still applies.</p>
       </div>
     </section>
 
@@ -128,6 +129,7 @@
         <p><strong>Rolling days, quiet nights.</strong><br>After the first start, windows keep rolling as each one resets, then pause overnight so tomorrow begins on the time you chose.</p>
         <p><strong>Next routine, in plain numbers.</strong><br>The card shows the upcoming first start, the next reset five hours later, and when the overnight pause begins.</p>
       </div>
+      <p>Need a day off? In v1.2.0, <strong>Pause until tomorrow</strong> waits until tomorrow's configured first-start time without changing your routine. You can resume early from the Dashboard or tray.</p>
     </section>
 
     <section class="section boundary-section" aria-labelledby="not-title">
@@ -156,6 +158,7 @@
           <a href="https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256">SHA-256 checksum</a>
         </div>
         <p class="small"><strong>The installer is currently unsigned.</strong> Windows may show “Unknown publisher.” Download it only from the GitHub release and verify the checksum. If your organization blocks unsigned software, do not bypass that policy.</p>
+        <p class="small"><a href="https://github.com/benthompsondev/usageloop#install">Checksum commands and installation steps</a>. Already installed? Open Settings, scroll to Updates, and choose Check for updates. Updates are manual.</p>
       </div>
     </section>
 
@@ -190,6 +193,14 @@
         <h2 id="faq-title">Short answers</h2>
       </div>
       <div class="faq-list">
+        <details>
+          <summary>Who is this useful for?</summary>
+          <p>Windows Codex users whose account shows a 5-hour window and who want its next reset earlier in their workday. If your account only shows a weekly limit, the 5-hour scheduling feature does not apply. OpenAI controls the limits and can change their behavior.</p>
+        </details>
+        <details>
+          <summary>Does starting a window use my allowance?</summary>
+          <p>Yes. An automatic start sends one small Codex request through your existing sign-in. That uses subscription allowance. Watching the local countdown and checking GitHub for updates do not send a model request.</p>
+        </details>
         <details>
           <summary>Does UsageLoop give me more Codex quota?</summary>
           <p>No. It cannot add quota or bypass either limit. It can only start the normal next 5-hour window after the current one ends.</p>

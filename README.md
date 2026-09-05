@@ -4,11 +4,12 @@
 
 **Plan when your Codex day starts.**
 
-Your Codex 5-hour window only begins when you actually use Codex. If a window
-ends while you are asleep, the next reset clock sits idle until you come back,
-so the first stretch of your session is spent waiting instead of working.
+For Codex accounts with a five-hour usage window, the next reset clock normally
+starts with the first request after the previous window ends. Start at 7:00 AM
+and the next reset is around noon. Start at 4:00 AM and it is around 9:00 AM.
 
-UsageLoop starts that next window for you. Pick one time, separate weekday and
+UsageLoop can start that next window with one small Codex request, which uses
+some of your subscription allowance. Pick one time, separate weekday and
 weekend times, or a different time for every day of the week. It keeps windows
 rolling through the day, pauses overnight, and shows you when the next one
 begins.
@@ -17,12 +18,20 @@ UsageLoop does not add quota or bypass limits. It starts the normal next window
 you were going to receive anyway, earlier. It is a local-first Windows app, with
 a Linux beta available for testing.
 
-**[Download for Windows — Stable](https://github.com/benthompsondev/usageloop/releases/download/v1.1.4/UsageLoop-Setup.exe)**
-· **[Download for Linux — Beta](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1)**
-· [Windows release notes](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.4)
+**[Download for Windows (stable)](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
+· **[Download for Linux (beta)](https://github.com/benthompsondev/usageloop/releases/tag/v1.1.0-beta.1)**
+· [Windows release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
+Requires Codex already installed and signed in. Your PC must be awake and
+signed in, with UsageLoop running, for a scheduled start. The Windows installer
+is unsigned; [check the download and SmartScreen guidance](#windows) before
+running it. If your account has no five-hour window, this scheduling feature
+does not apply.
+
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
+
+Screenshots show v1.2.0 with synthetic usage data.
 
 - Native x64-compatible Windows app with a quiet system tray mode
 - Free and open source under the MIT license
@@ -86,12 +95,15 @@ You need:
 - an x64-compatible Windows PC;
 - the Codex desktop app or Codex CLI installed and already signed in.
 
-Download the stable v1.1.4 per-user installer:
+Download the latest stable per-user installer and its matching checksum:
 
-- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/download/v1.1.4/UsageLoop-Setup.exe)
-- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.1.4/UsageLoop-Setup.exe.sha256)
+- [UsageLoop-Setup.exe](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)
+- [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256)
 
 The installer does not need administrator rights or change the global PATH.
+Already installed? Open **Settings**, scroll to **Updates**, and choose
+**Check for updates**. Checks and installation are manual; UsageLoop does not
+update itself in the background.
 
 > [!IMPORTANT]
 > The current installer is not code-signed. Windows Defender SmartScreen may
@@ -136,14 +148,20 @@ available.
 
 ## What UsageLoop does
 
-Your Codex five-hour window starts when you actually use Codex. If the current
-window ends while you're away, the next reset clock normally waits until you
-come back and use Codex again.
+On accounts that expose a five-hour window, its clock normally starts when you
+use Codex. If the current window ends while you're away, the next reset clock
+normally waits until you come back and use Codex again.
 
 UsageLoop can start that next window for you with one minimal request. Your
 current window ends at 1:00 AM. UsageLoop starts the next one at 4:00 AM. When
 you sit down at 7:00 AM, that reset clock has already been running for three
 hours, so your next full reset arrives around 9:00 AM instead of noon.
+
+You can still work at 7:00 AM in either case if you have allowance left. The
+benefit is an earlier next reset if you use up that window, not extra quota or
+five hours of continuous model work. The weekly limit still applies. OpenAI
+controls these limits, and account behavior can change; check the limits your
+Codex app actually shows.
 
 The dashboard shows:
 

@@ -33,6 +33,10 @@ For a release:
 4. Attach the installer and its checksum without renaming either.
 5. Install the uploaded artifact on a clean Windows machine.
 6. Confirm `/releases/latest` returns the tag and both exact assets.
+7. Check the live README and website download, checksum, and release-note links.
+   Stable Windows links should use `/releases/latest`; keep platform prereleases
+   pinned separately. Refresh the screenshots used by those pages when the
+   visible workflow changes, and check the installed app's manual updater.
 
 Write release notes for the person using the app. Lead with what changed for
 them, then add the technical detail that makes the claim trustworthy.

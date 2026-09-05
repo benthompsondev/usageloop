@@ -91,6 +91,12 @@ def main() -> int:
         )
         window.clock_timer.stop()
         window.automation_timer.stop()
+        # Show the weekly routine and pause control in the public dashboard.
+        window.schedule_mode.setCurrentIndex(window.schedule_mode.findData("weekly"))
+        controller.set_weekly_start_times(
+            ((4, 0), (4, 0), (4, 0), (4, 0), (4, 0), (5, 0), (5, 0))
+        )
+        window._sync_weekly_editor()
         window.refresh_clock(now=now)
         for width, height in (
             (1024, 768),
@@ -101,9 +107,9 @@ def main() -> int:
         ):
             window.resize(width, height)
             save(window, args.output / f"dashboard-{width}x{height}.png", app)
-        # Use the 1366x768 composition for the README hero so the current
+        # Use the 1600x900 composition for the README hero so the current
         # window, schedule, and weekly guard are visible in one frame.
-        window.resize(1366, 768)
+        window.resize(1600, 900)
         save(window, args.output / "dashboard.png", app)
 
         window.resize(1040, 720)
