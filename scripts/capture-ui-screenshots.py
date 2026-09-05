@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+import os
 from datetime import datetime
 from pathlib import Path
 import tempfile
@@ -71,8 +72,31 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
     parser.add_argument("--interactive", action="store_true", help="Keep the synthetic app open; no provider traffic.")
+    parser.add_argument(
+        "--platform",
+        choices=("Windows", "Linux"),
+        default="Windows",
+        help=(
+            "Which host surface to render. Linux captures only the two pages "
+            "that actually differ, so the shared pages stay one set of images."
+        ),
+    )
+    parser.add_argument(
+        "--allow-foreign-host",
+        action="store_true",
+        help="Render the Windows set from a non-Windows machine anyway.",
+    )
     parser.add_argument("--compatibility-failure", action="store_true", help="Preview a failed read-only check and its recovery.")
     args = parser.parse_args()
+    if args.platform == "Windows" and os.name != "nt" and not args.allow_foreign_host:
+        # Font metrics differ per host, so rendering the Windows set from Linux
+        # rewrites every published Windows screenshot with a subtly different
+        # image. That has already happened once by accident.
+        parser.error(
+            "Refusing to rewrite the Windows screenshots from a non-Windows host. "
+            "Use --platform Linux for the Linux set, or pass --allow-foreign-host "
+            "if you really mean to re-render the Windows images here."
+        )
     args.output.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
     app.setStyle("Fusion")
@@ -103,6 +127,9 @@ def main() -> int:
             controller, {"codex": provider}, PreviewStartup(), updater=PreviewUpdater(),
             confirm_enable=lambda: False, confirm_bootstrap=lambda: False,
             confirm_install=lambda _version: False,
+            # Pinning the host keeps a capture run comparable no matter which
+            # machine renders it. Most pages are identical on both.
+            platform_name=args.platform,
         )
         window.clock_timer.stop()
         window.automation_timer.stop()
@@ -124,6 +151,24 @@ def main() -> int:
             window.resize(1040, 750)
             window.show()
             return app.exec()
+        if args.platform == "Linux":
+            # Only Settings and About differ on Linux: the startup card names
+            # the session and the Windows-only updater is replaced by a notice.
+            # Every other page is the same UI, so it stays one set of images.
+            window.resize(1366, 768)
+            window.show_page(1)
+            save(window, args.output / "settings-linux.png", app)
+            settings = window.pages.widget(1)
+            if isinstance(settings, QScrollArea):
+                settings.verticalScrollBar().setValue(
+                    settings.verticalScrollBar().maximum()
+                )
+            save(window, args.output / "updates-linux.png", app)
+            window.show_page(2)
+            save(window, args.output / "about-linux.png", app)
+            window.close()
+            return 0
+
         window.show_recent_starts()
         save(window.recent_starts_dialog, args.output / "recent-starts.png", app)
         window.recent_starts_dialog.close()

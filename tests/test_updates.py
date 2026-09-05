@@ -5,8 +5,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from unittest import mock
+
 from sentinel.updates import (
+    ArtifactUnavailableError,
     GitHubReleaseUpdater,
+    HostArtifact,
     UpdateCheckResult,
     UpdateError,
     VerifiedInstaller,
@@ -25,26 +29,32 @@ class FakeResponse(BytesIO):
         self.close()
 
 
-def release_payload(*, version: str = "0.5.0", include_checksum: bool = True):
-    assets = [
-        {
-            "name": PRODUCT.installer_filename,
-            "browser_download_url": (
-                "https://github.com/benthompsondev/usageloop/"
-                f"releases/download/v0.5.0/{PRODUCT.installer_filename}"
-            ),
-        }
-    ]
-    if include_checksum:
-        assets.append(
-            {
-                "name": PRODUCT.checksum_filename,
-                "browser_download_url": (
-                    "https://github.com/benthompsondev/usageloop/"
-                    f"releases/download/v0.5.0/{PRODUCT.checksum_filename}"
-                ),
-            }
-        )
+def asset(name: str, version: str = "0.5.0"):
+    return {
+        "name": name,
+        "browser_download_url": (
+            "https://github.com/benthompsondev/usageloop/"
+            f"releases/download/v{version}/{name}"
+        ),
+    }
+
+
+def release_payload(
+    *,
+    version: str = "0.5.0",
+    include_checksum: bool = True,
+    platforms: tuple[str, ...] = ("windows",),
+):
+    """A release carrying whichever platforms' assets a case needs."""
+    assets = []
+    if "windows" in platforms:
+        assets.append(asset(PRODUCT.installer_filename, version))
+        if include_checksum:
+            assets.append(asset(PRODUCT.checksum_filename, version))
+    if "linux" in platforms:
+        assets.append(asset(PRODUCT.linux_archive_name(version), version))
+        if include_checksum:
+            assets.append(asset(PRODUCT.linux_checksum_name(version), version))
     return {
         "tag_name": f"v{version}",
         "html_url": "https://github.com/benthompsondev/usageloop/releases/tag/v0.5.0",
@@ -67,16 +77,87 @@ class UpdateParsingTests(unittest.TestCase):
         self.assertTrue(is_newer_version("1.0.0", "0.9.1"))
 
     def test_release_requires_exact_installer_and_checksum_assets(self) -> None:
-        release = parse_release(release_payload(), installed_version="0.4.0")
+        release = parse_release(
+            release_payload(), installed_version="0.4.0", windows=True
+        )
         self.assertIsNotNone(release)
         self.assertEqual("0.5.0", release.version)
-        self.assertEqual(PRODUCT.installer_filename, release.installer.name)
+        self.assertEqual(PRODUCT.installer_filename, release.payload.name)
         self.assertEqual(PRODUCT.checksum_filename, release.checksum.name)
 
         with self.assertRaises(UpdateError):
             parse_release(
-                release_payload(include_checksum=False), installed_version="0.4.0"
+                release_payload(include_checksum=False),
+                installed_version="0.4.0",
+                windows=True,
             )
+
+    def test_linux_selects_the_versioned_archive_not_the_windows_installer(self) -> None:
+        release = parse_release(
+            release_payload(platforms=("windows", "linux")),
+            installed_version="0.4.0",
+            windows=False,
+        )
+        self.assertEqual(PRODUCT.linux_archive_name("0.5.0"), release.payload.name)
+        self.assertEqual(PRODUCT.linux_checksum_name("0.5.0"), release.checksum.name)
+        # The Windows installer must not appear anywhere Linux could reach it.
+        self.assertNotIn(".exe", release.payload.download_url)
+        self.assertNotIn(".exe", release.checksum.download_url)
+
+    def test_a_windows_only_release_reads_as_nothing_for_linux_yet(self) -> None:
+        # Every release published so far is Windows-only, so this is the state
+        # a Linux user is in today. It must not look like a failure.
+        with self.assertRaises(ArtifactUnavailableError) as caught:
+            parse_release(
+                release_payload(platforms=("windows",)),
+                installed_version="0.4.0",
+                windows=False,
+            )
+        self.assertEqual("0.5.0", caught.exception.version)
+        self.assertIn("Linux archive", str(caught.exception))
+
+    def test_a_linux_only_release_reads_as_nothing_for_windows_yet(self) -> None:
+        with self.assertRaises(ArtifactUnavailableError) as caught:
+            parse_release(
+                release_payload(platforms=("linux",)),
+                installed_version="0.4.0",
+                windows=True,
+            )
+        self.assertIn("Windows installer", str(caught.exception))
+
+    def test_half_a_pair_is_a_broken_release_not_a_missing_platform(self) -> None:
+        payload = release_payload(platforms=("linux",), include_checksum=False)
+        with self.assertRaises(UpdateError) as caught:
+            parse_release(payload, installed_version="0.4.0", windows=False)
+        self.assertNotIsInstance(caught.exception, ArtifactUnavailableError)
+
+    def test_check_reports_a_missing_platform_download_without_erroring(self) -> None:
+        def opener(_request, _timeout):
+            return FakeResponse(
+                json.dumps(release_payload(platforms=("windows",))).encode("utf-8")
+            )
+
+        updater = GitHubReleaseUpdater(
+            product=replace(PRODUCT, version="0.4.0"), opener=opener
+        )
+        with mock.patch("sentinel.updates.is_windows", return_value=False):
+            result = updater.check()
+
+        self.assertEqual("no_artifact", result.status)
+        self.assertEqual("0.5.0", result.unavailable.version)
+        self.assertIsNone(result.release)
+
+    def test_each_host_names_its_own_artifact(self) -> None:
+        self.assertEqual(
+            (PRODUCT.installer_filename, PRODUCT.checksum_filename),
+            (
+                HostArtifact.for_host("1.2.3", windows=True).payload_name,
+                HostArtifact.for_host("1.2.3", windows=True).checksum_name,
+            ),
+        )
+        linux = HostArtifact.for_host("1.2.3", windows=False)
+        self.assertEqual("UsageLoop-1.2.3-linux-x86_64.tar.gz", linux.payload_name)
+        self.assertEqual(f"{linux.payload_name}.sha256", linux.checksum_name)
 
     def test_release_notes_are_plain_concise_lines(self) -> None:
         self.assertEqual(
@@ -94,7 +175,8 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
             return FakeResponse(json.dumps(release_payload()).encode("utf-8"))
 
         updater = GitHubReleaseUpdater(product=replace(PRODUCT, version="0.4.0"), opener=opener)
-        result = updater.check()
+        with mock.patch("sentinel.updates.is_windows", return_value=True):
+            result = updater.check()
 
         self.assertEqual("update_available", result.status)
         self.assertEqual("0.5.0", result.release.version)
@@ -112,7 +194,9 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
         def opener(_request, timeout):
             return FakeResponse(next(responses))
 
-        release = parse_release(release_payload(), installed_version="0.4.0")
+        release = parse_release(
+            release_payload(), installed_version="0.4.0", windows=True
+        )
         with tempfile.TemporaryDirectory() as directory:
             result = GitHubReleaseUpdater(opener=opener).download(
                 release, destination_root=Path(directory)
@@ -132,7 +216,9 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
         def opener(_request, timeout):
             return FakeResponse(next(responses))
 
-        release = parse_release(release_payload(), installed_version="0.4.0")
+        release = parse_release(
+            release_payload(), installed_version="0.4.0", windows=True
+        )
         with tempfile.TemporaryDirectory() as directory:
             updater = GitHubReleaseUpdater(
                 opener=opener,
@@ -141,9 +227,24 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
             verified = updater.download(release, destination_root=Path(directory))
             verified.path.write_bytes(b"replaced after verification")
 
-            with self.assertRaisesRegex(UpdateError, "changed after download"):
-                updater.launch_installer(verified)
+            with mock.patch("sentinel.updates.is_windows", return_value=True):
+                with self.assertRaisesRegex(UpdateError, "changed after download"):
+                    updater.launch_installer(verified)
             self.assertEqual([], launches)
+
+    def test_linux_never_runs_the_windows_installer(self) -> None:
+        # The Linux flow cannot reach this call, and if anything ever routed
+        # there it must refuse rather than exec a Windows binary.
+        updater = GitHubReleaseUpdater(
+            process_launcher=lambda args, cwd: self.fail("nothing may be launched")
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / PRODUCT.installer_filename
+            target.write_bytes(b"windows installer")
+            verified = VerifiedInstaller(target, "0" * 64)
+            with mock.patch("sentinel.updates.is_windows", return_value=False):
+                with self.assertRaisesRegex(UpdateError, "cannot be run on this system"):
+                    updater.launch_installer(verified)
 
     def test_checksum_mismatch_refuses_installer(self) -> None:
         responses = iter(
@@ -156,13 +257,39 @@ class GitHubReleaseUpdaterTests(unittest.TestCase):
         def opener(_request, timeout):
             return FakeResponse(next(responses))
 
-        release = parse_release(release_payload(), installed_version="0.4.0")
+        release = parse_release(
+            release_payload(), installed_version="0.4.0", windows=True
+        )
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(UpdateError, "checksum"):
                 GitHubReleaseUpdater(opener=opener).download(
                     release, destination_root=Path(directory)
                 )
             self.assertEqual([], list(Path(directory).rglob("*.exe")))
+
+    def test_linux_download_verifies_the_archive_checksum(self) -> None:
+        archive = b"linux archive bytes"
+        name = PRODUCT.linux_archive_name("0.5.0")
+        checksum = (
+            "83d3d1e1a45c0a2c0d3f2a1b0f1d4d6b90a2ec3a0b4b4c5d6e7f8091a2b3c4d5"
+            f"  {name}\n"
+        ).encode("ascii")
+        responses = iter([checksum, archive])
+
+        def opener(_request, _timeout):
+            return FakeResponse(next(responses))
+
+        release = parse_release(
+            release_payload(platforms=("linux",)),
+            installed_version="0.4.0",
+            windows=False,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(UpdateError, "checksum did not match"):
+                GitHubReleaseUpdater(opener=opener).download(
+                    release, destination_root=Path(directory)
+                )
+            self.assertEqual([], list(Path(directory).rglob("*.tar.gz")))
 
 
 

@@ -11,6 +11,7 @@ from typing import Callable
 from .app_state import ProviderViewState
 from .classifier import classify
 from .history import SafeHistory
+from .host import is_windows
 from .quota import select_five_hour, select_weekly
 from .transport import find_codex_executable
 
@@ -90,7 +91,7 @@ class CodexProvider:
         self.history = history or SafeHistory()
         self._find = executable_finder or find_codex_executable
         self._identity = identity_reader or file_runtime_identity
-        self._version = version_reader or windows_file_version
+        self._version = version_reader or platform_file_version
         self._probe = capability_probe
         self._runner = operation_runner
         self._now = now
@@ -275,3 +276,15 @@ def windows_file_version(executable: Path) -> str | None:
         info.product_version_ls & 0xFFFF,
     )
     return ".".join(str(value) for value in values)
+
+
+def platform_file_version(executable: Path) -> str | None:
+    """Read the Windows version resource only on Windows.
+
+    A Linux Codex binary carries no equivalent resource. The compatibility
+    guard already keys on `runtime_identity`, which is size and mtime, so a
+    missing version string weakens the diagnostic summary and nothing else.
+    """
+    if not is_windows():
+        return None
+    return windows_file_version(executable)

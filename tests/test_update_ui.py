@@ -39,13 +39,23 @@ class UpdatePanelTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def make_panel(self):
-        panel = UpdatePanel(FakeUpdater(), confirm_install=lambda _version: False)
+    def make_panel(self, *, platform_name="Windows"):
+        panel = UpdatePanel(
+            FakeUpdater(),
+            confirm_install=lambda _version: False,
+            platform_name=platform_name,
+            managed_install=True,
+        )
         self.addCleanup(panel.close)
         return panel
 
     def make_install_panel(self, updater, confirm_install):
-        panel = UpdatePanel(updater, confirm_install=confirm_install)
+        panel = UpdatePanel(
+            updater,
+            confirm_install=confirm_install,
+            platform_name="Windows",
+            managed_install=True,
+        )
         self.addCleanup(panel.close)
         panel.release = ReleaseInfo(
             "0.9.1",
@@ -62,7 +72,7 @@ class UpdatePanelTests(unittest.TestCase):
         return panel
 
     def test_default_confirmation_uses_supported_yes_and_cancel_buttons(self) -> None:
-        panel = UpdatePanel(FakeUpdater())
+        panel = UpdatePanel(FakeUpdater(), platform_name="Windows", managed_install=True)
         self.addCleanup(panel.close)
 
         with patch.object(

@@ -49,6 +49,7 @@ from .app_state import (
 )
 from .chain import WEEKLY_PROTECTION_PERCENT
 from .branding import make_app_icon, render_mark
+from .host import platform_label
 from .product import PRODUCT
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
@@ -181,11 +182,14 @@ class MainWindow(QMainWindow):
         confirm_enable: Callable[[], bool] | None = None,
         confirm_bootstrap: Callable[[], bool] | None = None,
         confirm_install: Callable[[str], bool] | None = None,
+        platform_name: str | None = None,
     ):
         super().__init__()
         self.controller = controller
         self.providers = providers
         self.startup_manager = startup_manager
+        self.platform_name = platform_name or platform_label()
+        self.is_windows = self.platform_name == "Windows"
         self.confirm_enable = confirm_enable or self._confirm_enable
         self.confirm_bootstrap = confirm_bootstrap or self._confirm_bootstrap
         self.active_operations: dict[str, str] = {}
@@ -768,9 +772,14 @@ class MainWindow(QMainWindow):
         self._sync_weekly_editor()
 
         startup_card, startup_layout = make_surface_card(
-            "Windows startup",
-            "Start in the tray when you sign in to Windows. Applies to your account only, needs no "
-            "administrator rights, and is off until you turn it on.",
+            f"{self.platform_name} startup",
+            (
+                "Start in the tray when you sign in to Windows. Applies to your account only, needs no "
+                "administrator rights, and is off until you turn it on."
+                if self.is_windows
+                else "Start when you sign in to your desktop session. This writes one per-user "
+                "autostart entry, needs no root, and is off until you turn it on."
+            ),
         )
         startup_row = QFrame()
         startup_row.setObjectName("settingRow")
@@ -778,16 +787,21 @@ class MainWindow(QMainWindow):
         row_layout.setContentsMargins(14, 12, 14, 12)
         row_copy = QVBoxLayout()
         row_copy.setSpacing(2)
-        row_title = QLabel(f"Start {PRODUCT.display_name} with Windows")
+        startup_label = f"Start {PRODUCT.display_name} with {self.platform_name}"
+        row_title = QLabel(startup_label)
         row_title.setObjectName("secondaryMetric")
-        row_hint = QLabel("Opens quietly in the tray, not on screen")
+        row_hint = QLabel(
+            "Opens quietly in the tray, not on screen"
+            if self.is_windows
+            else "Uses the tray if your desktop has one"
+        )
         row_hint.setProperty("muted", True)
         row_copy.addWidget(row_title)
         row_copy.addWidget(row_hint)
         row_layout.addLayout(row_copy)
         row_layout.addStretch()
         self.startup_toggle = ToggleSwitch()
-        self.startup_toggle.setAccessibleName(f"Start {PRODUCT.display_name} with Windows")
+        self.startup_toggle.setAccessibleName(startup_label)
         self.startup_toggle.setChecked(bool(self.startup_manager.is_enabled()))
         row_layout.addWidget(self.startup_toggle)
         startup_layout.addWidget(startup_row)
@@ -823,11 +837,19 @@ class MainWindow(QMainWindow):
         technical.add_widget(self.copy_summary_button)
         technical_layout.addWidget(technical)
 
+        # Both hosts get the same user-initiated check. Only the final step
+        # differs: Windows runs a verified setup executable, Linux replaces its
+        # per-user bundle through the installer that shipped inside it.
         self.update_panel = UpdatePanel(
-            updater, confirm_install=confirm_install, parent=self
+            updater,
+            confirm_install=confirm_install,
+            parent=self,
+            platform_name=self.platform_name,
         )
         self.update_panel.installer_launched.connect(self._exit_for_update)
-        self.update_panel.setSizePolicy(
+        updates_widget: QWidget = self.update_panel
+        self.updates_widget = updates_widget
+        updates_widget.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
         )
         technical_card.setSizePolicy(
@@ -847,7 +869,7 @@ class MainWindow(QMainWindow):
         bottom_layout = QHBoxLayout(self.settings_bottom_row)
         bottom_layout.setContentsMargins(0, 0, 0, 0)
         bottom_layout.setSpacing(14)
-        bottom_layout.addWidget(self.update_panel, 1, Qt.AlignmentFlag.AlignTop)
+        bottom_layout.addWidget(self.updates_widget, 1, Qt.AlignmentFlag.AlignTop)
         bottom_layout.addWidget(technical_card, 1, Qt.AlignmentFlag.AlignTop)
         root.addWidget(self.settings_bottom_row)
         root.addStretch()
@@ -868,7 +890,9 @@ class MainWindow(QMainWindow):
         product_title = QLabel(PRODUCT.display_name)
         product_title.setObjectName("aboutProductTitle")
         story.addWidget(product_title)
-        version = QLabel(f"Version {PRODUCT.version} \u00b7 Windows \u00b7 MIT licensed")
+        version = QLabel(
+            f"Version {PRODUCT.version} \u00b7 {self.platform_name} \u00b7 MIT licensed"
+        )
         version.setObjectName("secondaryMetric")
         story.addWidget(version)
         self.about_description = QLabel(
@@ -1356,7 +1380,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Startup setting not changed",
-                "Windows did not allow the per-user startup setting to be changed.",
+                f"{self.platform_name} did not allow the per-user startup setting to be changed.",
             )
             return
         if not self.controller.set_start_with_windows(enabled):
@@ -1529,14 +1553,15 @@ class MainWindow(QMainWindow):
         try:
             clipboard = QApplication.clipboard()
             if clipboard is None:
-                raise RuntimeError("Windows clipboard is unavailable")
+                raise RuntimeError("The desktop clipboard is unavailable")
             clipboard.setText(self.diagnostic_text.text())
         except Exception:
             self.copy_summary_button.setText("Copy failed")
             QMessageBox.warning(
                 self,
                 "Summary not copied",
-                "Windows did not allow UsageLoop to copy the diagnostic summary. Try again after closing other clipboard tools.",
+                f"{self.platform_name} did not allow UsageLoop to copy the diagnostic summary. "
+                "Try again after closing other clipboard tools.",
             )
             return
         self.copy_summary_button.setText("Copied")
@@ -1619,11 +1644,17 @@ class DesktopShell:
         self.window.presentation_changed.connect(self.refresh_menu)
         self.refresh_menu()
         self.tray.activated.connect(self._tray_activated)
-        self.window.hide_on_close = QSystemTrayIcon.isSystemTrayAvailable()
+        # A GNOME session without a status-notifier extension has no tray at
+        # all. Showing an icon nothing can render would leave Pause, Recent
+        # starts, and Quit unreachable, so the window becomes the only surface
+        # and closing it exits instead of hiding into nothing.
+        self.tray_available = QSystemTrayIcon.isSystemTrayAvailable()
+        self.window.hide_on_close = self.tray_available
         application = QApplication.instance()
         if application is not None:
             application.aboutToQuit.connect(self.tray.hide)
-        self.tray.show()
+        if self.tray_available:
+            self.tray.show()
 
     def refresh_menu(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now

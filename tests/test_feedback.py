@@ -142,6 +142,10 @@ class ScreenshotToolTests(unittest.TestCase):
                 [
                     sys.executable,
                     str(ROOT / "scripts" / "capture-ui-screenshots.py"),
+                    # Rendering into a temp directory cannot disturb the
+                    # published images, so the foreign-host guard is waived
+                    # rather than making the test host-dependent.
+                    "--allow-foreign-host",
                     directory,
                 ],
                 cwd=ROOT,
@@ -166,6 +170,65 @@ class ScreenshotToolTests(unittest.TestCase):
                 with self.subTest(image=name):
                     self.assertTrue(target.is_file())
                     self.assertGreater(target.stat().st_size, 10_000)
+
+    def test_the_linux_set_renders_only_the_pages_that_differ(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(ROOT / "src")
+            environment["QT_QPA_PLATFORM"] = "offscreen"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "capture-ui-screenshots.py"),
+                    "--platform",
+                    "Linux",
+                    directory,
+                ],
+                cwd=ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            rendered = sorted(p.name for p in Path(directory).iterdir())
+            # Every other page is identical on both hosts, so the Linux set
+            # stays three images instead of a duplicate of the whole gallery.
+            self.assertEqual(
+                ["about-linux.png", "settings-linux.png", "updates-linux.png"],
+                rendered,
+            )
+            for name in rendered:
+                with self.subTest(image=name):
+                    self.assertGreater((Path(directory) / name).stat().st_size, 10_000)
+
+    def test_the_windows_set_is_not_rewritten_from_a_foreign_host(self) -> None:
+        if os.name == "nt":
+            self.skipTest("the guard only applies off Windows")
+        with tempfile.TemporaryDirectory() as directory:
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(ROOT / "src")
+            environment["QT_QPA_PLATFORM"] = "offscreen"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "capture-ui-screenshots.py"),
+                    directory,
+                ],
+                cwd=ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+
+        # Font metrics differ per host, so an accidental run here would rewrite
+        # every published Windows image with a subtly different render.
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("Refusing to rewrite", result.stderr)
 
 
 if __name__ == "__main__":
