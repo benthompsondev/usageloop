@@ -17,9 +17,22 @@ if [[ "$architecture" != "x86_64" ]]; then
   fi
 fi
 
-version="$("$python_bin" -c "import sys; sys.path.insert(0, '$repo_root/src'); from sentinel.product import PRODUCT; print(PRODUCT.version)")"
-bundle_name="UsageLoop-${version}-linux-${architecture}"
-archive_name="${bundle_name}.tar.gz"
+# The updater looks for these exact asset names, so they come from the same
+# place the updater reads them from rather than being spelled twice.
+read -r version bundle_name archive_name <<<"$(
+  "$python_bin" - "$repo_root" "$architecture" <<'PYTHON'
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/src")
+from sentinel.product import PRODUCT
+
+architecture = sys.argv[2]
+print(
+    PRODUCT.version,
+    PRODUCT.linux_bundle_name(PRODUCT.version, architecture),
+    PRODUCT.linux_archive_name(PRODUCT.version, architecture),
+)
+PYTHON
+)"
 
 cd "$repo_root"
 

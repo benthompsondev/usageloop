@@ -6,6 +6,7 @@ from typing import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -15,6 +16,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .host import platform_label
+from .linux_update import (
+    LinuxUpdateError,
+    StagedUpdate,
+    apply_update,
+    default_install_prefix,
+    install_command,
+    is_managed_install,
+    stage_update,
+)
 from .product import PRODUCT
 from .updates import (
     GitHubReleaseUpdater,
@@ -40,7 +51,7 @@ class UpdateWorker(QRunnable):
     def run(self) -> None:
         try:
             result = self.operation()
-        except UpdateError as exc:
+        except (UpdateError, LinuxUpdateError) as exc:
             self.signals.failed.emit(self.action, str(exc))
         except Exception:
             self.signals.failed.emit(
@@ -59,6 +70,8 @@ class UpdatePanel(QFrame):
         *,
         confirm_install: Callable[[str], bool] | None = None,
         parent: QWidget | None = None,
+        platform_name: str | None = None,
+        managed_install: bool | None = None,
     ):
         super().__init__(parent)
         self.setObjectName("surfaceCard")
@@ -67,8 +80,18 @@ class UpdatePanel(QFrame):
         self.thread_pool = QThreadPool.globalInstance()
         self.release: ReleaseInfo | None = None
         self.installer: VerifiedInstaller | None = None
+        self.staged: StagedUpdate | None = None
         self.state = "idle"
         self._checking_model_support = False
+        self.platform_name = platform_name or platform_label()
+        self.is_windows = self.platform_name == "Windows"
+        # A copy running from an extracted tarball is not the one install.sh
+        # manages, so it is offered the command instead of a button that would
+        # quietly create a second installation somewhere else.
+        self.managed_install = (
+            is_managed_install() if managed_install is None else managed_install
+        )
+        self.artifact_noun = "installer" if self.is_windows else "update"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
@@ -80,6 +103,7 @@ class UpdatePanel(QFrame):
             "GitHub is checked only when you press the button. Update traffic is separate "
             "from Codex and cannot use subscription quota."
         )
+        copy.setObjectName("updateIntro")
         copy.setProperty("muted", True)
         copy.setWordWrap(True)
         layout.addWidget(copy)
@@ -110,12 +134,38 @@ class UpdatePanel(QFrame):
         layout.addLayout(actions)
 
     def _primary_action(self) -> None:
-        if self.state in {"idle", "latest", "error"}:
+        if self.state in {"idle", "latest", "error", "no_release"}:
             self.start_check()
         elif self.state == "available":
             self.start_download()
         elif self.state == "downloaded":
             self.start_install()
+        elif self.state == "manual":
+            self._copy_install_command()
+
+    def _download_operation(self) -> object:
+        """Fetch and verify, and on Linux unpack under our own validation."""
+        release = self.release
+        if release is None:
+            raise UpdateError("There is no checked release to download.")
+        verified = self.updater.download(release)
+        if self.is_windows:
+            return verified
+        return stage_update(
+            verified.path,
+            version=release.version,
+            staging_root=verified.path.parent,
+        )
+
+    def _copy_install_command(self) -> None:
+        if self.staged is None:
+            return
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            self.action_button.setText("Copy failed")
+            return
+        clipboard.setText(" ".join(install_command(self.staged)))
+        self.action_button.setText("Copied")
 
     def start_check(self) -> None:
         self._set_busy("checking", "Checking GitHub…")
@@ -131,14 +181,24 @@ class UpdatePanel(QFrame):
     def start_download(self) -> None:
         if self.release is None:
             return
-        self._set_busy("downloading", "Downloading and verifying the Windows installer…")
-        worker = UpdateWorker("download", lambda: self.updater.download(self.release))
+        self._set_busy(
+            "downloading",
+            "Downloading and verifying the Windows installer…"
+            if self.is_windows
+            else "Downloading and verifying the Linux archive…",
+        )
+        worker = UpdateWorker("download", self._download_operation)
         worker.signals.completed.connect(self._operation_completed)
         worker.signals.failed.connect(self._operation_failed)
         self.thread_pool.start(worker)
 
     def start_install(self) -> None:
-        if self.installer is None or self.release is None:
+        if self.release is None:
+            return
+        if not self.is_windows:
+            self._start_linux_install()
+            return
+        if self.installer is None:
             return
         try:
             confirmed = self.confirm_install(self.release.version)
@@ -182,6 +242,18 @@ class UpdatePanel(QFrame):
                 )
                 self.action_button.setText("Check again")
                 return
+            if result.status == "no_artifact":
+                self.release = None
+                unavailable = result.unavailable
+                version = getattr(unavailable, "version", "A newer version")
+                self._set_state(
+                    "no_release",
+                    f"Version {version} is published, but it does not include a "
+                    f"{self.platform_name} download yet. Your installed app was "
+                    "not changed.",
+                )
+                self.action_button.setText("Check again")
+                return
             if result.status == "latest":
                 self.release = None
                 message = f"You are on the latest version ({PRODUCT.version})."
@@ -210,20 +282,81 @@ class UpdatePanel(QFrame):
                     "What changed\n" + "\n".join(f"• {note}" for note in release.notes)
                 )
                 self.notes_label.setVisible(True)
-            self.action_button.setText("Download installer")
+            self.action_button.setText(
+                "Download installer" if self.is_windows else "Download update"
+            )
             self.dismiss_button.setVisible(True)
             return
         if action == "download" and isinstance(result, VerifiedInstaller):
             self.installer = result
-            self._set_state(
-                "downloaded",
-                "Installer downloaded and its SHA-256 checksum matched the release.",
-                status="success",
-            )
-            self.action_button.setText("Install update")
+            if self.is_windows:
+                self._set_state(
+                    "downloaded",
+                    "Installer downloaded and its SHA-256 checksum matched the release.",
+                    status="success",
+                )
+                self.action_button.setText("Install update")
+                self.dismiss_button.setVisible(True)
+                return
+            self._operation_failed(action, "The update result was not understood.")
+            return
+        if action == "download" and isinstance(result, StagedUpdate):
+            self.staged = result
+            if self.managed_install:
+                self._set_state(
+                    "downloaded",
+                    "Update downloaded, its SHA-256 checksum matched the release, and it "
+                    "unpacked cleanly. Installing will close UsageLoop and reopen it.",
+                    status="success",
+                )
+                self.action_button.setText("Install and restart")
+            else:
+                # Not our installation to replace. Say exactly what to run.
+                self._set_state(
+                    "manual",
+                    "Update downloaded and its SHA-256 checksum matched the release. This "
+                    "copy is not the one install.sh manages, so finish it yourself:\n\n"
+                    + " ".join(install_command(result))
+                    + "\n\nQuit UsageLoop first. Your settings and history are kept.",
+                    status="success",
+                )
+                self.action_button.setText("Copy command")
             self.dismiss_button.setVisible(True)
             return
         self._operation_failed(action, "The update result was not understood.")
+
+    def _start_linux_install(self) -> None:
+        staged = self.staged
+        release = self.release
+        if staged is None or release is None:
+            return
+        try:
+            confirmed = self.confirm_install(release.version)
+        except Exception:
+            self._operation_failed(
+                "install", "The install confirmation could not be opened. Try again."
+            )
+            return
+        if not confirmed:
+            return
+        try:
+            apply_update(staged)
+        except LinuxUpdateError as exc:
+            self._operation_failed("install", str(exc))
+            return
+        except Exception:
+            self._operation_failed(
+                "install",
+                "The update could not be started. Your current app is still running.",
+            )
+            return
+        self._set_state(
+            "launching",
+            "Installing. UsageLoop will close and reopen on the new version.",
+            status="success",
+        )
+        self.action_button.setEnabled(False)
+        self.installer_launched.emit()
 
     def _operation_failed(self, _action: str, message: str) -> None:
         self._set_state("error", message, status="error")
@@ -248,10 +381,12 @@ class UpdatePanel(QFrame):
         self._checking_model_support = False
         self.release = None
         self.installer = None
+        self.staged = None
         self.notes_label.clear()
         self.notes_label.setVisible(False)
         self.dismiss_button.setVisible(False)
         self._set_state("idle", "No update check has run.")
+        self.action_button.setEnabled(True)
         self.action_button.setText("Check for updates")
 
     def _confirm_install(self, version: str) -> bool:

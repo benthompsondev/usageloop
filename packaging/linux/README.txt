@@ -53,8 +53,17 @@ that reaches, point at it directly:
 
 Updates
 -------
-UsageLoop does not update itself on Linux. Download a newer build and run
-install.sh again; your settings and history are kept.
+Settings > Check for updates. UsageLoop only contacts GitHub when you press
+that button, and update traffic never touches Codex or your subscription quota.
+
+It downloads the Linux archive for your version, verifies its SHA-256 against
+the published checksum, and unpacks it before offering to install. If you
+installed with install.sh, "Install and restart" closes UsageLoop, replaces it,
+and reopens it. If you are running from an extracted folder, it shows you the
+exact command to run instead.
+
+Your settings and start history live outside the app folder, so they survive
+either path.
 
 Report a problem
 ----------------

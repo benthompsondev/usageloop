@@ -423,8 +423,9 @@ class LinuxSettingsSurfaceTests(unittest.TestCase):
         for _ in range(4):
             self.app.processEvents()
 
-    def test_settings_keeps_two_balanced_rows_without_the_windows_updater(self):
-        self.assertIsNone(self.window.update_panel)
+    def test_settings_keeps_two_balanced_rows_with_the_linux_updater(self):
+        self.assertIsNotNone(self.window.update_panel)
+        self.assertFalse(self.window.update_panel.is_windows)
         self.assertEqual(2, self.window.settings_top_row.layout().count())
         self.assertEqual(2, self.window.settings_bottom_row.layout().count())
 

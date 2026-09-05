@@ -50,6 +50,20 @@ class ProductMetadata:
             f"{self.github_repo}/releases/latest"
         )
 
+    def linux_bundle_name(self, version: str, architecture: str = "x86_64") -> str:
+        """The extracted folder name inside a Linux release archive.
+
+        `scripts/build-linux.sh` reads this, so the published asset name and the
+        name the updater looks for cannot drift apart.
+        """
+        return f"{self.display_name}-{version}-linux-{architecture}"
+
+    def linux_archive_name(self, version: str, architecture: str = "x86_64") -> str:
+        return f"{self.linux_bundle_name(version, architecture)}.tar.gz"
+
+    def linux_checksum_name(self, version: str, architecture: str = "x86_64") -> str:
+        return f"{self.linux_archive_name(version, architecture)}.sha256"
+
     @property
     def dist_folder_name(self) -> str:
         """PyInstaller COLLECT directory, derived so packaging cannot drift."""
@@ -75,6 +89,8 @@ class ProductMetadata:
 
         data = {key: str(value) for key, value in asdict(self).items()}
         data["dist_folder_name"] = self.dist_folder_name
+        data["linux_bundle_name"] = self.linux_bundle_name(self.version)
+        data["linux_archive_name"] = self.linux_archive_name(self.version)
         data["single_instance_name"] = self.single_instance_name
         data["app_id_guid"] = self.app_id_guid
         return data

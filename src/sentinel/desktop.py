@@ -826,30 +826,17 @@ class MainWindow(QMainWindow):
         technical.add_widget(self.copy_summary_button)
         technical_layout.addWidget(technical)
 
-        # In-app updating installs a signed Windows setup executable. There is
-        # no equivalent artifact on Linux, so that surface is replaced by an
-        # honest description rather than a button that cannot finish.
-        self.update_panel: UpdatePanel | None = None
-        if self.is_windows:
-            self.update_panel = UpdatePanel(
-                updater, confirm_install=confirm_install, parent=self
-            )
-            self.update_panel.installer_launched.connect(self._exit_for_update)
-            updates_widget: QWidget = self.update_panel
-        else:
-            updates_widget, updates_layout = make_surface_card(
-                "Updates",
-                "UsageLoop does not update itself on Linux. Download a newer build from "
-                "GitHub Releases, quit UsageLoop, and run the new build’s install.sh. "
-                "For a portable copy, replace the extracted folder.",
-            )
-            self.update_notice_label = QLabel(
-                "Your settings, schedule, and start history stay in your XDG state "
-                "directory, so replacing the app keeps them."
-            )
-            self.update_notice_label.setProperty("muted", True)
-            self.update_notice_label.setWordWrap(True)
-            updates_layout.addWidget(self.update_notice_label)
+        # Both hosts get the same user-initiated check. Only the final step
+        # differs: Windows runs a verified setup executable, Linux replaces its
+        # per-user bundle through the installer that shipped inside it.
+        self.update_panel = UpdatePanel(
+            updater,
+            confirm_install=confirm_install,
+            parent=self,
+            platform_name=self.platform_name,
+        )
+        self.update_panel.installer_launched.connect(self._exit_for_update)
+        updates_widget: QWidget = self.update_panel
         self.updates_widget = updates_widget
         updates_widget.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
@@ -1532,8 +1519,6 @@ class MainWindow(QMainWindow):
         )
 
     def _exit_for_update(self) -> None:
-        if self.update_panel is None:
-            return
         application = QApplication.instance()
         if application is None:
             self.update_panel._operation_failed(

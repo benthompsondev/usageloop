@@ -89,6 +89,17 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/capture-ui-screenshots.py \
 
 They use the same synthetic fixture as the Windows set and contact nothing.
 
+Both platform assets belong in the same release, named exactly:
+
+```text
+UsageLoop-Setup.exe                        UsageLoop-Setup.exe.sha256
+UsageLoop-<version>-linux-x86_64.tar.gz    UsageLoop-<version>-linux-x86_64.tar.gz.sha256
+```
+
+The in-app updater matches those names exactly. A release missing one platform's
+pair is reported to that platform as "no download yet", which is correct while a
+platform has not shipped, and wrong once it has.
+
 ARM64 is not built. Do not advertise a Linux ARM64 download until one exists.
 
 For a release:

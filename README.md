@@ -190,8 +190,13 @@ does not ship one by default; without an AppIndicator extension UsageLoop runs
 as a normal window, and closing the window exits the app. Pause, Recent starts,
 and Sync are all on the Dashboard, so nothing is tray-only.
 
-**Updates.** UsageLoop does not update itself on Linux. Download a newer build
-and run `install.sh` again; your settings and history are kept.
+**Updates.** Open **Settings** and press **Check for updates**. UsageLoop asks
+GitHub only when you press it, shows what changed, downloads the Linux archive,
+and checks its SHA-256 against the published checksum before doing anything with
+it. If you installed with `install.sh`, **Install and restart** finishes the job:
+UsageLoop closes, the new version is unpacked into place, and it reopens. If you
+are running from an extracted folder instead, it hands you the exact command to
+run yourself. Your settings and history are kept either way.
 
 **If Codex lives somewhere unusual**, such as a Nix, Flatpak, or hand-built
 layout, you can point UsageLoop straight at it. You should not need this for a
