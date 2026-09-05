@@ -225,6 +225,9 @@ class SafeHistoryTests(unittest.TestCase):
 
         self.assertEqual(1, len(loaded))
         self.assertEqual("request_possibly_sent", loaded[0].state)
+        self.assertEqual(attempt.model, loaded[0].model)
+        self.assertEqual("gpt-5.4-mini", loaded[0].model)
+        self.assertEqual("low", loaded[0].reasoning_effort)
         self.assertEqual("rollover:2000010000", loaded[0].idempotency_key)
 
     def test_terminal_trigger_state_cannot_roll_back_to_recoverable(self):

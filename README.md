@@ -278,9 +278,21 @@ When automation is enabled, a rollover start is allowed only after:
 - the current Codex capabilities pass a lightweight compatibility probe.
 
 The start uses one ephemeral `thread/start` plus one `turn/start` through the
-same local app-server. The selected model comes from the current `model/list`
-catalog, with low reasoning when advertised. Success is reported only when
-fresh rate-limit observations show a fixed reset timestamp.
+same local app-server. UsageLoop prefers **GPT-5.6 Luna**, at the lowest reasoning
+effort that the installed Codex catalog supports, with standard service instead
+of Fast mode. The request asks for only “OK” and no tool use.
+
+The model must be visible, support text, and have no retirement/upgrade hint.
+If Luna is unavailable, GPT-5.4 mini is allowed only if it still meets those
+checks. If neither qualifies, UsageLoop sends nothing. It never falls back to
+Astra or Sol just because Codex recommends them as the general default, and it
+does not assume that an unknown successor is cheap.
+
+**Recent starts** shows the saved model and reasoning for each attempt.
+`sentinel doctor` previews the live selection without sending a model request.
+Codex controls usage accounting; a short prompt or lightweight model is not a
+promise of a particular percentage. Success still requires fresh rate-limit
+observations showing a fixed reset timestamp.
 
 If a request may have been sent, UsageLoop never retries it automatically.
 

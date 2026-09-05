@@ -50,6 +50,13 @@ class CompatibilityResult:
                 "Compatibility check passed. The guarded Codex path will be used.",
                 runtime_identity,
             )
+        if initialized and rate_limits_available is True and model_catalog_available and not suitable_model_available:
+            return cls(
+                False,
+                "Needs attention",
+                "No supported lightweight trigger model and reasoning level are available. Automatic starts are paused; no expensive default is used.",
+                runtime_identity,
+            )
         return cls(
             False,
             "Needs attention",

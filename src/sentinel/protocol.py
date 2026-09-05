@@ -140,11 +140,24 @@ class AppServerClient:
 
     def list_models(self) -> list[dict[str, Any]]:
         """Read the installed runtime's model catalog. Sends no model request."""
-        result = self._call("model/list", {})
-        data = result.get("data")
-        if not isinstance(data, list):
-            raise AppServerProtocolError("protocol_unsupported", "Codex returned an unsupported model list.")
-        return [entry for entry in data if isinstance(entry, dict)]
+        models: list[dict[str, Any]] = []
+        params: dict[str, Any] = {}
+        cursors: set[str] = set()
+        for _ in range(20):
+            result = self._call("model/list", params)
+            data = result.get("data")
+            if not isinstance(data, list):
+                break
+            models.extend(entry for entry in data if isinstance(entry, dict))
+            cursor = result.get("nextCursor")
+            if cursor is None:
+                return models
+            if not isinstance(cursor, str) or not cursor or cursor in cursors:
+                break
+            cursors.add(cursor)
+            params = {"cursor": cursor}
+        # Never select an expensive fallback from an incomplete catalog.
+        raise AppServerProtocolError("protocol_unsupported", "Codex returned an incomplete model list.")
 
     def start_thread(self, params: dict[str, Any]) -> str:
         """Create a thread. Creating a thread does not start a turn or spend quota."""

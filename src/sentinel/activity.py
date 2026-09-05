@@ -127,6 +127,12 @@ class RecentStartsDialog(QDialog):
                 label = QLabel(text)
                 label.setWordWrap(True)
                 body.addWidget(label)
+            selection = QLabel(
+                f"Model: {attempt.model or 'Not recorded'} · Reasoning: {attempt.reasoning_effort or 'Not recorded'}"
+            )
+            selection.setWordWrap(True)
+            selection.setProperty("muted", True)
+            body.addWidget(selection)
             if attempt.updated_at != attempt.created_at:
                 updated = QLabel(f"Last recorded: {activity_time(attempt.updated_at)}")
                 updated.setWordWrap(True)

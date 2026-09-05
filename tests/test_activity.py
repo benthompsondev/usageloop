@@ -143,6 +143,24 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual("Time unavailable", activity_time(float("nan")))
         self.assertEqual("Time unavailable", activity_time(float("inf")))
 
+    def test_existing_13_records_expose_saved_model_and_effort_without_rewriting(self):
+        self.record()
+        before = self.history.path.read_bytes()
+        self.assertIn("Model: test · Reasoning: low", self.texts(self.dialog()))
+        self.assertEqual(before, self.history.path.read_bytes())
+
+    def test_absent_or_unsafe_metadata_does_not_break_history_or_leak_text(self):
+        import json
+        self.record()
+        rows = [json.loads(line) for line in self.history.path.read_text().splitlines()]
+        rows[0]["model"] = "private text <bad>"
+        rows[0].pop("reasoning_effort")
+        self.history.path.write_text("\n".join(json.dumps(row) for row in rows))
+        text = self.texts(self.dialog())
+        self.assertIn("Model: Not recorded · Reasoning: Not recorded", text)
+        self.assertNotIn("private", text)
+        self.assertIn("Confirmed", text)
+
 
 if __name__ == "__main__":
     unittest.main()

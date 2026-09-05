@@ -49,7 +49,7 @@ class FakeClient:
         if not self.model:
             return []
         return [{
-            "id": "current-model",
+            "id": "gpt-5.6-luna",
             "isDefault": True,
             "hidden": False,
             "upgrade": None,
