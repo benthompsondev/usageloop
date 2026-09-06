@@ -249,6 +249,20 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("does not add quota or bypass limits", index)
         self.assertIn("The installer is currently unsigned.", index)
 
+    def test_supporter_slots_stay_hidden_until_populated(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        index = (root / "docs" / "index.html").read_text(encoding="utf-8")
+        process = (root / "docs" / "SUPPORTERS.md").read_text(encoding="utf-8")
+
+        for page in (readme, index):
+            self.assertIn("<!-- supporters:start -->", page)
+            self.assertIn("<!-- supporters:end -->", page)
+            self.assertNotIn("No sponsors yet", page)
+
+        for rule in ("public", "opt in", "private", "$25", "$50"):
+            self.assertIn(rule, process)
+
     def test_release_checklist_forbids_reusing_an_installed_candidate_version(self) -> None:
         root = Path(__file__).resolve().parents[1]
         releasing = (root / "docs" / "RELEASING.md").read_text(encoding="utf-8")

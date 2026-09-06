@@ -497,6 +497,44 @@ details p {
   margin-top: 0;
 }
 
+.supporters-strip {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.supporters-strip h2 {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+.supporters-list,
+.supporter-link {
+  display: flex;
+  align-items: center;
+}
+
+.supporters-list {
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.supporter-link {
+  gap: 0.5rem;
+}
+
+.supporter-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  object-fit: contain;
+}
+
 footer {
   display: flex;
   justify-content: space-between;
@@ -553,6 +591,11 @@ footer p {
   }
 
   footer {
+    flex-direction: column;
+  }
+
+  .supporters-strip {
+    align-items: flex-start;
     flex-direction: column;
   }
 }

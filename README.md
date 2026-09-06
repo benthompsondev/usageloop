@@ -363,6 +363,10 @@ conversations, account information, auth files, or unrelated logs.
 UsageLoop helping you? Consider starring the repository. It helps other Codex
 users find the project.
 
+<!-- supporters:start -->
+<!-- Add the Supporters section here only after an eligible public sponsor opts in. See docs/SUPPORTERS.md. -->
+<!-- supporters:end -->
+
 ## Advanced use and development
 
 <details>
