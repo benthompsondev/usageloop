@@ -479,3 +479,7 @@ private personal finance for Windows. My PowerShell automation portfolio is
 [Enterprise PowerShell Systems](https://github.com/benthompsondev/enterprise-powershell-systems).
 
 The rest is on [benthompsondev.github.io](https://benthompsondev.github.io/).
+
+UsageLoop is free and MIT. If it saved you time, you can
+[sponsor the work](https://github.com/sponsors/benthompsondev); it goes toward
+the Codex and Claude subscriptions I use to build and maintain it.
