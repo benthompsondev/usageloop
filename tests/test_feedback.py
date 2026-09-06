@@ -34,10 +34,13 @@ class IssueFormTests(unittest.TestCase):
     def test_issue_forms_are_quick_with_only_one_required_answer_each(self) -> None:
         bug = self.load_yaml("bug_report.yml")
         feature = self.load_yaml("feature_request.yml")
+        setup = self.load_yaml("setup_feedback.yml")
 
         self.assertEqual(
             [
                 "what_went_wrong",
+                "platform",
+                "versions",
                 "anything_else",
                 "diagnostic_summary",
             ],
@@ -48,7 +51,11 @@ class IssueFormTests(unittest.TestCase):
             [item["id"] for item in feature["body"] if "id" in item],
         )
 
-        for form in (bug, feature):
+        self.assertEqual(
+            ["result", "platform", "versions"],
+            [item["id"] for item in setup["body"] if "id" in item],
+        )
+        for form in (bug, feature, setup):
             fields = [item for item in form["body"] if "id" in item]
             required = [
                 item["id"]
@@ -88,14 +95,14 @@ class IssueFormTests(unittest.TestCase):
         config = self.load_yaml("config.yml")
         self.assertIs(config["blank_issues_enabled"], False)
 
-    def test_both_forms_warn_against_pasting_private_codex_data(self) -> None:
+    def test_all_forms_warn_against_pasting_private_codex_data(self) -> None:
         required_warnings = (
             "passwords",
             "api keys",
             "private codex conversations",
             "other sensitive information",
         )
-        for name in ("bug_report.yml", "feature_request.yml"):
+        for name in ("bug_report.yml", "feature_request.yml", "setup_feedback.yml"):
             form = self.load_yaml(name)
             markdown = " ".join(
                 item.get("attributes", {}).get("value", "")
@@ -117,7 +124,7 @@ class IssueFormTests(unittest.TestCase):
             "auth file",
             "unrelated log",
         )
-        for name in ("bug_report.yml", "feature_request.yml"):
+        for name in ("bug_report.yml", "feature_request.yml", "setup_feedback.yml"):
             form = self.load_yaml(name)
             for item in form["body"]:
                 if item.get("type") == "markdown":

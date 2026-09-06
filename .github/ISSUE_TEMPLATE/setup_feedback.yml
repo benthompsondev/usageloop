@@ -6,21 +6,7 @@ body:
     attributes:
       value: |
         Successful installs are useful feedback too. Tell me what worked or where you got stuck.
-        This is public. Leave out account details, credentials, private conversations, and unrelated logs.
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      options:
-        - Windows
-        - Linux
-    validations:
-      required: true
-  - type: input
-    id: versions
-    attributes:
-      label: Versions (if known)
-      description: UsageLoop version from About, Windows version or Linux distribution, and Codex version if available.
+        This is public. Please don't include passwords, API keys, private Codex conversations, or other sensitive information.
   - type: textarea
     id: result
     attributes:
@@ -28,3 +14,15 @@ body:
       placeholder: Did installation and first launch work? Was anything confusing? No need to send an extra Codex request to test it.
     validations:
       required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Linux
+  - type: input
+    id: versions
+    attributes:
+      label: Versions (if known)
+      description: UsageLoop version from About, Windows version or Linux distribution, and Codex version if available.

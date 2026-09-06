@@ -10,21 +10,6 @@ body:
         Please don't include passwords, API keys, private Codex conversations, or other sensitive information.
         For a security vulnerability, use GitHub's private reporting link instead of this public form:
         https://github.com/benthompsondev/usageloop/security/advisories/new
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      options:
-        - Windows
-        - Linux
-    validations:
-      required: true
-  - type: input
-    id: versions
-    attributes:
-      label: Versions (if known)
-      description: UsageLoop version from About, Windows version or Linux distribution, and Codex version if available. No account details needed.
-      placeholder: "UsageLoop 1.3.4; Windows 11 or Ubuntu 24.04; Codex version if known"
   - type: textarea
     id: what_went_wrong
     attributes:
@@ -32,6 +17,19 @@ body:
       placeholder: Tell us what happened and what you saw.
     validations:
       required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Linux
+  - type: input
+    id: versions
+    attributes:
+      label: Versions (if known)
+      description: UsageLoop version from About, Windows version or Linux distribution, and Codex version if available. No account details needed.
+      placeholder: "UsageLoop 1.3.4; Windows 11 or Ubuntu 24.04; Codex version if known"
   - type: textarea
     id: anything_else
     attributes:
@@ -44,7 +42,7 @@ body:
     id: diagnostic_summary
     attributes:
       label: Diagnostic summary (optional)
-      description: Open Settings → Codex connection → Technical details → Copy this summary. Review it before posting; do not attach auth files or unrelated logs.
+      description: Open Settings → Codex connection → Technical details → Copy this summary. Review the summary before posting. Keep any attachments limited to this report.
       render: text
     validations:
       required: false
