@@ -1,0 +1,30 @@
+name: Share setup feedback
+description: Tell me whether UsageLoop installed and worked on your computer.
+title: "[Setup] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Successful installs are useful feedback too. Tell me what worked or where you got stuck.
+        This is public. Leave out account details, credentials, private conversations, and unrelated logs.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions (if known)
+      description: UsageLoop version from About, Windows version or Linux distribution, and Codex version if available.
+  - type: textarea
+    id: result
+    attributes:
+      label: How did it go?
+      placeholder: Did installation and first launch work? Was anything confusing? No need to send an extra Codex request to test it.
+    validations:
+      required: true

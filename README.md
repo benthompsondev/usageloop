@@ -1,4 +1,4 @@
-# UsageLoop
+# UsageLoop: Codex 5-hour reset scheduler
 
 [![Latest release](https://img.shields.io/github/v/release/benthompsondev/usageloop?sort=semver)](https://github.com/benthompsondev/usageloop/releases/latest) [![Windows and Linux verification](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml/badge.svg)](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -23,9 +23,9 @@ Windows and Linux, built from one shared core.
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
-Requires Codex already installed and signed in, as either the Codex desktop app
-or the Codex CLI. Your computer must be awake and signed in, with UsageLoop
-running, for a scheduled start. The Windows installer is unsigned;
+No API key needed. Requires Codex already installed and signed in, as either the
+Codex desktop app or the Codex CLI. Your computer must be awake and signed in,
+with UsageLoop running, for a scheduled start. The Windows installer is unsigned;
 [check the download and SmartScreen guidance](#windows) before running it. If
 your account has no five-hour window, this scheduling feature does not apply.
 
@@ -355,6 +355,7 @@ problem and recheck when ready. UsageLoop does not repeatedly retry it for you.
 
 - [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml)
+- [Share how installation went](https://github.com/benthompsondev/usageloop/issues/new?template=setup_feedback.yml), including a successful Windows or Linux setup.
 
 Bug reports can include the privacy-safe summary from **Settings → Codex connection → Technical details →
 Copy this summary**. Do not paste credentials, Codex prompts or responses,
