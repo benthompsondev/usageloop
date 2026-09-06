@@ -23,7 +23,8 @@
   <meta name="twitter:image" content="https://benthompsondev.github.io/usageloop/social-preview.png">
 
   <link rel="icon" href="favicon.ico" sizes="any">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=lightbox">
+  <script src="lightbox.js?v=lightbox" defer></script>
 
   <script type="application/ld+json">
   {
@@ -85,7 +86,7 @@
           <li>Open source</li>
         </ul>
       </div>
-      <a class="hero-shot" href="screenshots/dashboard-1600x900.png" aria-label="Open the full UsageLoop dashboard screenshot">
+      <a class="hero-shot" href="screenshots/dashboard-1600x900.png" aria-label="Open the full UsageLoop dashboard screenshot" data-lightbox>
         <img src="screenshots/dashboard-1600x900.png" width="1600" height="900" alt="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
       </a>
     </section>
@@ -121,7 +122,7 @@
         <h2 id="weekly-title">Set a routine that matches your week</h2>
         <p>Most people do not start work at the same time seven days a week. Give weekdays one first-start time and weekends another, then override any single day if you want to.</p>
       </div>
-      <a href="screenshots/settings-weekly-expanded.png" aria-label="Open the full UsageLoop Weekly routine screenshot">
+      <a href="screenshots/settings-weekly-expanded.png" aria-label="Open the full UsageLoop Weekly routine screenshot" data-lightbox>
         <img class="product-shot" src="screenshots/settings-weekly-expanded.png" width="1366" height="900" loading="lazy" alt="UsageLoop Weekly routine settings with separate weekday and weekend first-start times, per-day overrides for all seven days, and a Next routine card showing first start, next reset, and overnight pause">
       </a>
       <div class="weekly-points">
@@ -132,7 +133,7 @@
       </div>
       <p>Need a day off? <strong>Pause until tomorrow</strong> waits until tomorrow's configured first-start time without changing your routine. You can resume early from the Dashboard or tray.</p>
       <p><strong>Recent starts</strong> shows your last ten window-start attempts from the Dashboard or tray. See which starts were confirmed, not sent, or left uncertain. It reads existing local history and makes no Codex requests.</p>
-      <a class="screenshot-link" href="screenshots/recent-starts.png" aria-label="Open the Recent starts screenshot">
+      <a class="screenshot-link" href="screenshots/recent-starts.png" aria-label="Open the Recent starts screenshot" data-lightbox>
         <img class="product-shot" src="screenshots/recent-starts.png" alt="Recent starts showing a confirmed window start and an earlier unconfirmed attempt" loading="lazy" width="660" height="640" style="max-width: 660px">
       </a>
     </section>
@@ -275,5 +276,17 @@
     <p>UsageLoop is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by OpenAI.</p>
     <p>Built by <a href="https://benthompsondev.github.io/">Ben Thompson</a> · <a href="https://github.com/benthompsondev">GitHub profile</a> · <a href="https://github.com/sponsors/benthompsondev">Support on GitHub Sponsors</a> · <a href="https://github.com/benthompsondev/usageloop/blob/main/LICENSE">MIT License</a></p>
   </footer>
+
+  <dialog class="lightbox" aria-label="Screenshot viewer">
+    <div class="lightbox-toolbar">
+      <p class="lightbox-status" aria-live="polite"></p>
+      <button class="lightbox-button lightbox-close" type="button" aria-label="Close screenshot">&times;</button>
+    </div>
+    <button class="lightbox-button lightbox-previous" type="button" aria-label="Previous screenshot">&#8249;</button>
+    <figure class="lightbox-figure">
+      <img class="lightbox-image" alt="">
+    </figure>
+    <button class="lightbox-button lightbox-next" type="button" aria-label="Next screenshot">&#8250;</button>
+  </dialog>
 </body>
 </html>

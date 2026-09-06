@@ -58,6 +58,10 @@ img {
   height: auto;
 }
 
+body.lightbox-open {
+  overflow: hidden;
+}
+
 .skip-link {
   position: fixed;
   top: 0.75rem;
@@ -409,6 +413,109 @@ h2 {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
 }
 
+.lightbox {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(3, 8, 14, 0.94);
+  color: var(--text);
+}
+
+.lightbox[open] {
+  display: grid;
+  grid-template: 64px minmax(0, 1fr) 32px / 72px minmax(0, 1fr) 72px;
+}
+
+.lightbox::backdrop {
+  background: transparent;
+}
+
+.lightbox-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+}
+
+.lightbox-status {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.lightbox-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightbox-button:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.lightbox-button:focus-visible {
+  outline: 3px solid var(--warning);
+  outline-offset: 3px;
+}
+
+.lightbox-close {
+  font-size: 2rem;
+}
+
+.lightbox-previous,
+.lightbox-next {
+  align-self: center;
+  justify-self: center;
+  font-size: 2.5rem;
+}
+
+.lightbox-previous {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.lightbox-next {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.lightbox-figure {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.lightbox-image {
+  max-width: 100%;
+  max-height: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  object-fit: contain;
+}
+
 .weekly-points {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -648,5 +755,28 @@ footer p {
 
   .section {
     padding: 4.5rem 0;
+  }
+
+  .lightbox[open] {
+    grid-template: 60px minmax(0, 1fr) 24px / 56px minmax(0, 1fr) 56px;
+  }
+
+  .lightbox-toolbar {
+    padding-inline: 0.5rem;
+  }
+
+  .lightbox-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .lightbox-previous,
+  .lightbox-next {
+    z-index: 1;
+  }
+
+  .lightbox-figure {
+    grid-column: 1 / -1;
+    padding-inline: 0.5rem;
   }
 }

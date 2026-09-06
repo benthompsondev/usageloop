@@ -31,7 +31,7 @@ your account has no five-hour window, this scheduling feature does not apply.
 
 ![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
 
-Screenshots use synthetic usage data: v1.3.3 on Windows and v1.3.4 on Linux.
+Screenshots use synthetic usage data from v1.3.4 on Windows and Linux.
 Both platforms use the same interface.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
