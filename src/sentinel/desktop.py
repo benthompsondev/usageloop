@@ -1058,13 +1058,7 @@ class MainWindow(QMainWindow):
                     state, now=current, automation_enabled=enabled
                 )
                 card.action_button.setVisible(
-                    provider_id == "codex"
-                    and enabled
-                    and not paused
-                    and state.installed
-                    and state.automation_supported
-                    and state.reset_at is None
-                    and state.status not in {"Starting", "Checking"}
+                    self._can_start_loop(provider_id, now=current)
                 )
         codex = self.controller.states.get("codex")
         if codex is not None:
@@ -1235,12 +1229,35 @@ class MainWindow(QMainWindow):
             elif decision.action == "ROLLOVER":
                 self._start_operation(provider_id, "rollover")
 
+    def _can_start_loop(self, provider_id: str, *, now: float) -> bool:
+        state = self.controller.states.get(provider_id)
+        settings = self.controller.settings
+        if state is None:
+            return False
+        # A reported reset remains useful for quota timing. It only hides this
+        # manual action when the current reading actually proves an anchor.
+        current_anchor = (
+            state.reset_at is not None and state.reset_at > now
+            and (state.quota_state == "ANCHORED" or (
+                state.quota_state is None and state.last_verified_at is not None
+            ))
+        )
+        return (
+            provider_id == "codex" and settings.automation_enabled
+            and not settings.pause_active(now)
+            and state.installed and state.automation_supported
+            and state.runtime_identity is not None
+            and settings.compatible_runtime_identities.get(provider_id) == state.runtime_identity
+            and self.controller.persistence_error is None
+            and provider_id not in self.active_operations
+            and state.status not in {"Starting", "Checking", "Needs attention"}
+            and not current_anchor
+        )
+
     def start_bootstrap(self, provider_id: str) -> None:
-        if self.controller.settings.pause_active(time.time()):
+        if not self._can_start_loop(provider_id, now=time.time()) or not self.confirm_bootstrap():
             return
-        if provider_id in self.active_operations or not self.confirm_bootstrap():
-            return
-        if self.controller.settings.pause_active(time.time()):
+        if not self._can_start_loop(provider_id, now=time.time()):
             return
         self._start_operation(provider_id, "bootstrap")
 
@@ -1604,9 +1621,10 @@ class MainWindow(QMainWindow):
     def _confirm_bootstrap(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Start your first Codex window now?",
-            "This sends one small request through your signed-in Codex client, and only if repeated checks "
-            "show no window is running and your weekly limit is safe. It runs once and is not retried.",
+            "Start continuous loop now?",
+            "UsageLoop first checks quota without spending it. Only if no window is running and "
+            "the safety checks pass will it send one small request and verify the reset clock. "
+            "Your saved Continuous or Weekly Routine schedule then takes over. An unclear start is not retried.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )

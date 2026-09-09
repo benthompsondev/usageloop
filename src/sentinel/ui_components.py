@@ -319,7 +319,7 @@ class ProviderCard(QFrame):
         sync_row.addWidget(self.sync_button, 0)
         sync_row.addWidget(self.sync_status, 1)
         layout.addLayout(sync_row)
-        self.action_button = QPushButton("Start my first window now")
+        self.action_button = QPushButton("Start continuous loop now")
         self.action_button.setObjectName("primaryButton")
         self.action_button.setVisible(False)
         layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignLeft)

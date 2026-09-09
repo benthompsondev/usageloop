@@ -167,6 +167,9 @@ class CodexProvider:
             result.outcome not in {"ALREADY_ANCHORED", "ANCHOR_VERIFIED"}
             and current_state is not None
             and current_state.reset_at is not None
+            # A manual bootstrap check should refresh useful quota timing just
+            # like Sync, including an exhausted window's future reset.
+            and not (mode == "bootstrap" and result_state.quota_state in {"UNANCHORED", "EXHAUSTED"})
         ):
             # Sliding UNANCHORED resets are evidence for the classifier, not a
             # new authoritative countdown. Keep showing the last verified
