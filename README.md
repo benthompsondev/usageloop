@@ -1,4 +1,4 @@
-# UsageLoop: Codex 5-hour reset scheduler
+# UsageLoop: Codex 5-hour window scheduler
 
 [![Latest release](https://img.shields.io/github/v/release/benthompsondev/usageloop?sort=semver)](https://github.com/benthompsondev/usageloop/releases/latest) [![Windows and Linux verification](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml/badge.svg)](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -18,8 +18,11 @@ UsageLoop does not add quota or bypass limits. It starts the normal next window
 you were going to receive anyway, earlier. It is a local-first desktop app for
 Windows and Linux, built from one shared core.
 
+It does not redeem banked resets, buy credits, or reset an active window or
+your weekly allowance.
+
 **[Download for Windows](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
-· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.3.4/UsageLoop-1.3.4-linux-x86_64.tar.gz)**
+· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.3.5/UsageLoop-1.3.5-linux-x86_64.tar.gz)**
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
@@ -45,6 +48,16 @@ Both platforms use the same interface.
 [See what it does](#what-usageloop-does) ·
 [Review privacy and trust](#privacy-and-trust) · [Understand how it works](#how-it-works)
 · [Get help](#get-help-and-share-feedback)
+
+## Why use this instead of a scheduled command?
+
+A small Codex command in cron or Windows Task Scheduler may be all you need.
+If that already works for you, there is no need to install another app.
+
+UsageLoop adds checks before sending a start request, blocks automatic starts
+when weekly allowance is nearly exhausted, and avoids automatic retries after
+an uncertain send. You can set weekday and weekend routines, pause them, and
+check **Recent starts** to see whether a start was confirmed.
 
 ## Set your weekly routine
 
@@ -157,15 +170,15 @@ alone would report Codex as missing on a machine that clearly has it.
 
 Download the archive and matching checksum:
 
-- [UsageLoop-1.3.4-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.3.4/UsageLoop-1.3.4-linux-x86_64.tar.gz)
-- [UsageLoop-1.3.4-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.3.4/UsageLoop-1.3.4-linux-x86_64.tar.gz.sha256)
+- [UsageLoop-1.3.5-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.3.5/UsageLoop-1.3.5-linux-x86_64.tar.gz)
+- [UsageLoop-1.3.5-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.3.5/UsageLoop-1.3.5-linux-x86_64.tar.gz.sha256)
 
 From the folder containing both downloads:
 
 ```bash
-sha256sum -c UsageLoop-1.3.4-linux-x86_64.tar.gz.sha256
-tar -xzf UsageLoop-1.3.4-linux-x86_64.tar.gz
-cd UsageLoop-1.3.4-linux-x86_64
+sha256sum -c UsageLoop-1.3.5-linux-x86_64.tar.gz.sha256
+tar -xzf UsageLoop-1.3.5-linux-x86_64.tar.gz
+cd UsageLoop-1.3.5-linux-x86_64
 ./UsageLoop/UsageLoop
 ```
 
