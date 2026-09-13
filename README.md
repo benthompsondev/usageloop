@@ -32,7 +32,7 @@ with UsageLoop running, for a scheduled start. The Windows installer is unsigned
 [check the download and SmartScreen guidance](#windows) before running it. If
 your account has no five-hour window, this scheduling feature does not apply.
 
-![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
+![UsageLoop Weekly routine settings showing weekday and weekend start times and the next scheduled reset](docs/screenshots/settings-weekly-expanded.png)
 
 Screenshots use synthetic usage data from v1.3.4 on Windows and Linux.
 Both platforms use the same interface.
@@ -45,6 +45,7 @@ Both platforms use the same interface.
 
 [Website](https://benthompsondev.github.io/usageloop/) ·
 [Set your weekly routine](#set-your-weekly-routine) · [Install](#install) ·
+[Try it on your next workday](#try-it-on-your-next-workday) ·
 [See what it does](#what-usageloop-does) ·
 [Review privacy and trust](#privacy-and-trust) · [Understand how it works](#how-it-works)
 · [Get help](#get-help-and-share-feedback)
@@ -64,8 +65,6 @@ check **Recent starts** to see whether a start was confirmed.
 Most people do not want the same start time seven days a week. UsageLoop lets
 you set a first-start time for weekdays and another for weekends, then override
 any individual day if you want to.
-
-![UsageLoop Weekly routine settings showing separate weekday and weekend first-start times, per-day overrides, and the Next routine card with first start, next reset, and overnight pause](docs/screenshots/settings-weekly-expanded.png)
 
 - **Weekdays** and **Weekends** each hold one first-start time. Set the time,
   press **Apply Mon–Fri** or **Apply Sat–Sun**, and the button confirms with
@@ -241,6 +240,8 @@ five hours of continuous model work. The weekly limit still applies. OpenAI
 controls these limits, and account behavior can change; check the limits your
 Codex app actually shows.
 
+![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
+
 The dashboard shows:
 
 - whether the five-hour reset clock is running;
@@ -293,6 +294,18 @@ Windows service or store your Windows password.
 Settings contains the schedule, start at sign-in, manual updates, and collapsed
 technical diagnostics. Update checks contact GitHub only after a button click
 and never affect quota.
+
+### Try it on your next workday
+
+After [first-run setup](#first-run), let your chosen routine reach its next
+scheduled start with UsageLoop running and your computer awake and signed in.
+Then open **Recent starts** to check what happened. An active window or a safety
+check can prevent a new start; an empty history does not prove a start failed.
+
+[Tell me how it went](https://github.com/benthompsondev/usageloop/issues/new?template=setup_feedback.yml):
+did setup make sense, and did the reset timing fit your day? Successful setups
+are useful feedback too. There is no need to send an extra request just to test
+it. Feedback is public, so leave out account details and private conversations.
 
 ## Privacy and trust
 
