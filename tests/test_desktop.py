@@ -325,11 +325,28 @@ class DesktopTests(unittest.TestCase):
         # A freshly detected provider has never been checked, so it must not
         # borrow the language of a window that is actually counting down.
         self.assertEqual(
-            "AUTOMATION OFF", window.provider_cards["codex"].status_label.text()
+            "GET STARTED", window.provider_cards["codex"].status_label.text()
         )
+        self.assertEqual("Set up your routine", window.overall_title.text())
+        self.assertIn("choose when your day starts", window.overall_detail.text().lower())
+        self.assertNotIn("saved routine", window.overall_detail.text().lower())
+        self.assertTrue(window.recheck_dashboard_button.isHidden())
         self.assertLessEqual(window.minimumSizeHint().width(), 1366)
         self.assertLessEqual(window.minimumSizeHint().height(), 768)
         self.assertEqual(3, window.findChild(QStackedWidget).count())
+
+    def test_dashboard_recheck_appears_after_a_failed_check(self):
+        state = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="runtime:1"
+        )
+        window, provider = self.make_window(state)
+        self.assertTrue(window.recheck_dashboard_button.isHidden())
+        window.controller.apply_compatibility(
+            "codex", CompatibilityResult(False, "Needs attention", "Sign in to Codex.", "runtime:1")
+        )
+        window.refresh_clock()
+        self.assertFalse(window.recheck_dashboard_button.isHidden())
+        self.assertEqual(0, provider.action_calls)
         self.assertEqual(
             ["Dashboard", "Settings", "About"],
             [button.text() for button in window.nav_buttons],
@@ -892,8 +909,8 @@ class DesktopTests(unittest.TestCase):
 
         window.refresh_clock(now=now)
 
-        self.assertIn("Current window", window.schedule_card.next_label.text())
-        self.assertIn("until it resets", window.schedule_card.next_label.text())
+        self.assertIn("Next start around", window.schedule_card.next_label.text())
+        self.assertIn("after this window resets", window.schedule_card.next_label.text())
         self.assertNotIn("verified", window.schedule_card.next_label.text().lower())
 
     def test_weekly_pause_starts_no_worker_and_due_rollover_starts_at_most_one(self):

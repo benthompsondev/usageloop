@@ -284,7 +284,7 @@ weekly snapshots. It never selects a model or starts a Codex turn.
    its own first-start time: set the
    weekday and weekend times, then check the **Next routine** card before you
    leave.
-4. On a true first run, choose **Start continuous loop now**. This explicit
+4. If no window is running yet, choose **Start my first window now**. This explicit
    action uses the same evidence and weekly checks as an automatic start.
 5. Leave UsageLoop in the tray. Automation and start at sign-in stay off until
    you enable them.

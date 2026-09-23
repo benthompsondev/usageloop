@@ -48,6 +48,13 @@ def operational_presentation(
                     "Resumes " + _absolute_time(settings.automation_paused_until),
                     tray="Paused until " + _absolute_time(settings.automation_paused_until))
     if state is None:
+        if not settings.automation_enabled and not settings.first_run_complete:
+            return make("first_run", "Set up your routine",
+                        "Choose when your day starts in Settings, then turn on Automation. Nothing is sent to Codex until you do.",
+                        "info", "GET STARTED", "No clock running yet",
+                        "Choose a start time, then turn on Automation.",
+                        "Choose your start time in Settings, then turn on Automation",
+                        tray="Set up your routine")
         return make("first_run", "Waiting for Codex status",
                     "UsageLoop has not checked Codex yet.", "info", "NOT CHECKED",
                     "No reset clock verified yet", "Sync usage to read the current window.",
@@ -64,6 +71,17 @@ def operational_presentation(
                     "info", "CHECKING CONNECTION", "Checking Codex",
                     "Compatibility is being checked without sending a turn.",
                     "Wait for the read-only check.", tray="Checking Codex")
+    if (not settings.automation_enabled and not settings.first_run_complete
+            and state.provider_id not in settings.checked_runtime_identities
+            and state.usage_checked_at is None and state.last_verified_at is None
+            and state.reset_at is None
+            and state.status != "Needs attention"):
+        return make("first_run", "Set up your routine",
+                    "Choose when your day starts in Settings, then turn on Automation. Nothing is sent to Codex until you do.",
+                    "info", "GET STARTED", "No clock running yet",
+                    "Choose a start time, then turn on Automation.",
+                    "Choose your start time in Settings, then turn on Automation",
+                    tray="Set up your routine")
     if (state.compatibility_next_retry_at is None and
             (state.status == "Needs attention" or not state.automation_supported
              or (settings.checked_runtime_identities.get(state.provider_id) == state.runtime_identity
@@ -126,18 +144,21 @@ def operational_presentation(
                     "warning", "NEEDS ATTENTION", "Usage unclear",
                     "Sync usage to read the current state.",
                     "Start blocked until quota evidence is clear.", tray="Needs attention")
-    if state.reset_at is not None and state.reset_at > now and (state.quota_state == "ANCHORED" or state.status == "Ready"):
+    if (state.reset_at is not None and state.reset_at > now
+            and state.quota_state != "UNANCHORED"
+            and (state.quota_state == "ANCHORED" or state.status == "Ready")):
         return make("active_window", "Everything is set",
                     "The countdown runs locally. UsageLoop follows your saved schedule after this window ends.",
                     "success", "CLOCK RUNNING", format_countdown(state.reset_at, now),
                     "Codex confirmed this reset time. No Codex traffic is needed for the countdown.",
-                    "Current window stays active until it resets", tray=format_countdown(state.reset_at, now) + " left")
+                    _active_window_next_action(settings, state.reset_at, now),
+                    tray=format_countdown(state.reset_at, now) + " left")
     if (state.quota_state == "UNANCHORED" and state.last_verified_at is None
             and state.weekly_used_percent is not None
             and (state.reset_at is None or state.reset_at > now)):
         return make("first_window", "Ready when you choose to start",
                     "Starting a first window requires your approval.", "info",
-                    "FIRST START", "No reset clock verified yet",
+                    "FIRST START", "No clock running yet",
                     "The first start uses a guarded Codex request after you approve it.",
                     "First window starts only when you ask", manual=True,
                     tray="Waiting for first window")
@@ -179,6 +200,25 @@ def operational_presentation(
                 "info", "NOT CHECKED", "No reset clock verified yet",
                 "Read-only usage evidence is needed before a start.",
                 "Sync usage to check the current window", tray="Waiting for Codex status")
+
+
+def _active_window_next_action(settings: AppSettings, reset_at: float, now: float) -> str:
+    try:
+        summary = schedule_summary(
+            settings.schedule_mode, boundary_reset_at=reset_at, now=now,
+            hour=settings.daily_start_hour, minute=settings.daily_start_minute,
+            weekly_times=settings.weekly_start_times,
+        )
+    except (OSError, OverflowError, ValueError):
+        return "Next start waits for this window to reset and a usable schedule"
+    target = _time(summary.next_action_at, now)
+    if target == "when the schedule allows":
+        return "Next start waits for this window to reset and a usable schedule"
+    if summary.phase == "overnight_pause":
+        return "After this window: overnight pause · first start " + target
+    if summary.phase == "scheduled_first_start":
+        return "Next start " + target
+    return "Next start around " + target + ", after this window resets"
 
 
 def _time(timestamp: float | None, now: float) -> str:

@@ -243,6 +243,48 @@ class PresentationTests(unittest.TestCase):
         return replace(ProviderViewState.waiting("codex", "Codex", installed=True,
                                                 runtime_identity="runtime:1"), **changes)
 
+    def test_active_window_next_action_uses_existing_schedule(self):
+        now = datetime(2026, 9, 23, 10).timestamp()
+        active = self.state(status="Ready", quota_state="ANCHORED",
+                            reset_at=int(datetime(2026, 9, 23, 15).timestamp()),
+                            last_verified_at=now - 60)
+        weekly = self.settings(schedule_mode="weekly", weekly_start_times=((4, 0),) * 7)
+        self.assertEqual(
+            "Next start around today at 3:01 PM, after this window resets",
+            operational_presentation(weekly, active, now=now).next_action,
+        )
+        evening = replace(active, reset_at=int(datetime(2026, 9, 23, 23, 30).timestamp()))
+        self.assertEqual(
+            "After this window: overnight pause · first start tomorrow at 4:00 AM",
+            operational_presentation(weekly, evening,
+                                     now=datetime(2026, 9, 23, 20).timestamp()).next_action,
+        )
+        daily = self.settings(schedule_mode="daily", daily_start_hour=4,
+                              daily_start_minute=0)
+        self.assertEqual(
+            "Next start tomorrow at 4:00 AM",
+            operational_presentation(daily, active, now=now).next_action,
+        )
+        continuous = self.settings(schedule_mode="continuous")
+        self.assertEqual(
+            "Next start around today at 3:01 PM, after this window resets",
+            operational_presentation(continuous, active, now=now).next_action,
+        )
+        unavailable = self.settings(schedule_mode="weekly", weekly_start_times=None)
+        self.assertIn("usable schedule",
+                      operational_presentation(unavailable, active, now=now).next_action)
+
+    def test_unanchored_estimate_is_not_a_confirmed_active_window(self):
+        result = operational_presentation(
+            self.settings(), self.state(status="Ready", quota_state="UNANCHORED",
+                                        reset_at=int(self.NOW + 18000),
+                                        weekly_used_percent=20, usage_checked_at=self.NOW),
+            now=self.NOW,
+        )
+        self.assertEqual("first_window", result.kind)
+        self.assertEqual("No clock running yet", result.card_headline)
+        self.assertNotIn("resets", result.next_action.lower())
+
     def test_normal_daily_wait_and_weekly_pause_have_no_alarm_or_manual_start(self):
         daily = self.state(reset_at=int(datetime(2026, 9, 23, 5).timestamp()),
                            quota_state="UNANCHORED", usage_checked_at=self.NOW,

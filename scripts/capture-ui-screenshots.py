@@ -186,6 +186,14 @@ def main() -> int:
         window.resize(1600, 900)
         save(window, args.output / "dashboard.png", app)
 
+        evening_now = datetime(2030, 1, 15, 20, 0).timestamp()
+        evening_reset = int(datetime(2030, 1, 15, 23, 30).timestamp())
+        controller.update_provider_state(replace(codex, reset_at=evening_reset))
+        window.refresh_clock(now=evening_now)
+        save(window, args.output / "dashboard-weekly-evening.png", app)
+        controller.update_provider_state(codex)
+        window.refresh_clock(now=now)
+
         window.resize(1040, 720)
         window.show_page(1)
         save(window, args.output / "settings.png", app)
@@ -268,11 +276,29 @@ def main() -> int:
                 runtime_identity=codex.runtime_identity,
             )
         )
+        controller._save_settings(replace(
+            controller.settings, first_run_complete=False,
+            checked_runtime_identities={}, compatible_runtime_identities={},
+            schedule_mode="continuous",
+            weekly_start_times=None,
+        ))
+        provider.history = SafeHistory(Path(directory) / "first-run-history.jsonl")
         window.refresh_clock(now=now)
         window.resize(1040, 720)
         save(window, args.output / "dashboard-first-run.png", app)
         window.resize(1920, 1080)
         save(window, args.output / "dashboard-first-run-1920x1080.png", app)
+        controller.set_automation_enabled(True)
+        controller.apply_compatibility("codex", CompatibilityResult(
+            True, "Ready", "Compatibility confirmed.", codex.runtime_identity,
+        ))
+        controller.update_provider_state(replace(
+            codex, quota_state="UNANCHORED", last_verified_at=None,
+            usage_checked_at=now, reset_at=int(now + 5 * 3600),
+        ))
+        window.resize(1366, 768)
+        window.refresh_clock(now=now)
+        save(window, args.output / "dashboard-unanchored.png", app)
         window.close()
     return 0
 

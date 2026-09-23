@@ -990,7 +990,10 @@ class MainWindow(QMainWindow):
             "info" if paused else ("success" if enabled else "neutral"),
         )
         pause_button = self.schedule_card.pause_button
-        pause_button.setVisible(paused or self.controller.settings.schedule_mode in {DAILY, WEEKLY})
+        pause_button.setVisible(
+            paused or (self.controller.settings.automation_enabled
+                       and self.controller.settings.schedule_mode in {DAILY, WEEKLY})
+        )
         pause_button.setText("Resume automation" if paused else "Pause until tomorrow")
         pause_button.setEnabled(enabled and not self.active_operations)
         target = self.controller.settings.tomorrow_first_start(current)
@@ -1024,7 +1027,10 @@ class MainWindow(QMainWindow):
                 not codex.automation_supported
                 or self.controller.settings.compatible_runtime_identities.get("codex") != codex.runtime_identity
             )
-            self.recheck_dashboard_button.setVisible(codex.installed and needs_check)
+            self.recheck_dashboard_button.setVisible(
+                codex.installed and needs_check
+                and "codex" in self.controller.settings.checked_runtime_identities
+            )
             for button in (self.recheck_button, self.recheck_dashboard_button):
                 button.setEnabled(codex.installed and not self.active_operations and self.controller.persistence_error is None)
                 button.setText("Checking Codex…" if checking else "Recheck Codex compatibility")
@@ -1637,10 +1643,10 @@ class MainWindow(QMainWindow):
     def _confirm_bootstrap(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Start continuous loop now?",
+            "Start my first window now?",
             "UsageLoop first checks quota without spending it. Only if no window is running and "
             "the safety checks pass will it send one small request and verify the reset clock. "
-            "Your saved Continuous or Weekly Routine schedule then takes over. An unclear start is not retried.",
+            "Your chosen routine then takes over. An unclear start is not retried.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )

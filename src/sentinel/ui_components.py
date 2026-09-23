@@ -180,7 +180,9 @@ def present_provider_state(
             usage, weekly, action,
         )
 
-    reset = _reset_copy(state.reset_at, now=now)
+    unanchored_first_window = state.quota_state == "UNANCHORED" and state.last_verified_at is None
+    reset = ("Reset time not verified" if unanchored_first_window
+             else _reset_copy(state.reset_at, now=now))
     if state.last_verified_at is not None:
         verified = f"Last synced {_friendly_time(state.last_verified_at, now=now)}"
     elif state.usage_checked_at is not None:
@@ -212,11 +214,11 @@ def present_provider_state(
             "One minimal Codex request is in progress. It will not be retried automatically.",
             verified, usage, weekly, action,
         )
-    if state.reset_at is None:
+    if state.reset_at is None or unanchored_first_window:
         return ProviderPresentation(
             "WAITING FOR RESET" if automation_enabled else "AUTOMATION OFF",
             "info" if automation_enabled else "neutral",
-            "No reset clock verified yet", reset,
+            "No clock running yet" if unanchored_first_window else "No reset clock verified yet", reset,
             (
                 "UsageLoop will check Codex and start the first window only after every safety gate passes."
                 if automation_enabled
@@ -313,7 +315,7 @@ class ProviderCard(QFrame):
         sync_row.addWidget(self.sync_button, 0)
         sync_row.addWidget(self.sync_status, 1)
         layout.addLayout(sync_row)
-        self.action_button = QPushButton("Start continuous loop now")
+        self.action_button = QPushButton("Start my first window now")
         self.action_button.setObjectName("primaryButton")
         self.action_button.setVisible(False)
         layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignLeft)

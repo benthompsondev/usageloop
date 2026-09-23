@@ -112,8 +112,11 @@ class ManualLoopStartTests(unittest.TestCase):
     def test_unanchored_sync_offers_exactly_one_guarded_lightweight_start(self):
         self.assertEqual("UNANCHORED", self.state.quota_state)
         self.assertGreater(self.state.reset_at, self.now)
-        self.assertEqual("Start continuous loop now", self.button.text())
+        self.assertEqual("Start my first window now", self.button.text())
         self.assertFalse(self.button.isHidden())
+        card = self.window.provider_cards["codex"]
+        self.assertEqual("No clock running yet", card.countdown_label.text())
+        self.assertEqual("Reset time not verified", card.reset_label.text())
         settings = self.controller.settings
         reads = self.client.read_calls
         self.click_start()
@@ -183,8 +186,13 @@ class ManualLoopStartTests(unittest.TestCase):
                 self.assertEqual(kind, self.state.quota_state)
                 self.assertEqual(used, self.state.used_percent)
                 self.assertGreater(self.state.reset_at, self.now)
-                self.assertIn("Resets", present_provider_state(self.state,
-                    now=self.now, automation_enabled=True).reset)
+                reset_copy = present_provider_state(
+                    self.state, now=self.now, automation_enabled=True
+                ).reset
+                if kind == "UNANCHORED":
+                    self.assertEqual("Reset time not verified", reset_copy)
+                else:
+                    self.assertIn("Resets", reset_copy)
         self.assertEqual(0, self.client.model_calls)
         self.assertEqual(0, self.client.thread_calls)
         self.assertEqual(0, self.client.turn_calls)
