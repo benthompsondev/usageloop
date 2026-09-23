@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sentinel.models import ModelChoice, select_trigger_model
+from sentinel.models import ModelChoice, TRIGGER_MODEL_PREFERENCE, select_trigger_model
 from sentinel.protocol import AppServerProtocolError, AppServerRequestRejected
 from sentinel.transport import TransportTimeoutError
 from sentinel.trigger import AppServerTrigger, TriggerConfig
@@ -72,15 +72,15 @@ def rejected(code):
 
 
 class ModelSelectionTests(unittest.TestCase):
-    def test_prefers_luna_over_astra_default_and_catalog_order(self):
-        catalog = [catalog_entry("gpt-6-astra", default=True)] + LIVE_CATALOG
-        self.assertEqual(ModelChoice("gpt-5.6-luna", "low", False), select_trigger_model(catalog))
+    def test_prefers_gpt_6_luna_over_astra_default_and_catalog_order(self):
+        catalog = [catalog_entry("gpt-6-astra", default=True), catalog_entry("gpt-6-luna")] + LIVE_CATALOG
+        self.assertEqual(ModelChoice("gpt-6-luna", "low", False), select_trigger_model(catalog))
         self.assertEqual(select_trigger_model(catalog), select_trigger_model(list(reversed(catalog))))
 
     def test_defaults_are_irrelevant_even_when_multiple_or_missing(self):
         for default in (False, True):
-            catalog = [catalog_entry("gpt-6-astra", default=default), catalog_entry("gpt-5.6-luna", default=default)]
-            self.assertEqual("gpt-5.6-luna", select_trigger_model(catalog).model)
+            catalog = [catalog_entry("gpt-6-astra", default=default), catalog_entry("gpt-5.6-luna", default=default), catalog_entry("gpt-6-luna", default=default)]
+            self.assertEqual("gpt-6-luna", select_trigger_model(catalog).model)
 
     def test_retired_mini_is_never_a_fallback(self):
         for problem in ({"hidden": True}, {"upgrade": "gpt-7-unknown"}, {"upgradeInfo": {"model": "gpt-7-unknown"}}):
@@ -89,16 +89,21 @@ class ModelSelectionTests(unittest.TestCase):
             self.assertIsNone(select_trigger_model(catalog))
         self.assertIsNone(select_trigger_model([catalog_entry("gpt-5.4-mini", upgrade="gpt-5.6-luna")]))
 
-    def test_candidate_luna_order_is_explicit_and_rejects_hidden_or_upgraded_six(self):
-        from unittest.mock import patch
-        with patch("sentinel.models.TRIGGER_MODEL_PREFERENCE", ("gpt-6-luna", "gpt-5.6-luna")):
-            both = [catalog_entry("gpt-5.6-luna"), catalog_entry("gpt-6-luna")]
-            self.assertEqual("gpt-6-luna", select_trigger_model(both).model)
-            self.assertEqual("gpt-5.6-luna", select_trigger_model(both[:1]).model)
-            for problem in ({"hidden": True}, {"upgrade": "gpt-7-luna"}):
-                catalog = [catalog_entry("gpt-6-luna") | problem, both[0]]
-                self.assertEqual("gpt-5.6-luna", select_trigger_model(catalog).model)
-            self.assertIsNone(select_trigger_model([catalog_entry("gpt-7-luna")]))
+    def test_candidate_order_and_unusable_primary_fallback(self):
+        self.assertEqual(("gpt-6-luna", "gpt-5.6-luna"), TRIGGER_MODEL_PREFERENCE)
+        both = [catalog_entry("gpt-5.6-luna"), catalog_entry("gpt-6-luna")]
+        self.assertEqual("gpt-6-luna", select_trigger_model(both).model)
+        self.assertEqual("gpt-5.6-luna", select_trigger_model(both[:1]).model)
+        for problem in ({"hidden": True}, {"upgrade": "gpt-7-luna"}, {"upgradeInfo": {"model": "gpt-7-luna"}}):
+            catalog = [catalog_entry("gpt-6-luna") | problem, both[0]]
+            self.assertEqual("gpt-5.6-luna", select_trigger_model(catalog).model)
+        self.assertIsNone(select_trigger_model([catalog_entry("gpt-7-luna")]))
+        self.assertIsNone(select_trigger_model([catalog_entry("gpt-5.4-mini")]))
+        self.assertIsNone(select_trigger_model([
+            catalog_entry("gpt-6-luna", hidden=True),
+            catalog_entry("gpt-5.6-luna", upgrade="gpt-7-luna"),
+            catalog_entry("gpt-5.4-mini"),
+        ]))
 
     def test_never_follows_unknown_successor_or_expensive_default(self):
         for catalog in (
@@ -279,6 +284,17 @@ class TriggerOutcomeTests(unittest.TestCase):
     def test_transport_failure_after_submission_is_possibly_sent(self):
         client = FakeClient(turn_error=OSError("pipe closed"))
         result = self.trigger(client).run()
+        self.assertEqual("turn_start_unconfirmed", result.terminal_outcome)
+        self.assertTrue(result.request_possibly_sent)
+
+    def test_possible_send_never_falls_back_to_second_model(self):
+        client = FakeClient(
+            catalog=[catalog_entry("gpt-6-luna"), catalog_entry("gpt-5.6-luna")],
+            turn_error=OSError("pipe closed"),
+        )
+        result = self.trigger(client).run()
+        self.assertEqual("gpt-6-luna", client.thread_params["model"])
+        self.assertEqual(1, client.turn_calls)
         self.assertEqual("turn_start_unconfirmed", result.terminal_outcome)
         self.assertTrue(result.request_possibly_sent)
 

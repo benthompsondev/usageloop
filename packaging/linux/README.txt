@@ -5,8 +5,9 @@ Plan when your Codex day starts.
 Requirements
 ------------
 - An x86_64 Linux desktop with a graphical session (X11 or Wayland).
-- Codex already installed and signed in: either the Codex desktop app or the
-  Codex CLI. UsageLoop finds both on its own, and does not need `codex` on PATH.
+- Codex already installed and signed in: either the ChatGPT desktop app in
+  Codex mode or the Codex CLI. UsageLoop finds both on its own, and does not
+  need `codex` on PATH.
 
 Run it without installing
 -------------------------
@@ -43,7 +44,7 @@ starts, and Sync are all on the Dashboard, so nothing is tray-only.
 If Codex is somewhere unusual
 -----------------------------
 UsageLoop checks $CODEX_HOME (default ~/.codex) for the binary the Codex CLI
-manages, then follows the Codex desktop app's own launcher to wherever it is
+manages, then follows the ChatGPT desktop app's own launcher to wherever it is
 installed, then falls back to `codex` on PATH.
 
 You should not need to configure anything. If your Codex lives somewhere none of

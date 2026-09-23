@@ -15,9 +15,8 @@ from typing import Any, Sequence
 
 _SAFE_MODEL = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 _SAFE_EFFORT = re.compile(r"^[a-z]{1,16}$")
-# GPT-6 Luna remains a test candidate until a supervised fresh-window start
-# proves it anchors the target meter. Do not put it in this production list yet.
-TRIGGER_MODEL_PREFERENCE = ("gpt-5.6-luna",)
+# Reviewed lightweight models only; do not match arbitrary future Luna names.
+TRIGGER_MODEL_PREFERENCE = ("gpt-6-luna", "gpt-5.6-luna")
 _EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra")
 
 
