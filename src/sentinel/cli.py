@@ -17,7 +17,7 @@ from . import __version__
 from .chain import ChainCoordinator, ChainPolicy, ChainResult
 from .classifier import Classification, classify
 from .history import SafeHistory, default_history_path
-from .models import select_trigger_model
+from .models import TRIGGER_MODEL_PREFERENCE, select_trigger_model
 from .product import PRODUCT
 from .protocol import AppServerClient
 from .quota import QuotaSnapshot, QuotaWindow, normalize_rate_limits, select_five_hour
@@ -140,6 +140,8 @@ def run_doctor() -> int:
         print(f"Subscription rate limits: available ({len(snapshot.windows)} window(s))")
         print("Trigger transport: local app-server turn (thread/start + turn/start)")
         print(f"Trigger model: {_describe_trigger_model(session)}")
+        print(f"Model preference: {', then '.join(TRIGGER_MODEL_PREFERENCE)}")
+        print("Model policy: listed lightweight models only; no unknown or default-model fallback")
         print(f"Safe log: {default_history_path()}")
         print("Doctor boundary: read-only checks only; no model request was sent.")
         return 0
@@ -154,9 +156,9 @@ def _describe_trigger_model(session: RuntimeSession) -> str:
     except Exception:
         return "unavailable (model/list failed)"
     if choice is None:
-        return "none usable (no supported lightweight model/effort; no default fallback)"
+        return "none usable (no supported lightweight model/effort)"
     effort = choice.reasoning_effort or "provider default"
-    return f"{choice.model} / {effort} / standard service (lightweight preference; no default fallback)"
+    return f"{choice.model} / {effort} / standard service"
 
 
 def run_status(*, json_output: bool) -> int:

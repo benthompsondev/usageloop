@@ -1,11 +1,60 @@
+from contextlib import redirect_stdout
+from io import StringIO
 import unittest
+from unittest.mock import patch
 
 from sentinel.classifier import Classification
-from sentinel.cli import build_status_payload, create_parser
+from sentinel.cli import build_status_payload, create_parser, run_doctor
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 
 
 class CliShapeTests(unittest.TestCase):
+    def test_doctor_shows_selected_model_explicit_fallback_and_policy(self):
+        def model(identifier, **overrides):
+            return {
+                "id": identifier,
+                "supportedReasoningEfforts": [{"reasoningEffort": "low"}],
+                **overrides,
+            }
+
+        class Session:
+            executable = "fixture-codex"
+            codex_version = "fixture"
+            platform_os = "windows"
+
+            def __init__(self, catalog):
+                self.client = self
+                self.catalog = catalog
+                self.closed = False
+
+            def read_rate_limits(self):
+                return {}
+
+            def list_models(self):
+                return self.catalog
+
+            def close(self):
+                self.closed = True
+
+        cases = (
+            ([model("gpt-5.6-luna"), model("gpt-6-luna")], "gpt-6-luna / low / standard service"),
+            ([model("gpt-6-luna", hidden=True), model("gpt-5.6-luna")], "gpt-5.6-luna / low / standard service"),
+            ([model("gpt-6-luna", hidden=True), model("gpt-5.6-luna", upgrade="gpt-7-luna")], "none usable"),
+        )
+        for catalog, selected in cases:
+            with self.subTest(selected=selected):
+                session = Session(catalog)
+                output = StringIO()
+                with (patch("sentinel.cli.connect", return_value=session),
+                      patch("sentinel.cli.normalize_rate_limits", return_value=QuotaSnapshot(0, ())),
+                      redirect_stdout(output)):
+                    self.assertEqual(0, run_doctor())
+                rendered = output.getvalue()
+                self.assertIn(f"Trigger model: {selected}", rendered)
+                self.assertIn("Model preference: gpt-6-luna, then gpt-5.6-luna", rendered)
+                self.assertIn("Model policy: listed lightweight models only; no unknown or default-model fallback", rendered)
+                self.assertTrue(session.closed)
+
     def test_status_json_has_machine_readable_five_hour_and_other_windows(self):
         five_hour = QuotaWindow("codex", "primary", 12, 300, 2000010000, None)
         weekly = QuotaWindow("codex", "secondary", 34, 10080, 2000604800, None)
