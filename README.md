@@ -34,7 +34,8 @@ your account has no five-hour window, this scheduling feature does not apply.
 
 ![UsageLoop Weekly routine settings showing weekday and weekend start times and the next scheduled reset](docs/screenshots/settings-weekly-expanded.png)
 
-Screenshots use synthetic usage data. Both platforms use the same interface.
+Screenshots show the 1.3.8 interface with synthetic usage data. Both platforms
+use the same interface.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
 - Free and open source under the MIT license
