@@ -22,7 +22,7 @@ It does not redeem banked resets, buy credits, or reset an active window or
 your weekly allowance.
 
 **[Download for Windows](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
-· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.3.5/UsageLoop-1.3.5-linux-x86_64.tar.gz)**
+· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.3.8/UsageLoop-1.3.8-linux-x86_64.tar.gz)**
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
@@ -168,15 +168,15 @@ alone would report Codex as missing on a machine that clearly has it.
 
 Download the archive and matching checksum:
 
-- [UsageLoop-1.3.5-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.3.5/UsageLoop-1.3.5-linux-x86_64.tar.gz)
-- [UsageLoop-1.3.5-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.3.5/UsageLoop-1.3.5-linux-x86_64.tar.gz.sha256)
+- [UsageLoop-1.3.8-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.3.8/UsageLoop-1.3.8-linux-x86_64.tar.gz)
+- [UsageLoop-1.3.8-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.3.8/UsageLoop-1.3.8-linux-x86_64.tar.gz.sha256)
 
 From the folder containing both downloads:
 
 ```bash
-sha256sum -c UsageLoop-1.3.5-linux-x86_64.tar.gz.sha256
-tar -xzf UsageLoop-1.3.5-linux-x86_64.tar.gz
-cd UsageLoop-1.3.5-linux-x86_64
+sha256sum -c UsageLoop-1.3.8-linux-x86_64.tar.gz.sha256
+tar -xzf UsageLoop-1.3.8-linux-x86_64.tar.gz
+cd UsageLoop-1.3.8-linux-x86_64
 ./UsageLoop/UsageLoop
 ```
 
