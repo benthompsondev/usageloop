@@ -88,6 +88,7 @@ class ManualLoopStartTests(unittest.TestCase):
         self.client.turn_calls += 1
         self.turn_params = params
         if self.verify:
+            self.advance(1)
             self.fixed = int(self.now + 18000)
 
     def sync(self):
@@ -154,9 +155,11 @@ class ManualLoopStartTests(unittest.TestCase):
         # Old cached reset must not mask the useful timing from the fresh check.
         self.controller.update_provider_state(replace(self.state,
             reset_at=int(self.now - 86400), last_verified_at=self.now - 86500))
+        self.window.refresh_clock(now=self.now)
         self.used = 100
         self.fixed = int(datetime(2026, 9, 9, 12, 42).timestamp())
-        self.click_start()
+        self.assertTrue(self.button.isHidden())
+        self.sync()
         self.assertEqual(0, self.client.turn_calls)
         self.assertEqual("EXHAUSTED", self.state.quota_state)
         self.assertEqual(self.fixed, self.state.reset_at)
@@ -207,8 +210,10 @@ class ManualLoopStartTests(unittest.TestCase):
         self.assertEqual("ANCHOR_NOT_VERIFIED", self.state.last_action)
         self.controller.start()
         self.window.refresh_clock(now=self.now)
+        count = len(self.window.thread_pool.workers)
         self.click_start()
-        self.assertEqual("BOOTSTRAP_COOLDOWN", self.state.last_action)
+        self.assertEqual(count, len(self.window.thread_pool.workers))
+        self.assertEqual("ANCHOR_NOT_VERIFIED", self.state.last_action)
         self.assertEqual(1, self.client.turn_calls)
 
     def test_manual_start_respects_automation_pause_and_compatibility(self):

@@ -6,7 +6,6 @@ import unittest
 from sentinel.app_state import AppSettings, ProviderViewState
 from sentinel.host import is_windows, platform_label
 from sentinel.diagnostics import (
-    STALE_AFTER_SECONDS,
     build_health_rows,
     local_state_health,
     overall_summary,
@@ -67,15 +66,15 @@ class ProviderHealthTests(unittest.TestCase):
         self.assertEqual("Ready", row.status)
         self.assertEqual("success", row.tone)
 
-    def test_old_verification_reads_as_stale_rather_than_ready(self):
+    def test_old_verification_keeps_a_fixed_countdown_ready(self):
         row = self.health(
             state(
                 reset_at=int(NOW + 9000),
-                last_verified_at=NOW - STALE_AFTER_SECONDS - 1,
+                last_verified_at=NOW - 7 * 3600,
             )
         )
-        self.assertEqual("Stale", row.status)
-        self.assertEqual("warning", row.tone)
+        self.assertEqual("Ready", row.status)
+        self.assertEqual("success", row.tone)
 
     def test_automation_off_reads_as_detected_and_points_at_the_switch(self):
         row = self.health(state(), automation=False)
@@ -139,14 +138,14 @@ class LocalStateHealthTests(unittest.TestCase):
         self.assertEqual("Healthy", row.status)
         self.assertEqual("success", row.tone)
 
-    def test_old_reading_is_stale(self):
+    def test_old_reading_is_healthy_when_saved_state_is_readable(self):
         row = local_state_health(
             state_file_exists=True,
-            newest_observation_at=NOW - STALE_AFTER_SECONDS - 1,
+            newest_observation_at=NOW - 7 * 3600,
             now=NOW,
         )
-        self.assertEqual("Stale", row.status)
-        self.assertEqual("warning", row.tone)
+        self.assertEqual("Healthy", row.status)
+        self.assertEqual("success", row.tone)
 
     def test_saved_but_no_readings_is_still_healthy(self):
         row = local_state_health(
@@ -193,16 +192,16 @@ class SummaryTests(unittest.TestCase):
         rows = self.rows(states={"codex": state(status="Needs attention")})
         self.assertEqual("error", overall_summary(rows).tone)
 
-    def test_overall_reports_a_warning_when_something_is_stale(self):
+    def test_overall_does_not_warn_for_an_old_fixed_clock(self):
         rows = self.rows(
             states={
                 "codex": state(
                     reset_at=int(NOW + 9000),
-                    last_verified_at=NOW - STALE_AFTER_SECONDS - 1,
+                    last_verified_at=NOW - 7 * 3600,
                 )
             }
         )
-        self.assertEqual("warning", overall_summary(rows).tone)
+        self.assertEqual("info", overall_summary(rows).tone)
 
     def test_all_good_requires_automation_on_and_a_ready_provider(self):
         rows = self.rows(

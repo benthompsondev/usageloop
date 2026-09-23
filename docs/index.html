@@ -155,7 +155,7 @@
       <div>
         <p class="section-number">05</p>
         <h2 id="download-title">Download</h2>
-        <p>Either build needs the Codex desktop app or CLI already installed and signed in. Both are 64-bit Intel or AMD.</p>
+        <p>Either build needs the ChatGPT desktop app in Codex mode or the Codex CLI already installed and signed in. Both are 64-bit Intel or AMD.</p>
       </div>
       <div class="download-choices">
         <div class="download-panel">
@@ -178,7 +178,7 @@
             <a href="https://github.com/benthompsondev/usageloop#linux">Install steps</a>
           </div>
           <p class="small">Version 1.3.5. Verify the checksum, extract the archive, then run <code>./install.sh</code> to add UsageLoop to your application menu. You can also run it directly from the extracted folder.</p>
-          <p class="small">Tested on Ubuntu with GNOME. Other desktops should work but have not been checked. There is no ARM64 build.</p>
+          <p class="small">Tested on Ubuntu with GNOME. An unattended start on a real Linux desktop has not yet been observed, so this path is less proven than Windows. There is no ARM64 build.</p>
         </div>
       </div>
     </section>
@@ -216,7 +216,7 @@
       <div class="faq-list">
         <details>
           <summary>Who is this useful for?</summary>
-          <p>Codex users on Windows or Linux whose account shows a 5-hour window and who want its next reset earlier in their workday. If your account only shows a weekly limit, the 5-hour scheduling feature does not apply. OpenAI controls the limits and can change their behavior.</p>
+          <p>Codex users on Windows or Linux whose Codex usage shows a 5-hour window and who want its next reset earlier in their workday. If Codex reports weekly information but no five-hour window, there is no five-hour start to schedule. OpenAI controls the limits and can change their behavior.</p>
         </details>
         <details>
           <summary>Does starting a window use my allowance?</summary>
@@ -248,11 +248,11 @@
         </details>
         <details>
           <summary>What if the Codex connection needs attention?</summary>
-          <p>After updating or signing back in to Codex, choose Recheck Codex compatibility. It reads usage and supported models without sending a model request or changing your routine.</p>
+          <p>Temporary connection failures get a few spaced, read-only retries for up to an hour. No start is replayed. For sign-in, missing models, or unsupported usage data, choose Recheck Codex compatibility after fixing the problem. The check sends no model request and leaves your routine alone.</p>
         </details>
         <details>
           <summary>What happens if my computer is asleep or turned off?</summary>
-          <p>UsageLoop cannot act while the computer is unavailable. After wake, restart, or sign-in, it checks your schedule and safety conditions before starting anything.</p>
+          <p>UsageLoop needs the computer awake and signed in, with the app running. It cannot act while the computer is unavailable. After wake, restart, or sign-in, it checks the current schedule and safety conditions; it does not replay every missed start.</p>
         </details>
         <details>
           <summary>Why does Windows warn about the installer?</summary>

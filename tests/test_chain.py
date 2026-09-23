@@ -2,6 +2,7 @@ import tempfile
 import threading
 import unittest
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 from sentinel.chain import ChainCoordinator, ChainPolicy
@@ -24,8 +25,10 @@ def snapshot(observed_at, reset_at, *, used=0, weekly_used=10):
     )
 
 
-def anchored(start=BOUNDARY + 20, *, used=1, weekly_used=10):
-    reset = start + 17_000
+def anchored(start=BOUNDARY + 60, *, used=1, weekly_used=10):
+    # Verification begins after the four preflight samples and the settle gap.
+    start += 40
+    reset = start + 18_000
     return [
         snapshot(start + offset, reset, used=used, weekly_used=weekly_used)
         for offset in (0, 10, 20, 30)
@@ -142,6 +145,40 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ANCHOR_VERIFIED", result.status)
         self.assertEqual(1, trigger.calls)
         self.assertTrue(result.request_possibly_sent)
+
+    def test_fixed_old_reset_after_send_is_guarded(self):
+        trigger = FakeTrigger()
+        preflight = unanchored()
+        old_reset = preflight[-1].windows[0].resets_at
+        post = [replace(item, windows=(replace(item.windows[0], resets_at=old_reset),
+                                       item.windows[1])) for item in anchored()]
+        result = self.coordinator(trigger).run(preflight, lambda: post)
+        self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
+        self.assertEqual("failed_guarded", self.history.trigger_attempts()[-1].state)
+        self.assertEqual(1, trigger.calls)
+
+    def test_fixed_wrong_bucket_after_send_is_guarded(self):
+        trigger = FakeTrigger()
+        post = [replace(item, windows=(replace(item.windows[0], limit_id="other"),
+                                       item.windows[1])) for item in anchored()]
+        result = self.coordinator(trigger).run(unanchored(), lambda: post)
+        self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
+        self.assertEqual("failed_guarded", self.history.trigger_attempts()[-1].state)
+
+    def test_insufficient_or_contradictory_post_send_evidence_is_guarded(self):
+        for post in (anchored()[:2],
+                     [*anchored()[:2], *unanchored(BOUNDARY + 120)[:2]]):
+            with self.subTest(samples=len(post)):
+                history = SafeHistory(Path(self.directory.name) / f"short-{len(post)}-{post[-1].observed_at}.jsonl")
+                history.record_observation(
+                    snapshot(BOUNDARY - 30, BOUNDARY, used=12),
+                    Classification("ANCHORED", "high", "fixed", {"sample_count": 4}),
+                    "codex-cli test",
+                )
+                result = ChainCoordinator(FakeTrigger(), history, ChainPolicy()).run(
+                    unanchored(), lambda post=post: post)
+                self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
+                self.assertFalse(result.anchored)
 
     def test_transient_exhausted_preflight_never_triggers_then_unanchored_triggers_once(self):
         trigger = FakeTrigger()
@@ -449,7 +486,7 @@ class ChainCoordinatorTests(unittest.TestCase):
 
         recovered = ChainCoordinator(
             trigger, SafeHistory(self.history.path), ChainPolicy()
-        ).run(unanchored(BOUNDARY + 180), lambda: anchored())
+        ).run(unanchored(BOUNDARY + 180), lambda: anchored(BOUNDARY + 180))
         self.assertEqual("ANCHOR_VERIFIED", recovered.status)
         self.assertEqual(1, trigger.calls)
 

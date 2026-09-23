@@ -82,12 +82,23 @@ class ModelSelectionTests(unittest.TestCase):
             catalog = [catalog_entry("gpt-6-astra", default=default), catalog_entry("gpt-5.6-luna", default=default)]
             self.assertEqual("gpt-5.6-luna", select_trigger_model(catalog).model)
 
-    def test_only_falls_back_to_current_visible_mini(self):
+    def test_retired_mini_is_never_a_fallback(self):
         for problem in ({"hidden": True}, {"upgrade": "gpt-7-unknown"}, {"upgradeInfo": {"model": "gpt-7-unknown"}}):
             luna = catalog_entry("gpt-5.6-luna") | problem
             catalog = [luna, catalog_entry("gpt-5.4-mini"), catalog_entry("gpt-6-astra", default=True)]
-            self.assertEqual("gpt-5.4-mini", select_trigger_model(catalog).model)
+            self.assertIsNone(select_trigger_model(catalog))
         self.assertIsNone(select_trigger_model([catalog_entry("gpt-5.4-mini", upgrade="gpt-5.6-luna")]))
+
+    def test_candidate_luna_order_is_explicit_and_rejects_hidden_or_upgraded_six(self):
+        from unittest.mock import patch
+        with patch("sentinel.models.TRIGGER_MODEL_PREFERENCE", ("gpt-6-luna", "gpt-5.6-luna")):
+            both = [catalog_entry("gpt-5.6-luna"), catalog_entry("gpt-6-luna")]
+            self.assertEqual("gpt-6-luna", select_trigger_model(both).model)
+            self.assertEqual("gpt-5.6-luna", select_trigger_model(both[:1]).model)
+            for problem in ({"hidden": True}, {"upgrade": "gpt-7-luna"}):
+                catalog = [catalog_entry("gpt-6-luna") | problem, both[0]]
+                self.assertEqual("gpt-5.6-luna", select_trigger_model(catalog).model)
+            self.assertIsNone(select_trigger_model([catalog_entry("gpt-7-luna")]))
 
     def test_never_follows_unknown_successor_or_expensive_default(self):
         for catalog in (

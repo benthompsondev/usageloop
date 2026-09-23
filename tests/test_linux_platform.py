@@ -90,7 +90,12 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
             launcher_target = make_executable(install / "codex-launcher")
             bin_dir = Path(directory) / "bin"
             bin_dir.mkdir(parents=True)
-            (bin_dir / "chatgpt").symlink_to(launcher_target)
+            try:
+                (bin_dir / "chatgpt").symlink_to(launcher_target)
+            except OSError as exc:
+                if getattr(exc, "winerror", None) == 1314:
+                    self.skipTest("Windows symlink privilege is unavailable")
+                raise
 
             with no_override(CODEX_HOME=str(Path(directory) / "none")):
                 with mock.patch("sentinel.transport._LINUX_DESKTOP_PREFIXES", ()):
@@ -137,7 +142,12 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
             launcher_target = make_executable(install / "codex-launcher")
             bin_dir = Path(directory) / "bin"
             bin_dir.mkdir(parents=True)
-            (bin_dir / "chatgpt").symlink_to(launcher_target)
+            try:
+                (bin_dir / "chatgpt").symlink_to(launcher_target)
+            except OSError as exc:
+                if getattr(exc, "winerror", None) == 1314:
+                    self.skipTest("Windows symlink privilege is unavailable")
+                raise
 
             with no_override(CODEX_HOME=str(Path(directory) / "none")):
                 with mock.patch(

@@ -15,8 +15,6 @@ from .host import is_windows, platform_label
 from .product import PRODUCT
 
 
-#: Local evidence older than this is reported as stale rather than current.
-STALE_AFTER_SECONDS = 6 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -66,16 +64,6 @@ def provider_health(
             state.display_name, "Checking", "info", "A safe check is running right now."
         )
     if state.reset_at is not None and state.reset_at > now:
-        if (
-            state.last_verified_at is not None
-            and now - state.last_verified_at > STALE_AFTER_SECONDS
-        ):
-            return HealthRow(
-                state.display_name,
-                "Stale",
-                "warning",
-                "The countdown is running from older information than usual.",
-            )
         return HealthRow(
             state.display_name,
             "Ready",
@@ -138,8 +126,6 @@ def codex_installation_health(state: ProviderViewState) -> HealthRow:
 def five_hour_health(state: ProviderViewState, *, now: float) -> HealthRow:
     if state.reset_at is None:
         return HealthRow("5-hour window", "Not verified", "neutral", "No fixed five-hour reset has been verified yet.")
-    if state.last_verified_at is not None and now - state.last_verified_at > STALE_AFTER_SECONDS:
-        return HealthRow("5-hour window", "Stale", "warning", "The cached reset evidence is older than usual.")
     if state.reset_at > now and state.status == "Ready":
         return HealthRow("5-hour window", "Clock running", "success", f"Last-known usage is {state.used_percent:g}% used." if state.used_percent is not None else "A fixed reset is counting down locally.")
     return HealthRow("5-hour window", "Waiting", "info", "The previous reset boundary has passed or is not currently anchored.")
@@ -181,16 +167,8 @@ def local_state_health(
             "success",
             "Saved on this PC and readable. No provider readings stored yet.",
         )
-    age = now - newest_observation_at
-    if age > STALE_AFTER_SECONDS:
-        return HealthRow(
-            "Local state",
-            "Stale",
-            "warning",
-            "Saved and readable, but the newest reading is more than six hours old.",
-        )
     return HealthRow(
-        "Local state", "Healthy", "success", "Saved on this PC and up to date."
+        "Local state", "Healthy", "success", "Saved and readable on this PC."
     )
 
 

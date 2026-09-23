@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 import sys
+import time
+import uuid
 from typing import Iterable, Protocol, Collection, Sequence
 
 from .app_state import (
@@ -16,10 +18,14 @@ from .app_state import (
 )
 from .providers import CompatibilityResult
 from .schedule import SCHEDULE_MODES, WEEKLY, normalize_weekly_times
+from .schedule import schedule_summary
 
 
 RECOVERY_INITIAL_SECONDS = 60
 RECOVERY_MAX_SECONDS = 15 * 60
+COMPATIBILITY_RETRY_DELAYS = (60, 120, 300, 600, 900)
+COMPATIBILITY_EPISODE_SECONDS = 60 * 60
+TRANSIENT_COMPATIBILITY_FAILURES = frozenset({"app_server_unavailable", "app_server_timeout"})
 
 
 class DetectingProvider(Protocol):
@@ -110,6 +116,15 @@ class ApplicationController:
                         state,
                         last_action=previous.last_action,
                         automation_blocked_until=previous.automation_blocked_until,
+                        compatibility_incident_id=previous.compatibility_incident_id,
+                        compatibility_failure_category=previous.compatibility_failure_category,
+                        compatibility_attempts=previous.compatibility_attempts,
+                        compatibility_started_at=previous.compatibility_started_at,
+                        compatibility_next_retry_at=previous.compatibility_next_retry_at,
+                        compatibility_notified=previous.compatibility_notified,
+                        compatibility_blocked_notified=previous.compatibility_blocked_notified,
+                        compatibility_terminal_notified=previous.compatibility_terminal_notified,
+                        compatibility_blocked_opportunity=previous.compatibility_blocked_opportunity,
                         recovery_signature=(
                             previous.recovery_signature if same_evidence else None
                         ),
@@ -134,7 +149,10 @@ class ApplicationController:
                     state = replace(
                         previous,
                         installed=True,
-                        automation_supported=state.automation_supported,
+                        automation_supported=(
+                            previous.automation_supported
+                            if previous.compatibility_incident_id else state.automation_supported
+                        ),
                     )
             if (
                 state.runtime_identity is not None
@@ -144,7 +162,8 @@ class ApplicationController:
                 state = replace(
                     state,
                     automation_supported=False,
-                    status="Needs attention",
+                    status=(previous.status if previous is not None and previous.compatibility_incident_id
+                            else "Needs attention"),
                     detail=(
                         previous.detail
                         if previous is not None
@@ -162,7 +181,13 @@ class ApplicationController:
             first_run_complete=True,
             automation_paused_until=(self.settings.automation_paused_until if enabled else None),
         )
-        return self._save_settings(candidate)
+        previous_states = self.states
+        if not enabled:
+            self._stop_compatibility_retries()
+        if self._save_settings(candidate):
+            return True
+        self.states = previous_states
+        return False
 
     def pause_until_tomorrow(self, *, now: float) -> bool:
         if not self.settings.automation_enabled or self.settings.pause_active(now):
@@ -170,7 +195,21 @@ class ApplicationController:
         target = self.settings.tomorrow_first_start(now)
         if target is None:
             return False
-        return self._save_settings(replace(self.settings, automation_paused_until=target))
+        previous_states = self.states
+        self._stop_compatibility_retries()
+        if self._save_settings(replace(self.settings, automation_paused_until=target)):
+            return True
+        self.states = previous_states
+        return False
+
+    def _stop_compatibility_retries(self) -> None:
+        self.states = {
+            provider_id: (replace(state, status="Needs attention",
+                                  detail="Read-only recovery stopped. Recheck Codex when ready.",
+                                  compatibility_next_retry_at=None)
+                          if state.compatibility_next_retry_at is not None else state)
+            for provider_id, state in self.states.items()
+        }
 
     def resume_automation(self) -> bool:
         # Removing a pause never turns the main automation switch on.
@@ -259,6 +298,8 @@ class ApplicationController:
                 self.states[provider_id] = detected
                 changed = True
                 continue
+            if current.compatibility_incident_id and current.runtime_identity == detected.runtime_identity:
+                continue
             if current.status == "Needs attention" and not current.automation_supported:
                 continue
             if (
@@ -302,11 +343,35 @@ class ApplicationController:
                 self.states = previous_states
 
     def apply_compatibility(
-        self, provider_id: str, result: CompatibilityResult
+        self, provider_id: str, result: CompatibilityResult, *,
+        now: float | None = None, explicit: bool = False,
     ) -> bool:
+        current_time = time.time() if now is None else now
         previous_settings = self.settings
         previous_state = self.states[provider_id]
         state = self.states[provider_id]
+        if result.runtime_identity != state.runtime_identity:
+            return False
+        if not explicit and state.compatibility_attempts >= 6 and not result.compatible:
+            return False
+        incident_id = None if explicit else state.compatibility_incident_id
+        if not result.compatible and incident_id is None:
+            incident_id = uuid.uuid4().hex
+        attempts = (state.compatibility_attempts + 1
+                    if incident_id == state.compatibility_incident_id else 1)
+        started = (state.compatibility_started_at
+                   if incident_id == state.compatibility_incident_id and state.compatibility_started_at is not None
+                   else current_time)
+        category = result.failure_category or "capability_unavailable"
+        retryable = category in TRANSIENT_COMPATIBILITY_FAILURES
+        next_retry = None
+        if (not result.compatible and retryable and self.settings.automation_enabled
+                and not self.settings.pause_active(current_time)
+                and attempts <= len(COMPATIBILITY_RETRY_DELAYS)
+                and current_time < started + COMPATIBILITY_EPISODE_SECONDS):
+            candidate = current_time + COMPATIBILITY_RETRY_DELAYS[attempts - 1]
+            if candidate < started + COMPATIBILITY_EPISODE_SECONDS:
+                next_retry = candidate
         checked = dict(self.settings.checked_runtime_identities or {})
         checked[provider_id] = result.runtime_identity
         compatible = dict(self.settings.compatible_runtime_identities or {})
@@ -322,15 +387,118 @@ class ApplicationController:
         self.states[provider_id] = replace(
             state,
             automation_supported=result.compatible,
-            status=result.status,
-            detail=result.detail,
+            status=(result.status if result.compatible else
+                    "Reconnecting" if next_retry is not None else "Needs attention"),
+            detail=(result.detail if result.compatible or not retryable else
+                    "Codex is temporarily unavailable. UsageLoop is retrying read-only checks."
+                    if next_retry is not None else
+                    "Codex did not reconnect in the retry window. Recheck it when ready."),
             runtime_identity=result.runtime_identity,
+            compatibility_incident_id=None if result.compatible else incident_id,
+            compatibility_failure_category=None if result.compatible else category,
+            compatibility_attempts=0 if result.compatible else attempts,
+            compatibility_started_at=None if result.compatible else started,
+            compatibility_next_retry_at=next_retry,
+            compatibility_notified=(False if result.compatible or incident_id != state.compatibility_incident_id
+                                    else state.compatibility_notified),
+            compatibility_blocked_notified=(False if result.compatible or incident_id != state.compatibility_incident_id
+                                            else state.compatibility_blocked_notified),
+            compatibility_terminal_notified=(False if result.compatible or incident_id != state.compatibility_incident_id
+                                             else state.compatibility_terminal_notified),
+            compatibility_blocked_opportunity=(None if result.compatible or incident_id != state.compatibility_incident_id
+                                               else state.compatibility_blocked_opportunity),
         )
         if self._save():
+            event = ("recovered" if result.compatible and state.compatibility_incident_id else
+                     "retry" if not result.compatible and attempts > 1 else
+                     "failed" if not result.compatible else None)
+            if event is not None:
+                if not self._record_compatibility_event(
+                    state.compatibility_incident_id if event == "recovered" else incident_id,
+                    result.runtime_identity,
+                    state.compatibility_failure_category if event == "recovered" else category,
+                    event, current_time, attempts, next_retry,
+                ):
+                    return False
             return True
         self.settings = previous_settings
         self.states[provider_id] = previous_state
         return False
+
+    def expire_compatibility(self, *, now: float) -> list[str]:
+        if not self.settings.automation_enabled or self.settings.pause_active(now):
+            return []
+        exhausted: list[str] = []
+        for provider_id, state in list(self.states.items()):
+            if (state.compatibility_next_retry_at is None or state.compatibility_started_at is None
+                    or now < state.compatibility_started_at + COMPATIBILITY_EPISODE_SECONDS):
+                continue
+            applied = replace(state, status="Needs attention",
+                              detail="Codex did not reconnect in the retry window. Recheck it when ready.",
+                              compatibility_next_retry_at=None)
+            if self.update_provider_state(applied) and self._record_compatibility_event(
+                state.compatibility_incident_id, state.runtime_identity,
+                state.compatibility_failure_category, "exhausted", now,
+                state.compatibility_attempts, None,
+            ):
+                exhausted.append(provider_id)
+        return exhausted
+
+    def record_blocked_opportunity(self, provider_id: str, *, now: float) -> bool:
+        state = self.states[provider_id]
+        if (not self.settings.automation_enabled or self.settings.pause_active(now)
+                or state.compatibility_incident_id is None or state.reset_at is None):
+            return False
+        try:
+            summary = schedule_summary(
+                self.settings.schedule_mode, boundary_reset_at=state.reset_at, now=now,
+                hour=self.settings.daily_start_hour, minute=self.settings.daily_start_minute,
+                weekly_times=self.settings.weekly_start_times,
+            )
+        except (OSError, OverflowError, ValueError):
+            return False
+        if not summary.due or summary.next_action_at is None:
+            return False
+        key = f"{self.settings.schedule_mode}:{int(summary.next_action_at)}"
+        if key == state.compatibility_blocked_opportunity:
+            return False
+        if not self._record_compatibility_event(
+            state.compatibility_incident_id, state.runtime_identity,
+            state.compatibility_failure_category, "blocked_start", now,
+            state.compatibility_attempts, state.compatibility_next_retry_at,
+            opportunity_at=summary.next_action_at,
+        ):
+            return False
+        return self.update_provider_state(replace(state, compatibility_blocked_opportunity=key))
+
+    def mark_compatibility_notified(self, provider_id: str, *, kind: str) -> bool:
+        state = self.states[provider_id]
+        if kind not in {"blocked", "terminal"}:
+            raise ValueError("Unsupported compatibility notification kind.")
+        if (state.compatibility_incident_id is None
+                or (kind == "blocked" and state.compatibility_blocked_notified)
+                or (kind == "terminal" and state.compatibility_terminal_notified)):
+            return False
+        return self.update_provider_state(replace(
+            state, compatibility_notified=True,
+            compatibility_blocked_notified=(kind == "blocked" or state.compatibility_blocked_notified),
+            compatibility_terminal_notified=(kind == "terminal" or state.compatibility_terminal_notified),
+        ))
+
+    def _record_compatibility_event(self, incident_id, runtime_identity, category,
+                                    event, now, attempts, next_retry, opportunity_at=None) -> bool:
+        if self.error_history is None or not hasattr(self.error_history, "record_compatibility_event"):
+            return True
+        try:
+            self.error_history.record_compatibility_event(
+                incident_id=incident_id, runtime_identity=runtime_identity,
+                category=category, event=event, now=now, attempts=attempts,
+                next_retry_at=next_retry, opportunity_at=opportunity_at,
+            )
+        except (OSError, RuntimeError):
+            self.persistence_error = "history_write_failed"
+            return False
+        return True
 
     def update_provider_state(self, state: ProviderViewState) -> bool:
         previous = self.states.get(state.provider_id)
@@ -342,6 +510,24 @@ class ApplicationController:
         else:
             self.states[state.provider_id] = previous
         return False
+
+    def apply_sync_result(self, state: ProviderViewState) -> bool:
+        current = self.states.get(state.provider_id)
+        if current is None or current.runtime_identity != state.runtime_identity:
+            return False
+        if current.compatibility_incident_id is not None:
+            state = replace(
+                current,
+                reset_at=state.reset_at,
+                last_verified_at=state.last_verified_at,
+                used_percent=state.used_percent,
+                usage_checked_at=state.usage_checked_at,
+                weekly_used_percent=state.weekly_used_percent,
+                weekly_reset_at=state.weekly_reset_at,
+                quota_state=state.quota_state,
+                quota_evidence=state.quota_evidence,
+            )
+        return self.update_provider_state(state)
 
     def apply_operation_result(
         self,

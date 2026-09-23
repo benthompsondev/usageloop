@@ -42,6 +42,7 @@ local app-server observation
   -> dynamic model selection
   -> ephemeral thread/start + turn/start
   -> bounded outcome handling
+  -> 10-second settling pause
   -> authoritative post-trigger observation
   -> persisted verified or guarded state
 ```
@@ -50,7 +51,9 @@ local app-server observation
 
 - `CLOCK RUNNING`
 - `STARTING NEXT WINDOW`
-- `WAITING FOR RESET`
+- `WAITING` for the saved start or overnight pause
+- `RECONNECTING` through read-only compatibility checks
+- `WEEKLY PROTECTED` when the weekly guard blocks a start
 - `AUTOMATION OFF`
 - `NEEDS ATTENTION`
 
@@ -66,7 +69,9 @@ local app-server observation
 - Definite pre-submit failures may recover. Possibly submitted or ambiguous
   outcomes are permanently guarded for that opportunity.
 - Turn lifecycle events are diagnostic. Only a newly anchored fixed reset is
-  success.
+  success, in the same five-hour bucket after the send.
+- Temporary transport failures get spaced read-only compatibility retries for
+  at most one hour. Other compatibility failures need an explicit recheck.
 - Automation off performs no compatibility probe, quota read, or trigger.
 - Manual Sync is explicitly user-started, collects four read-only rate-limit
   observations, and never discovers models or starts a thread or turn.
@@ -87,8 +92,8 @@ updates, admin requirements, and global PATH changes.
 ## Current proof boundary
 
 The observer, app-server trigger transport, and live anchoring behavior have
-each been proven. A packaged build has completed a genuine unattended rollover:
+each been proven on Windows. A packaged build has completed a genuine unattended rollover:
 it observed an unanchored window, reserved once, sent the guarded app-server
-turn, and verified a new fixed reset. The trigger payload remains unchanged for
-1.0; the reliability changes only tighten missed-boundary and pre-submit crash
-handling.
+turn, and verified a new fixed reset. A real unattended Linux start has not yet
+been observed. GPT-6 Luna is available in the current Codex catalog but needs
+a supervised fresh-window anchor check before UsageLoop can select it.

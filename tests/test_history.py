@@ -140,6 +140,8 @@ class SafeHistoryTests(unittest.TestCase):
                 "classification",
                 "confidence",
                 "evidence",
+                "valid_structure",
+                "valid_weekly_only",
             },
             set(row),
         )

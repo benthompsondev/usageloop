@@ -77,6 +77,16 @@ class ExtractionHardeningTests(unittest.TestCase):
         return extract_bundle(archive, root / "out", expected_bundle=expected)
 
     def test_a_normal_bundle_unpacks_including_its_relative_links(self) -> None:
+        if os.name == "nt":
+            with tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / "target"
+                target.write_text("test", encoding="utf-8")
+                try:
+                    (Path(directory) / "link").symlink_to(target)
+                except OSError as exc:
+                    if getattr(exc, "winerror", None) == 1314:
+                        self.skipTest("Windows symlink privilege is unavailable")
+                    raise
         bundle = self.extract(good_bundle)
         executable = bundle / PRODUCT.dist_folder_name / PRODUCT.dist_folder_name
         self.assertTrue(executable.is_file())

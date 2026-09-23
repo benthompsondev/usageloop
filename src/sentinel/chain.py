@@ -38,7 +38,7 @@ class ChainResult:
 
     @property
     def anchored(self) -> bool:
-        return self.classification.state == "ANCHORED"
+        return self.status in {"ALREADY_ANCHORED", "ANCHOR_VERIFIED"}
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -344,7 +344,8 @@ class ChainCoordinator:
                 terminal_outcome=trigger_result.terminal_outcome,
             )
 
-        if verified.state == "ANCHORED" and _strong_evidence(verified):
+        if (verified.state == "ANCHORED" and _strong_evidence(verified)
+                and _fresh_target_anchor(observations, verification)):
             self._transition_after_request(
                 attempt.attempt_id,
                 "verified",
@@ -478,6 +479,31 @@ def _strong_evidence(classification: Classification) -> bool:
         and evidence.get("sample_count", 0) >= 4
         and evidence.get("elapsed_seconds", 0) >= 30
     )
+
+
+def _fresh_target_anchor(
+    preflight: Sequence[QuotaSnapshot], verification: Sequence[QuotaSnapshot]
+) -> bool:
+    """A fixed clock only confirms this send when its bucket and reset are new."""
+    current = max(preflight, key=lambda item: item.observed_at)
+    before = select_five_hour(current).window
+    if before is None or before.resets_at is None or before.duration_minutes is None:
+        return False
+    selected = [select_five_hour(item).window for item in verification]
+    if not selected or any(window is None for window in selected):
+        return False
+    windows = [window for window in selected if window is not None]
+    identity = (before.limit_id, before.slot, before.duration_minutes)
+    if any((window.limit_id, window.slot, window.duration_minutes) != identity
+           for window in windows):
+        return False
+    first = min(verification, key=lambda item: item.observed_at)
+    if first.observed_at <= current.observed_at:
+        return False
+    reset = windows[-1].resets_at
+    if reset is None or reset <= before.resets_at:
+        return False
+    return abs(reset - first.observed_at - before.duration_minutes * 60) <= 300
 
 
 def _bootstrap_usage_suitable(observations: Sequence[QuotaSnapshot]) -> bool:

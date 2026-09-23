@@ -51,6 +51,7 @@ from .chain import WEEKLY_PROTECTION_PERCENT
 from .branding import make_app_icon, render_mark
 from .host import platform_label
 from .product import PRODUCT
+from .presentation import operational_presentation
 from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
 from .schedule import DAILY, WEEKLY, schedule_summary
@@ -105,72 +106,15 @@ def tray_tooltip_text(
     persistence_error: str | None = None,
 ) -> str:
     """Summarize cached dashboard state without exposing implementation labels."""
-    prefix = f"{PRODUCT.display_name} · "
-    if persistence_error is not None:
-        return prefix + "Needs attention"
-    if settings.pause_active(now):
-        return prefix + f"Paused until {pause_until_text(settings.automation_paused_until)}"
-    if state is not None and (not state.installed or state.status == "Needs attention"):
-        return prefix + "Needs attention"
-    if not settings.automation_enabled:
-        return prefix + "Automation off"
-    if state is None:
-        return prefix + "waiting for Codex status"
-    if state.reset_at is not None and state.reset_at > now:
-        return prefix + f"{format_countdown(state.reset_at, now)} left"
-    if state.status in {"Starting", "Checking"}:
-        return prefix + "checking Codex status"
-    decision = automation_decision(
-        settings.automation_enabled,
-        state,
-        now=now,
-        compatible_runtime_identity=settings.compatible_runtime_identities.get(
-            state.provider_id
-        ),
-        checked_runtime_identity=settings.checked_runtime_identities.get(
-            state.provider_id
-        ),
-        schedule_mode=settings.schedule_mode,
-        daily_hour=settings.daily_start_hour,
-        daily_minute=settings.daily_start_minute,
-        weekly_times=settings.weekly_start_times,
-    )
-    if decision.action == "ROLLOVER":
-        return prefix + "Next window due now"
-    if decision.action == "BOOTSTRAP":
-        return prefix + "Waiting for first window"
-    if settings.schedule_mode in {DAILY, WEEKLY} and state.reset_at is not None:
-        try:
-            schedule = schedule_summary(
-                settings.schedule_mode,
-                boundary_reset_at=state.reset_at,
-                now=now,
-                hour=settings.daily_start_hour,
-                minute=settings.daily_start_minute,
-                weekly_times=settings.weekly_start_times,
-            )
-            if schedule.next_action_at is not None and schedule.next_action_at > now:
-                target = datetime.fromtimestamp(schedule.next_action_at)
-                today = datetime.fromtimestamp(now).date()
-                if target.date() == today:
-                    day = "today"
-                elif target.date() == today + timedelta(days=1):
-                    day = "tomorrow"
-                else:
-                    day = target.strftime("%a")
-                clock = target.strftime("%I:%M %p").lstrip("0")
-                return prefix + f"next start {day} at {clock}"
-        except (OSError, OverflowError, ValueError):
-            return prefix + "Status unavailable"
-    if state.status == "Waiting":
-        return prefix + "waiting for Codex status"
-    return prefix + "Status unavailable"
+    return operational_presentation(settings, state, now=now,
+                                    persistence_error=persistence_error).tray_text
 
 
 class MainWindow(QMainWindow):
     PAGE_NAMES = ("Dashboard", "Settings", "About")
     tray_tooltip_changed = Signal(str)
     presentation_changed = Signal()
+    notification_requested = Signal(str, str)
 
     def __init__(
         self,
@@ -193,6 +137,7 @@ class MainWindow(QMainWindow):
         self.confirm_enable = confirm_enable or self._confirm_enable
         self.confirm_bootstrap = confirm_bootstrap or self._confirm_bootstrap
         self.active_operations: dict[str, str] = {}
+        self._probe_context: dict[str, tuple[ProviderViewState, ProviderViewState, bool]] = {}
         self.thread_pool = QThreadPool.globalInstance()
         self.hide_on_close = False
         self.force_close = False
@@ -434,8 +379,8 @@ class MainWindow(QMainWindow):
     def _build_dashboard(self) -> QWidget:
         page, root, self.dashboard_intro = self._page(
             "Your Codex reset clock",
-            "Codex starts a new 5-hour reset clock when you use it. UsageLoop can start the next one "
-            "for you while you’re away, so the clock is already counting down when you come back.",
+            "If Codex reports a 5-hour window, using it starts the next reset clock. With this PC awake, "
+            "UsageLoop can start the next one while you’re away, so it is already counting down when you return.",
         )
         self.dashboard_clarifier = QLabel(
             "UsageLoop does not add quota or bypass limits. It uses one minimal request to start "
@@ -637,7 +582,7 @@ class MainWindow(QMainWindow):
         time_copy = QVBoxLayout()
         self.daily_time_title = QLabel("Start time")
         self.daily_time_title.setObjectName("secondaryMetric")
-        time_hint = QLabel("Local time on this PC. Missed starts catch up once after wake or restart.")
+        time_hint = QLabel("Local time on this PC. Keep it awake; after restart UsageLoop checks the current schedule.")
         time_hint.setProperty("muted", True)
         time_hint.setWordWrap(True)
         time_copy.addWidget(self.daily_time_title)
@@ -896,9 +841,9 @@ class MainWindow(QMainWindow):
         version.setObjectName("secondaryMetric")
         story.addWidget(version)
         self.about_description = QLabel(
-            "Codex gives you usage in 5-hour windows. A new window begins when you actually use Codex. "
+            "If Codex reports a 5-hour window, a new one begins when you use Codex. "
             "If the previous window ends while you’re away, the next reset clock normally waits until "
-            "you come back and use Codex again. UsageLoop can start that next window with one minimal "
+            "you come back and use Codex again. With this PC awake, UsageLoop can start that next window with one minimal "
             "request, so its reset clock can already be counting down before you return. UsageLoop does "
             "not increase your quota or bypass limits."
         )
@@ -912,8 +857,8 @@ class MainWindow(QMainWindow):
 
         self.about_steps: list[QFrame] = []
         for number, title, detail in (
-            ("1", "Codex gives you 5-hour windows", "The clock begins when Codex is used."),
-            ("2", "UsageLoop starts the next one", "One minimal request can begin it while you’re away."),
+            ("1", "Codex reports a 5-hour window", "The clock begins when Codex is used."),
+            ("2", "UsageLoop starts the next one", "One minimal request can begin it while this PC is awake."),
             ("3", "No shortcuts or extra quota", "Your existing limits and weekly protection still apply."),
         ):
             step = QFrame()
@@ -1052,16 +997,25 @@ class MainWindow(QMainWindow):
              f"Pause until tomorrow's first start: {pause_until_text(target)}" if target is not None else "")
         )
         for provider_id, state in self.controller.states.items():
+            operational = operational_presentation(
+                self.controller.settings, state, now=current,
+                checking=self.active_operations.get(provider_id) == "probe",
+                persistence_error=self.controller.persistence_error,
+            )
             card = self.provider_cards.get(provider_id)
             if card is not None:
                 card.update_state(
-                    state, now=current, automation_enabled=enabled
+                    state, now=current, automation_enabled=enabled,
+                    operational=operational,
                 )
-                card.action_button.setVisible(
-                    self._can_start_loop(provider_id, now=current)
-                )
+                card.action_button.setVisible(self._can_start_loop(provider_id, now=current))
         codex = self.controller.states.get("codex")
         if codex is not None:
+            operational = operational_presentation(
+                self.controller.settings, codex, now=current,
+                checking=self.active_operations.get("codex") == "probe",
+                persistence_error=self.controller.persistence_error,
+            )
             checking = self.active_operations.get("codex") == "probe"
             needs_check = (
                 not codex.automation_supported
@@ -1080,57 +1034,16 @@ class MainWindow(QMainWindow):
                 "Compatibility confirmed. Your saved schedule and safety checks still apply."
             )
             self.schedule_card.update_schedule(
-                self.controller.settings, codex, now=current
+                self.controller.settings, codex, now=current,
+                next_action=operational.next_action,
             )
-            if self.controller.persistence_error is not None:
-                self._set_overall_icon("!", "warning")
-                self.overall_title.setText("UsageLoop needs attention")
-                self.overall_detail.setText(
-                    "A local setting could not be saved, so automatic starts are paused. See Technical details."
-                )
-            elif paused:
-                self._set_overall_icon("○", "info")
-                self.overall_title.setText("Automation is temporarily paused")
-                self.overall_detail.setText(
-                    f"Still enabled. Resumes {pause_until_text(self.controller.settings.automation_paused_until)}. Your routine is unchanged."
-                )
-            elif not codex.installed:
-                self._set_overall_icon("!", "warning")
-                self.overall_title.setText("Codex needs attention")
-                self.overall_detail.setText(
-                    "Install and sign in to Codex before UsageLoop can observe a reset clock."
-                )
-            elif checking:
-                self._set_overall_icon("○", "info")
-                self.overall_title.setText("Checking the Codex connection")
-                self.overall_detail.setText("Reading usage and supported models. No model request is sent. Allow about 30 seconds.")
-            elif codex.status == "Needs attention" or (
-                needs_check
-                and self.controller.settings.checked_runtime_identities.get("codex") == codex.runtime_identity
-            ):
-                self._set_overall_icon("!", "warning")
-                self.overall_title.setText("UsageLoop stopped safely")
-                self.overall_detail.setText(
-                    "Use Recheck Codex compatibility below after fixing the connection. No model request is sent."
-                    if needs_check else
-                    "No request was retried. Open Settings > Codex connection > Technical details for the reason."
-                )
-            elif not enabled:
-                self._set_overall_icon("○", "info")
-                self.overall_title.setText("Automation is off")
-                self.overall_detail.setText("No automatic starts. Your saved routine will be used when you enable automation.")
-            elif codex.reset_at is not None and codex.reset_at > current:
-                self._set_overall_icon("✓", "success")
-                self.overall_title.setText("Everything is set")
-                self.overall_detail.setText(
-                    "The countdown runs locally. UsageLoop will follow your schedule when this window ends."
-                )
-            else:
-                self._set_overall_icon("○", "info")
-                self.overall_title.setText("Waiting for a verified Codex window")
-                self.overall_detail.setText(
-                    "Sync usage to read the current state. Starting a first window always needs your approval."
-                )
+            self._set_overall_icon(
+                "✓" if operational.tone == "success" else
+                "!" if operational.tone == "warning" else "○",
+                operational.tone,
+            )
+            self.overall_title.setText(operational.banner_title)
+            self.overall_detail.setText(operational.banner_detail)
 
             if codex.weekly_used_percent is None:
                 self.weekly_value.setText("—")
@@ -1161,12 +1074,11 @@ class MainWindow(QMainWindow):
             self._refresh_last_automatic_start(now=current)
             self.schedule_card.fit_wrapped_text()
         self._update_diagnostics(now=current)
-        tooltip = tray_tooltip_text(
-            self.controller.settings,
-            codex,
-            now=current,
+        tooltip = operational_presentation(
+            self.controller.settings, codex, now=current,
+            checking=self.active_operations.get("codex") == "probe",
             persistence_error=self.controller.persistence_error,
-        )
+        ).tray_text
         if tooltip != self.current_tray_tooltip:
             self.current_tray_tooltip = tooltip
             self.tray_tooltip_changed.emit(tooltip)
@@ -1221,11 +1133,22 @@ class MainWindow(QMainWindow):
     def evaluate_automation(self, *, now: float | None = None) -> None:
         current = time.time() if now is None else now
         self.controller.refresh_local_states(exclude=self.active_operations)
+        for provider_id in self.controller.expire_compatibility(now=current):
+            self._notify_compatibility(provider_id,
+                "Codex connection needs attention",
+                "Read-only retries ended. Automatic starts remain paused.", kind="terminal")
+        for provider_id, state in self.controller.states.items():
+            if state.compatibility_incident_id and self.controller.record_blocked_opportunity(
+                provider_id, now=current
+            ):
+                self._notify_compatibility(provider_id,
+                    "Scheduled start blocked",
+                    "Codex needs a compatibility check. No start was sent.", kind="blocked")
         for provider_id, decision in self.controller.decisions(now=current).items():
             if provider_id in self.active_operations:
                 continue
             if decision.action == "PROBE":
-                self._start_operation(provider_id, "probe")
+                self._start_operation(provider_id, "probe", automatic=True)
             elif decision.action == "ROLLOVER":
                 self._start_operation(provider_id, "rollover")
 
@@ -1233,6 +1156,10 @@ class MainWindow(QMainWindow):
         state = self.controller.states.get(provider_id)
         settings = self.controller.settings
         if state is None:
+            return False
+        if not operational_presentation(settings, state, now=now,
+                                        checking=self.active_operations.get(provider_id) == "probe",
+                                        persistence_error=self.controller.persistence_error).manual_start_visible:
             return False
         # A reported reset remains useful for quota timing. It only hides this
         # manual action when the current reading actually proves an anchor.
@@ -1293,18 +1220,22 @@ class MainWindow(QMainWindow):
             return
         self._start_operation("codex", "probe")
 
-    def _start_operation(self, provider_id: str, action: str) -> None:
+    def _start_operation(self, provider_id: str, action: str, *, automatic: bool = False) -> None:
         provider = self.providers.get(provider_id)
         if provider is None:
             return
         state = self.controller.states[provider_id]
+        pending = replace(state, status="Checking" if action == "probe" else "Starting",
+                          detail="Checking Codex safely.")
         saved = self.controller.update_provider_state(
-            replace(state, status="Checking" if action == "probe" else "Starting", detail="Checking Codex safely.")
+            pending
         )
         if not saved:
             self.refresh_clock()
             return
         self.active_operations[provider_id] = action
+        if action == "probe":
+            self._probe_context[provider_id] = (state, pending, automatic)
         operation = (
             provider.probe
             if action == "probe"
@@ -1319,10 +1250,34 @@ class MainWindow(QMainWindow):
     def _operation_completed(self, provider_id: str, result: object) -> None:
         action = self.active_operations.pop(provider_id, None)
         if isinstance(result, CompatibilityResult):
-            self.controller.apply_compatibility(provider_id, result)
+            context = self._probe_context.pop(provider_id, None)
+            if action != "probe" or context is None:
+                self.refresh_clock()
+                return
+            prior, pending, automatic = context
+            current = self.controller.states[provider_id]
+            if (current != pending or result.runtime_identity != pending.runtime_identity or
+                    (automatic and (not self.controller.settings.automation_enabled
+                                    or self.controller.settings.pause_active(time.time())))):
+                if current == pending:
+                    self.controller.update_provider_state(prior)
+                self.refresh_clock()
+                return
+            notified = prior.compatibility_notified
+            saved = self.controller.apply_compatibility(provider_id, result,
+                                                          explicit=not automatic)
+            if saved and result.compatible and notified:
+                self.notification_requested.emit("Codex connection restored",
+                    "UsageLoop can follow the saved schedule again. Safety checks still apply.")
+            elif saved and not result.compatible and self.controller.states[provider_id].compatibility_next_retry_at is None:
+                self._notify_compatibility(provider_id, "Codex connection needs attention",
+                    "Automatic starts are paused. Recheck Codex when ready.", kind="terminal")
         elif isinstance(result, ProviderOperationResult):
+            if result.state.runtime_identity != self.controller.states[provider_id].runtime_identity:
+                self.refresh_clock()
+                return
             if action == "sync":
-                saved = self.controller.update_provider_state(result.state)
+                saved = self.controller.apply_sync_result(result.state)
             else:
                 self.controller.apply_operation_result(
                     result.outcome, result.state, now=time.time()
@@ -1334,12 +1289,35 @@ class MainWindow(QMainWindow):
                     else "inconclusive"
                 )
         else:
-            self._operation_failed(provider_id, "unsupported_result")
+            if action == "probe":
+                self._probe_context.pop(provider_id, None)
+            self.refresh_clock()
             return
         self.refresh_clock()
 
     def _operation_failed(self, provider_id: str, category: str) -> None:
         action = self.active_operations.pop(provider_id, None)
+        if action == "probe":
+            context = self._probe_context.pop(provider_id, None)
+            if context is None:
+                self.refresh_clock()
+                return
+            prior, pending, automatic = context
+            current = self.controller.states[provider_id]
+            if (current == pending and
+                    (not automatic or (self.controller.settings.automation_enabled
+                                       and not self.controller.settings.pause_active(time.time())))):
+                failure = CompatibilityResult(False, "Needs attention",
+                    "The Codex compatibility check stopped safely. No request was sent.",
+                    prior.runtime_identity or "unavailable", failure_category=category)
+                if self.controller.apply_compatibility(provider_id, failure, explicit=not automatic):
+                    if self.controller.states[provider_id].compatibility_next_retry_at is None:
+                        self._notify_compatibility(provider_id, "Codex connection needs attention",
+                            "Automatic starts are paused. Recheck Codex when ready.", kind="terminal")
+            elif current == pending:
+                self.controller.update_provider_state(prior)
+            self.refresh_clock()
+            return
         if action == "sync":
             card = self.provider_cards.get(provider_id)
             if card is not None:
@@ -1355,6 +1333,10 @@ class MainWindow(QMainWindow):
             )
         )
         self.refresh_clock()
+
+    def _notify_compatibility(self, provider_id: str, title: str, message: str, *, kind: str) -> None:
+        if self.controller.mark_compatibility_notified(provider_id, kind=kind):
+            self.notification_requested.emit(title, message)
 
     def _automation_toggled(self, enabled: bool) -> None:
         if enabled and not self.confirm_enable():
@@ -1644,6 +1626,7 @@ class DesktopShell:
         self.tray = QSystemTrayIcon(make_app_icon(), window)
         self.tray.setToolTip(window.current_tray_tooltip)
         self.window.tray_tooltip_changed.connect(self.tray.setToolTip)
+        self.window.notification_requested.connect(self.tray.showMessage)
         menu = QMenu()
         self.status_action = menu.addAction(window.current_tray_tooltip)
         self.status_action.setEnabled(False)

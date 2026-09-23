@@ -10,9 +10,12 @@ from .app_state import ProviderViewState
 from .chain import ChainCoordinator, ChainPolicy
 from .classifier import classify
 from .history import SafeHistory
+from .history import HistoryStateError
 from .models import select_trigger_model
 from .providers import CompatibilityResult
+from .protocol import AppServerProtocolError
 from .quota import QuotaSnapshot, normalize_rate_limits, select_five_hour, select_weekly
+from .transport import SentinelRuntimeError
 from .trigger import AppServerTrigger, TriggerConfig, dedicated_trigger_workspace
 
 
@@ -127,9 +130,20 @@ class CodexOperationRunner:
             return CompatibilityResult.from_capabilities(
                 runtime_identity=runtime_identity,
                 initialized=True,
-                rate_limits_available=any(snapshot.windows for snapshot in observations),
+                rate_limits_available=all(
+                    snapshot.valid_structure
+                    and select_weekly(snapshot) is not None
+                    and select_five_hour(snapshot).status != "ambiguous"
+                    for snapshot in observations
+                ),
                 model_catalog_available=bool(models),
                 suitable_model_available=choice is not None,
+            )
+        except (SentinelRuntimeError, AppServerProtocolError, HistoryStateError) as exc:
+            return CompatibilityResult(
+                False, "Needs attention",
+                "The Codex compatibility check stopped safely. No automatic request was sent.",
+                runtime_identity, failure_category=exc.category,
             )
         except Exception:
             return CompatibilityResult(
@@ -137,6 +151,7 @@ class CodexOperationRunner:
                 "Needs attention",
                 "The Codex compatibility check failed safely. No automatic request was sent.",
                 runtime_identity,
+                failure_category="unexpected_error",
             )
         finally:
             if session is not None:
@@ -166,16 +181,23 @@ class CodexOperationRunner:
                 "ANCHORED",
                 "UNANCHORED",
                 "EXHAUSTED",
-            }
+            } or (classification.state == "ABSENT" and all(
+                snapshot.valid_weekly_only for snapshot in observations
+            ))
             status = {
                 "ANCHORED": "Ready",
                 "UNANCHORED": "Waiting",
                 "EXHAUSTED": "Waiting",
+                "ABSENT": "Waiting" if conclusive else "Needs attention",
             }.get(classification.state, "Needs attention")
             detail = {
                 "ANCHORED": "Codex usage was updated from a fixed reset clock.",
                 "UNANCHORED": "Codex usage was updated; no fixed reset clock is active.",
                 "EXHAUSTED": "Codex reports that the five-hour window is exhausted.",
+                "ABSENT": (
+                    "Codex isn't reporting a five-hour window right now. There's no five-hour start to schedule."
+                    if conclusive else "Codex usage could not be confirmed safely."
+                ),
             }.get(classification.state, "Codex usage could not be confirmed safely.")
             state = ProviderViewState(
                 provider_id="codex",
@@ -194,6 +216,7 @@ class CodexOperationRunner:
                 weekly_used_percent=weekly.used_percent if weekly else None,
                 weekly_reset_at=weekly.resets_at if weekly else None,
                 quota_state=classification.state,
+                quota_evidence="valid_weekly_only" if classification.state == "ABSENT" and conclusive else "inconclusive",
             )
             return ProviderOperationResult(
                 "SYNC_UPDATED" if conclusive else "SYNC_INCONCLUSIVE",
@@ -233,13 +256,16 @@ class CodexOperationRunner:
                 return observations
 
             preflight = collect()
+            def collect_after_settling() -> list[QuotaSnapshot]:
+                self._sleep(10.0)
+                return collect()
             coordinator = ChainCoordinator(trigger, self.history, ChainPolicy())
             if mode == "bootstrap":
                 result = coordinator.run_bootstrap(
-                    preflight, collect, confirmed=True, dry_run=False
+                    preflight, collect_after_settling, confirmed=True, dry_run=False
                 )
             else:
-                result = coordinator.run(preflight, collect, dry_run=False)
+                result = coordinator.run(preflight, collect_after_settling, dry_run=False)
             state = self._state_from_result(
                 result.status,
                 result.reason,
@@ -285,4 +311,10 @@ class CodexOperationRunner:
             weekly_reset_at=weekly.resets_at if weekly else None,
             quota_state=classification_state,
             outcome_category=policy.category,
+            quota_evidence=(
+                "valid_weekly_only"
+                if classification_state == "ABSENT" and len(observations) >= 4
+                and all(snapshot.valid_weekly_only for snapshot in observations)
+                else "inconclusive"
+            ),
         )

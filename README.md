@@ -26,16 +26,15 @@ your weekly allowance.
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
-No API key needed. Requires Codex already installed and signed in, as either the
-Codex desktop app or the Codex CLI. Your computer must be awake and signed in,
+No API key needed. Requires Codex already installed and signed in, through the
+ChatGPT desktop app in Codex mode or the Codex CLI. Your computer must be awake and signed in,
 with UsageLoop running, for a scheduled start. The Windows installer is unsigned;
 [check the download and SmartScreen guidance](#windows) before running it. If
 your account has no five-hour window, this scheduling feature does not apply.
 
 ![UsageLoop Weekly routine settings showing weekday and weekend start times and the next scheduled reset](docs/screenshots/settings-weekly-expanded.png)
 
-Screenshots use synthetic usage data from v1.3.4 on Windows and Linux.
-Both platforms use the same interface.
+Screenshots use synthetic usage data. Both platforms use the same interface.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
 - Free and open source under the MIT license
@@ -123,7 +122,7 @@ was asleep. A confirmed start does not guarantee that quota is still available.
 You need:
 
 - an x64-compatible Windows PC;
-- the Codex desktop app or Codex CLI installed and already signed in.
+- the ChatGPT desktop app in Codex mode or Codex CLI installed and already signed in.
 
 Download the latest stable per-user installer and its matching checksum:
 
@@ -159,11 +158,11 @@ apps.
 You need:
 
 - an x86_64 Linux desktop with a graphical session (X11 or Wayland);
-- the Codex desktop app or Codex CLI installed and already signed in.
+- the ChatGPT desktop app in Codex mode or Codex CLI installed and already signed in.
 
 UsageLoop finds either one on its own. It checks `$CODEX_HOME` (default
-`~/.codex`) for the binary the Codex CLI manages, then follows the Codex desktop
-app's own launcher to wherever it is installed, then falls back to `codex` on
+`~/.codex`) for the binary the Codex CLI manages, then follows the ChatGPT desktop
+app's launcher to wherever it is installed, then falls back to `codex` on
 `PATH`. The desktop app puts no `codex` on `PATH` at all, so searching `PATH`
 alone would report Codex as missing on a machine that clearly has it.
 
@@ -198,6 +197,9 @@ entry. It leaves your settings and start history alone.
 The Dashboard, schedule, Pause, and Recent starts are the same as the Windows
 screenshots above. The startup card names your desktop session, and updates use the Linux archive
 instead of the Windows installer.
+
+The Linux build is newer. I have not yet observed an unattended start on a real
+Linux desktop, so its automatic start path is less proven than Windows.
 
 ARM64 is not built yet. Nothing in the app blocks it, it just has not been built
 or tested, so there is no artifact to download.
@@ -260,9 +262,10 @@ Automation has three local schedule choices:
   first start and pause overnight so the next day begins on schedule. See
   [Set your weekly routine](#set-your-weekly-routine).
 
-All three run on your PC's local clock. If the PC is asleep at the selected
-time, UsageLoop catches up once after wake or restart. If a Codex window is
-still active, it waits for the next scheduled time rather than starting early.
+All three run on your PC's local clock. UsageLoop needs your PC awake, signed in,
+and running at the selected time. After wake or restart it checks the current
+schedule and safety conditions; it does not replay every missed start. If a
+Codex window is still active, it waits for the next scheduled time rather than starting early.
 Daylight-saving changes use the Windows local clock.
 
 The countdown moves locally. It does not poll Codex to make the UI look live.
@@ -281,15 +284,15 @@ weekly snapshots. It never selects a model or starts a Codex turn.
    its own first-start time: set the
    weekday and weekend times, then check the **Next routine** card before you
    leave.
-4. On a true first run, choose **Start my first window now**. This explicit
+4. On a true first run, choose **Start continuous loop now**. This explicit
    action uses the same evidence and weekly checks as an automatic start.
 5. Leave UsageLoop in the tray. Automation and start at sign-in stay off until
    you enable them.
 
 Windows startup runs UsageLoop in your signed-in desktop session. If the PC
-sleeps, the app catches up after wake. If it is powered off or you are signed
-out, it catches up the next time you sign in. UsageLoop does not install a
-Windows service or store your Windows password.
+sleeps, powers off, or you sign out, no start runs during that time. When
+UsageLoop runs again, it checks the current schedule and safety gates. It does
+not install a Windows service or store your Windows password.
 
 Settings contains the schedule, start at sign-in, manual updates, and collapsed
 technical diagnostics. Update checks contact GitHub only after a button click
@@ -341,7 +344,8 @@ endorsed by, or sponsored by OpenAI.
 UsageLoop completes the normal local app-server initialization handshake. It
 reads subscription windows through `account/rateLimits/read`, identifies
 windows by their actual duration, and classifies several observations instead
-of trusting one timestamp.
+of trusting one timestamp. Codex still marks the app-server integration as
+experimental, so a Codex update may require a UsageLoop compatibility update.
 
 When automation is enabled, a rollover start is allowed only after:
 
@@ -357,8 +361,10 @@ effort that the installed Codex catalog supports, with standard service instead
 of Fast mode. The request asks for only “OK” and no tool use.
 
 The model must be visible, support text, and have no retirement/upgrade hint.
-If Luna is unavailable, GPT-5.4 mini is allowed only if it still meets those
-checks. If neither qualifies, UsageLoop sends nothing. It never falls back to
+GPT-5.4 mini has retired for Codex with ChatGPT sign-in, so UsageLoop uses
+GPT-5.6 Luna only. GPT-6 Luna is visible in Codex, but its ability to start
+the target five-hour clock still needs a supervised fresh-window check. If
+GPT-5.6 Luna is unavailable, UsageLoop sends nothing. It never falls back to
 Astra or Sol just because Codex recommends them as the general default, and it
 does not assume that an unknown successor is cheap.
 
@@ -366,18 +372,22 @@ does not assume that an unknown successor is cheap.
 `sentinel doctor` previews the live selection without sending a model request.
 Codex controls usage accounting; a short prompt or lightweight model is not a
 promise of a particular percentage. Success still requires fresh rate-limit
-observations showing a fixed reset timestamp.
+observations showing a new fixed reset in the same five-hour bucket after a
+short settling pause.
 
 If a request may have been sent, UsageLoop never retries it automatically.
 
 ## Get help and share feedback
 
-If a Codex update or temporary connection failure pauses compatibility, use
-**Settings > Codex connection > Recheck Codex compatibility**. A shortcut also
-appears on the Dashboard when a check is needed. Allow about 30 seconds. This
-reads usage and supported models without sending a model request, changing your
-routine, or retrying an uncertain start. If the check fails, fix the reported
-problem and recheck when ready. UsageLoop does not repeatedly retry it for you.
+If a temporary Codex connection failure interrupts a compatibility check,
+UsageLoop retries the read-only check at increasing intervals for up to an
+hour. No turn is sent during recovery. A blocked scheduled start is recorded
+once; it is not replayed. Authentication, malformed usage evidence, missing
+models, and other capability problems still need your attention. Use
+**Settings > Codex connection > Recheck Codex compatibility** after fixing one
+of those problems. A shortcut also appears on the Dashboard. The recheck reads
+usage and supported models without sending a model request, changing your
+routine, or retrying an uncertain start.
 
 - [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/benthompsondev/usageloop/issues/new?template=feature_request.yml)

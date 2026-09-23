@@ -335,7 +335,7 @@ class DesktopTests(unittest.TestCase):
             [button.text() for button in window.nav_buttons],
         )
         self.assertIn(
-            "Codex starts a new 5-hour reset clock", window.dashboard_intro.text()
+            "If Codex reports a 5-hour window", window.dashboard_intro.text()
         )
         self.assertIn(
             "does not add quota or bypass limits",
@@ -867,6 +867,9 @@ class DesktopTests(unittest.TestCase):
         window, _provider = self.make_window(state)
         window.controller.set_automation_enabled(True)
         window.controller.set_schedule_mode("weekly")
+        window.controller.apply_compatibility(
+            "codex", CompatibilityResult(True, "Ready", "Compatible.", "runtime:1")
+        )
 
         window.refresh_clock(now=now)
 
@@ -883,6 +886,9 @@ class DesktopTests(unittest.TestCase):
         window, _provider = self.make_window(state)
         window.controller.set_automation_enabled(True)
         window.controller.set_schedule_mode("weekly")
+        window.controller.apply_compatibility(
+            "codex", CompatibilityResult(True, "Ready", "Compatible.", "runtime:1")
+        )
 
         window.refresh_clock(now=now)
 
@@ -926,7 +932,7 @@ class DesktopTests(unittest.TestCase):
             ProviderViewState.waiting("codex", "Codex", installed=True)
         )
         self.assertIn(
-            "A new window begins when you actually use Codex",
+            "If Codex reports a 5-hour window",
             window.about_description.text(),
         )
         self.assertIn("does not increase your quota", window.about_description.text())
@@ -1129,13 +1135,14 @@ class DesktopTests(unittest.TestCase):
             "Codex not available", window.provider_cards["codex"].sync_status.text()
         )
 
-    def test_stale_verified_data_is_labelled_without_provider_work(self):
+    def test_old_fixed_countdown_does_not_trigger_provider_work(self):
         state = ProviderViewState.waiting(
             "codex", "Codex", installed=True, runtime_identity="runtime:1"
         ).with_reset(30_000, verified_at=100)
         window, provider = self.make_window(state)
         window.refresh_clock(now=25_000)
-        self.assertEqual("NEEDS ATTENTION", window.provider_cards["codex"].status_label.text())
+        self.assertEqual("AUTOMATION OFF", window.provider_cards["codex"].status_label.text())
+        self.assertEqual("1h 23m", window.provider_cards["codex"].countdown_label.text())
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 
@@ -1293,6 +1300,9 @@ class DesktopTests(unittest.TestCase):
         ).with_reset(14_000, verified_at=100)
         window, provider = self.make_window(state)
         window.controller.set_automation_enabled(True)
+        window.controller.apply_compatibility(
+            "codex", CompatibilityResult(True, "Ready", "Compatible.", "runtime:1")
+        )
         shell = DesktopShell(window)
         self.addCleanup(shell.tray.hide)
 
@@ -1321,7 +1331,9 @@ class TrayTooltipTests(unittest.TestCase):
     def settings(self, **overrides):
         from sentinel.app_state import AppSettings
 
-        values = dict(automation_enabled=True)
+        values = dict(automation_enabled=True,
+                      compatible_runtime_identities={"codex": "runtime:1"},
+                      checked_runtime_identities={"codex": "runtime:1"})
         values.update(overrides)
         return AppSettings(**values)
 
@@ -1347,7 +1359,7 @@ class TrayTooltipTests(unittest.TestCase):
             self.state(reset_at=int(reset)),
             now=now,
         )
-        self.assertEqual("UsageLoop · next start tomorrow at 4:00 AM", tooltip)
+        self.assertEqual("UsageLoop · Waiting for scheduled start tomorrow at 4:00 AM", tooltip)
 
     def test_weekly_overnight_pause_uses_next_first_start(self):
         reset = datetime(2026, 8, 30, 22, 0).timestamp()
@@ -1361,7 +1373,7 @@ class TrayTooltipTests(unittest.TestCase):
             now=now,
         )
 
-        self.assertEqual("UsageLoop · next start today at 4:00 AM", tooltip)
+        self.assertEqual("UsageLoop · Overnight pause · first start today at 4:00 AM", tooltip)
 
     def test_healthy_rollover_due_now_never_reports_status_unavailable(self):
         tooltip = tray_tooltip_text(
@@ -1382,7 +1394,8 @@ class TrayTooltipTests(unittest.TestCase):
                 compatible_runtime_identities={"codex": "runtime:1"},
                 checked_runtime_identities={"codex": "runtime:1"},
             ),
-            self.state(status="Ready", reset_at=None),
+            self.state(status="Ready", reset_at=None, quota_state="UNANCHORED",
+                       weekly_used_percent=20, usage_checked_at=90),
             now=100,
         )
 
@@ -1390,11 +1403,11 @@ class TrayTooltipTests(unittest.TestCase):
 
     def test_waiting_for_codex_status(self):
         tooltip = tray_tooltip_text(self.settings(), self.state(), now=100)
-        self.assertEqual("UsageLoop · waiting for Codex status", tooltip)
+        self.assertEqual("UsageLoop · Waiting for Codex status", tooltip)
 
     def test_no_cached_state_waits_for_codex_status(self):
         tooltip = tray_tooltip_text(self.settings(), None, now=100)
-        self.assertEqual("UsageLoop · waiting for Codex status", tooltip)
+        self.assertEqual("UsageLoop · Waiting for Codex status", tooltip)
 
     def test_needs_attention(self):
         tooltip = tray_tooltip_text(

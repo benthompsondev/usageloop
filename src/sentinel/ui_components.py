@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, tzinfo
 import re
 import time
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from .app_state import AppSettings, ProviderViewState, format_countdown
 from .history import SafeHistory, HistoryStateError
 from .providers import LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL
+from .presentation import OperationalPresentation
 from .schedule import (
     DAILY,
     FIVE_HOUR_WINDOW_SECONDS,
@@ -28,7 +29,6 @@ from .schedule import (
 from .ui_theme import TOKENS
 
 
-STALE_AFTER_SECONDS = 6 * 60 * 60
 CHAIN_OUTCOME_COPY = {
     "ALREADY_ANCHORED": "Current window was already running",
     "ANCHOR_VERIFIED": "Successful",
@@ -212,12 +212,6 @@ def present_provider_state(
             "One minimal Codex request is in progress. It will not be retried automatically.",
             verified, usage, weekly, action,
         )
-    if state.last_verified_at is not None and now - state.last_verified_at > STALE_AFTER_SECONDS:
-        return ProviderPresentation(
-            "NEEDS ATTENTION", "warning", format_countdown(state.reset_at, now), reset,
-            "This cached reading is older than usual. Diagnostics has more detail.",
-            verified, usage, weekly, action,
-        )
     if state.reset_at is None:
         return ProviderPresentation(
             "WAITING FOR RESET" if automation_enabled else "AUTOMATION OFF",
@@ -326,9 +320,15 @@ class ProviderCard(QFrame):
         self.update_state(state, now=time.time(), automation_enabled=False)
 
     def update_state(
-        self, state: ProviderViewState, *, now: float, automation_enabled: bool = False
+        self, state: ProviderViewState, *, now: float, automation_enabled: bool = False,
+        operational: OperationalPresentation | None = None,
     ) -> None:
         presented = present_provider_state(state, now=now, automation_enabled=automation_enabled)
+        if operational is not None:
+            presented = replace(presented, status=operational.card_status,
+                                tone=operational.tone,
+                                headline=operational.card_headline,
+                                detail=operational.card_detail)
         self.status_label.set_status(presented.status, presented.tone)
         if self.property("tone") != presented.tone:
             self.setProperty("tone", presented.tone)
@@ -429,6 +429,7 @@ class ScheduleCard(QFrame):
         state: ProviderViewState,
         *,
         now: float,
+        next_action: str | None = None,
     ) -> None:
         enabled = settings.automation_enabled
         if settings.schedule_mode == DAILY:
@@ -450,6 +451,9 @@ class ScheduleCard(QFrame):
                 "Starts the next window after the current reset and safety buffer."
             )
 
+        if next_action is not None:
+            self.next_label.setText(next_action)
+            return
         if not enabled:
             self.next_label.setText("No automatic requests while automation is off")
             return
@@ -712,6 +716,8 @@ def _reset_copy(reset_at: int | None, *, now: float) -> str:
         current = datetime.fromtimestamp(now).astimezone()
     except (OSError, OverflowError, ValueError):
         return "Reset time unavailable"
+    if reset_at <= now:
+        return f"Previous window ended {local.strftime('%a at %I:%M %p').replace(' 0', ' ')}"
     if local.date() == current.date():
         return f"Resets at {local.strftime('%I:%M %p').lstrip('0')}"
     return f"Resets {local.strftime('%a at %I:%M %p').replace(' 0', ' ')}"

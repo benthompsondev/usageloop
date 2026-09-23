@@ -29,6 +29,8 @@ class QuotaWindow:
 class QuotaSnapshot:
     observed_at: float
     windows: tuple[QuotaWindow, ...]
+    valid_structure: bool = False
+    valid_weekly_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -64,7 +66,35 @@ def normalize_rate_limits(payload: dict[str, Any], observed_at: float) -> QuotaS
             )
             if window is not None:
                 windows.append(window)
-    return QuotaSnapshot(observed_at=observed_at, windows=tuple(windows))
+    snapshot = QuotaSnapshot(observed_at=observed_at, windows=tuple(windows))
+    valid = _valid_payload_structure(payload, buckets, observed_at)
+    weekly_only = (
+        valid and select_weekly(snapshot) is not None
+        and select_five_hour(snapshot).status == "absent"
+    )
+    return QuotaSnapshot(observed_at, tuple(windows), valid, weekly_only)
+
+
+def _valid_payload_structure(payload: Any, buckets: tuple, observed_at: float) -> bool:
+    if not isinstance(payload, dict) or not buckets:
+        return False
+    seen = False
+    for map_key, bucket in buckets:
+        if not isinstance(bucket, dict) or _safe_limit_id(bucket.get("limitId")) is None:
+            return False
+        for slot in ("primary", "secondary"):
+            value = bucket.get(slot)
+            if value is None:
+                continue
+            if not isinstance(value, dict):
+                return False
+            window = _normalize_window(value, limit_id=_safe_limit_id(map_key),
+                                       slot=slot, blocked_reason=None)
+            if (window is None or window.duration_minutes is None
+                    or window.resets_at is None or window.resets_at <= observed_at):
+                return False
+            seen = True
+    return seen
 
 
 def select_five_hour(snapshot: QuotaSnapshot) -> FiveHourSelection:

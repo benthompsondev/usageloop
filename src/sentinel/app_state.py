@@ -88,6 +88,16 @@ class ProviderViewState:
     recovery_signature: str | None = None
     recovery_attempts: int = 0
     recovery_not_before: float | None = None
+    quota_evidence: str | None = None
+    compatibility_incident_id: str | None = None
+    compatibility_failure_category: str | None = None
+    compatibility_attempts: int = 0
+    compatibility_started_at: float | None = None
+    compatibility_next_retry_at: float | None = None
+    compatibility_notified: bool = False
+    compatibility_blocked_notified: bool = False
+    compatibility_terminal_notified: bool = False
+    compatibility_blocked_opportunity: str | None = None
 
     @classmethod
     def waiting(
@@ -146,7 +156,13 @@ def automation_decision(
         return AutomationDecision("NONE", "Automation is off.")
     if paused_until is not None and now < paused_until:
         return AutomationDecision("WAIT", "Automation is temporarily paused.")
-    if not state.installed or not state.automation_supported:
+    if not state.installed:
+        return AutomationDecision("NONE", "Provider automation is unavailable.")
+    if state.compatibility_next_retry_at is not None:
+        if now >= state.compatibility_next_retry_at:
+            return AutomationDecision("PROBE", "Read-only compatibility recovery is due.")
+        return AutomationDecision("WAIT", "Read-only compatibility recovery is backing off.")
+    if not state.automation_supported:
         return AutomationDecision("NONE", "Provider automation is unavailable.")
     if state.status == "Needs attention":
         return AutomationDecision("NONE", "Provider needs explicit attention.")
@@ -215,8 +231,16 @@ _OPTIONAL_TEXT_FIELDS = (
     "quota_state",
     "outcome_category",
     "recovery_signature",
+    "quota_evidence",
+    "compatibility_incident_id",
+    "compatibility_failure_category",
+    "compatibility_blocked_opportunity",
 )
-_BOOL_FIELDS = ("installed", "automation_supported", "retry_after_restart")
+_BOOL_FIELDS = (
+    "installed", "automation_supported", "retry_after_restart",
+    "compatibility_notified", "compatibility_blocked_notified",
+    "compatibility_terminal_notified",
+)
 _INT_FIELDS = ("reset_at", "weekly_reset_at")
 _FLOAT_FIELDS = (
     "last_verified_at",
@@ -225,6 +249,8 @@ _FLOAT_FIELDS = (
     "weekly_used_percent",
     "automation_blocked_until",
     "recovery_not_before",
+    "compatibility_started_at",
+    "compatibility_next_retry_at",
 )
 
 
@@ -250,7 +276,7 @@ def _coerce_provider_fields(value: dict[str, Any]) -> dict[str, Any]:
             cleaned[key] = int(raw) if _is_finite_number(raw) else None
         elif key in _FLOAT_FIELDS:
             cleaned[key] = float(raw) if _is_finite_number(raw) else None
-        elif key == "recovery_attempts":
+        elif key in {"recovery_attempts", "compatibility_attempts"}:
             cleaned[key] = (
                 int(raw)
                 if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0

@@ -80,6 +80,58 @@ class FakeSession:
 
 
 class CodexOperationRunnerTests(unittest.TestCase):
+    def test_weekly_only_automatic_check_remains_read_only_and_calm(self):
+        with tempfile.TemporaryDirectory() as directory:
+            weekly_only = payload(18_000)
+            weekly_only["rateLimitsByLimitId"]["codex"].pop("primary")
+            client = FakeClient([weekly_only] * 4)
+            clock = iter((100.0, 110.0, 120.0, 130.0))
+            runner = CodexOperationRunner(
+                SafeHistory(Path(directory) / "history.jsonl"),
+                session_factory=lambda: FakeSession(client),
+                clock=lambda: next(clock), sleep=lambda _seconds: None,
+            )
+            result = runner.run("bootstrap", runtime_identity="runtime:1")
+            self.assertEqual("NOT_ELIGIBLE", result.outcome)
+            self.assertEqual("ABSENT", result.state.quota_state)
+            self.assertEqual("valid_weekly_only", result.state.quota_evidence)
+            self.assertEqual(4, client.read_calls)
+            self.assertEqual(1, client.model_calls)  # read-only model/list for the trigger description
+            self.assertEqual(0, client.thread_calls)
+            self.assertEqual(0, client.turn_calls)
+
+    def test_post_send_settles_before_first_sample_then_confirms_fixed_reset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            clock = [100.0]
+            sleeps = []
+
+            class DelayedAnchorClient(FakeClient):
+                def __init__(self):
+                    super().__init__([])
+
+                def read_rate_limits(self):
+                    self.read_calls += 1
+                    # The Sep 12 first post-send sample still slid. Ten seconds
+                    # later Codex reported one fixed reset for all four reads.
+                    reset = int(clock[0] + 18_000) if clock[0] < 140 else 18_140
+                    return payload(reset)
+
+            def sleep(seconds):
+                sleeps.append(seconds)
+                clock[0] += seconds
+
+            client = DelayedAnchorClient()
+            history = SafeHistory(Path(directory) / "history.jsonl")
+            runner = CodexOperationRunner(history,
+                session_factory=lambda: FakeSession(client),
+                clock=lambda: clock[0], sleep=sleep)
+            result = runner.run("bootstrap", runtime_identity="runtime:1")
+            self.assertEqual("ANCHOR_VERIFIED", result.outcome)
+            self.assertEqual(1, client.turn_calls)
+            self.assertEqual(8, client.read_calls)
+            self.assertEqual([10.0] * 7, sleeps)
+            self.assertEqual("verified", history.trigger_attempts()[-1].state)
+
     def test_manual_sync_reads_four_samples_without_model_or_turn_calls(self):
         with tempfile.TemporaryDirectory() as directory:
             times = iter((100.0, 110.0, 120.0, 130.0))

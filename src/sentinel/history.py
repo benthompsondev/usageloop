@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -108,6 +109,8 @@ class SafeHistory:
             "sentinel_version": __version__,
             "codex_version": _safe_version(codex_version),
             "windows": [_window_to_dict(window) for window in snapshot.windows],
+            "valid_structure": snapshot.valid_structure,
+            "valid_weekly_only": snapshot.valid_weekly_only,
             "classification": classification.state,
             "confidence": classification.confidence,
             "evidence": _safe_evidence(classification.evidence),
@@ -124,6 +127,41 @@ class SafeHistory:
                 "category": safe_category,
             }
         )
+
+    def record_compatibility_event(
+        self, *, incident_id: str, runtime_identity: str, category: str,
+        event: str, now: float, attempts: int, next_retry_at: float | None,
+        opportunity_at: float | None = None,
+    ) -> None:
+        """Keep only fixed safe fields; never persist exception text or protocol data."""
+        if not isinstance(incident_id, str) or not _SAFE_ATTEMPT_ID.fullmatch(incident_id):
+            raise HistoryIntegrityError()
+        if event not in {"failed", "retry", "recovered", "exhausted", "blocked_start"}:
+            raise HistoryIntegrityError()
+        if event == "blocked_start" and any(
+            row.get("event") == "compatibility_blocked_start"
+            and row.get("incident_id") == incident_id
+            and row.get("opportunity_at") == opportunity_at
+            for row in self._read_rows(strict=True)
+        ):
+            return
+        row = {
+            "event": "compatibility_blocked_start" if event == "blocked_start" else "compatibility_incident",
+            "phase": event,
+            "timestamp": _iso_timestamp(now),
+            "occurred_at": float(now),
+            "incident_id": incident_id,
+            "runtime_key": hashlib.sha256(str(runtime_identity).encode("utf-8")).hexdigest()[:16],
+            "category": category if isinstance(category, str) and _SAFE_CATEGORY.fullmatch(category) else "unexpected_error",
+            "attempts": max(0, min(int(attempts), 6)),
+            "next_retry_at": float(next_retry_at) if next_retry_at is not None else None,
+            "opportunity_at": float(opportunity_at) if opportunity_at is not None else None,
+        }
+        self._append(row)
+
+    def recent_compatibility_events(self, *, limit: int = 10) -> list[dict[str, Any]]:
+        return [row for row in self._read_rows(strict=True)
+                if row.get("event") in {"compatibility_incident", "compatibility_blocked_start"}][-limit:]
 
     def record_transition(self, previous: str, current: str) -> None:
         allowed = {"ANCHORED", "UNANCHORED", "ABSENT", "EXHAUSTED", "UNKNOWN"}
@@ -461,7 +499,9 @@ def _snapshot_from_row(row: Any) -> QuotaSnapshot | None:
                 blocked_reason=raw.get("blocked_reason") if isinstance(raw.get("blocked_reason"), str) else None,
             )
         )
-    return QuotaSnapshot(float(observed_at), tuple(windows))
+    return QuotaSnapshot(float(observed_at), tuple(windows),
+                         row.get("valid_structure") is True,
+                         row.get("valid_weekly_only") is True)
 
 
 def _safe_evidence(evidence: dict[str, Any]) -> dict[str, Any]:

@@ -34,6 +34,7 @@ class CompatibilityResult:
     status: str
     detail: str
     runtime_identity: str
+    failure_category: str | None = None
 
     @classmethod
     def from_capabilities(
@@ -117,6 +118,17 @@ class CodexProvider:
         selected = select_five_hour(latest).window
         weekly = select_weekly(latest)
         if selected is None:
+            if classification.state == "ABSENT" and all(
+                snapshot.valid_weekly_only for snapshot in snapshots
+            ) and weekly is not None:
+                return replace(
+                    state, status="Waiting",
+                    detail="Codex isn't reporting a five-hour window right now. There's no five-hour start to schedule.",
+                    quota_state="ABSENT", quota_evidence="valid_weekly_only",
+                    usage_checked_at=latest.observed_at,
+                    weekly_used_percent=weekly.used_percent,
+                    weekly_reset_at=weekly.resets_at,
+                )
             return state
         status = {
             "ANCHORED": "Ready",
