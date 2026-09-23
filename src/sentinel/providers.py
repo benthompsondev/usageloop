@@ -8,7 +8,7 @@ from pathlib import Path
 import time
 from typing import Callable
 
-from .app_state import ProviderViewState
+from .app_state import ProviderViewState, preserve_verified_boundary
 from .classifier import classify
 from .history import SafeHistory
 from .host import is_windows
@@ -203,10 +203,16 @@ class CodexProvider:
         if result.outcome == "SYNC_INCONCLUSIVE" and current_state is not None:
             synced_state = replace(
                 current_state,
+                status="Needs attention",
                 detail=result.state.detail,
                 runtime_identity=identity,
                 runtime_version=detected.runtime_version,
                 automation_supported=detected.automation_supported,
+                quota_state=result.state.quota_state or "UNKNOWN",
+                quota_evidence="inconclusive",
+                usage_checked_at=(result.state.usage_checked_at
+                                  if result.state.usage_checked_at is not None
+                                  else current_state.usage_checked_at),
             )
         else:
             synced_state = replace(
@@ -219,6 +225,8 @@ class CodexProvider:
                     else detected.last_action
                 ),
             )
+            if current_state is not None:
+                synced_state = preserve_verified_boundary(current_state, synced_state)
         return replace(result, state=synced_state)
 
     def _operation_runner(self):

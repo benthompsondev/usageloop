@@ -15,6 +15,7 @@ from .app_state import (
     ProviderViewState,
     automation_decision,
     is_valid_daily_start_time,
+    preserve_verified_boundary,
 )
 from .providers import CompatibilityResult
 from .schedule import SCHEDULE_MODES, WEEKLY, normalize_weekly_times
@@ -91,6 +92,7 @@ class ApplicationController:
                 and state.installed
                 and previous.runtime_identity == state.runtime_identity
             ):
+                state = preserve_verified_boundary(previous, state)
                 if (
                     state.usage_checked_at is not None
                     and (
@@ -298,6 +300,7 @@ class ApplicationController:
                 self.states[provider_id] = detected
                 changed = True
                 continue
+            detected = preserve_verified_boundary(current, detected)
             if current.compatibility_incident_id and current.runtime_identity == detected.runtime_identity:
                 continue
             if current.status == "Needs attention" and not current.automation_supported:
@@ -515,6 +518,7 @@ class ApplicationController:
         current = self.states.get(state.provider_id)
         if current is None or current.runtime_identity != state.runtime_identity:
             return False
+        state = preserve_verified_boundary(current, state)
         if current.compatibility_incident_id is not None:
             state = replace(
                 current,

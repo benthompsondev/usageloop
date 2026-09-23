@@ -132,7 +132,8 @@ def operational_presentation(
                     "success", "CLOCK RUNNING", format_countdown(state.reset_at, now),
                     "Codex confirmed this reset time. No Codex traffic is needed for the countdown.",
                     "Current window stays active until it resets", tray=format_countdown(state.reset_at, now) + " left")
-    if (state.quota_state == "UNANCHORED" and state.weekly_used_percent is not None
+    if (state.quota_state == "UNANCHORED" and state.last_verified_at is None
+            and state.weekly_used_percent is not None
             and (state.reset_at is None or state.reset_at > now)):
         return make("first_window", "Ready when you choose to start",
                     "Starting a first window requires your approval.", "info",

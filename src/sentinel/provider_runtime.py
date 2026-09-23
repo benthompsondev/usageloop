@@ -236,6 +236,7 @@ class CodexOperationRunner:
                 session.client,
                 dedicated_trigger_workspace(self.history.path),
                 TriggerConfig(),
+                clock=self._clock,
             )
 
             def collect() -> list[QuotaSnapshot]:

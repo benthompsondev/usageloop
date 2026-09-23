@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Sequence
+import math
 import uuid
 
 from .classifier import Classification, classify
@@ -345,7 +346,8 @@ class ChainCoordinator:
             )
 
         if (verified.state == "ANCHORED" and _strong_evidence(verified)
-                and _fresh_target_anchor(observations, verification)):
+                and _fresh_target_anchor(observations, verification,
+                                         trigger_result.submitted_at)):
             self._transition_after_request(
                 attempt.attempt_id,
                 "verified",
@@ -482,12 +484,18 @@ def _strong_evidence(classification: Classification) -> bool:
 
 
 def _fresh_target_anchor(
-    preflight: Sequence[QuotaSnapshot], verification: Sequence[QuotaSnapshot]
+    preflight: Sequence[QuotaSnapshot], verification: Sequence[QuotaSnapshot],
+    submitted_at: float | None,
 ) -> bool:
-    """A fixed clock only confirms this send when its bucket and reset are new."""
+    """Require a fixed target clock consistent with this turn's submission."""
+    if (not isinstance(submitted_at, (int, float)) or isinstance(submitted_at, bool)
+            or not math.isfinite(submitted_at)):
+        return False
     current = max(preflight, key=lambda item: item.observed_at)
     before = select_five_hour(current).window
     if before is None or before.resets_at is None or before.duration_minutes is None:
+        return False
+    if submitted_at < current.observed_at:
         return False
     selected = [select_five_hour(item).window for item in verification]
     if not selected or any(window is None for window in selected):
@@ -498,12 +506,20 @@ def _fresh_target_anchor(
            for window in windows):
         return False
     first = min(verification, key=lambda item: item.observed_at)
-    if first.observed_at <= current.observed_at:
+    if first.observed_at <= submitted_at:
         return False
     reset = windows[-1].resets_at
-    if reset is None or reset <= before.resets_at:
+    if reset is None or reset < before.resets_at:
         return False
-    return abs(reset - first.observed_at - before.duration_minutes * 60) <= 300
+    expected_reset = submitted_at + before.duration_minutes * 60
+    # Codex reports integer seconds. A turn submitted within the same second
+    # as the final sliding read can legitimately produce that same integer reset.
+    if reset == before.resets_at and not (
+        submitted_at - current.observed_at < 1
+        and reset == math.floor(expected_reset)
+    ):
+        return False
+    return math.floor(expected_reset) <= reset <= expected_reset + 300
 
 
 def _bootstrap_usage_suitable(observations: Sequence[QuotaSnapshot]) -> bool:

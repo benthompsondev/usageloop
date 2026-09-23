@@ -295,6 +295,20 @@ class TechnicalSummaryTests(unittest.TestCase):
         text = self.summary().lower()
         for banned in ("auth.json", "@", "bearer", "sk-ant", "password", "credential"):
             self.assertNotIn(banned, text)
+
+    def test_compatibility_history_formats_only_safe_fields(self):
+        text = technical_summary(
+            {"codex": state()}, AppSettings(),
+            compatibility_events=[{
+                "event": "compatibility_blocked_start", "phase": "blocked_start",
+                "occurred_at": 1_800_000_000, "opportunity_at": 1_800_000_000,
+                "category": "app_server_timeout",
+                "raw_error": "Bearer secret in C:/private/auth.json",
+            }],
+        )
+        self.assertIn("Scheduled start blocked (app_server_timeout)", text)
+        self.assertNotIn("Bearer secret", text)
+        self.assertNotIn("auth.json", text)
         self.assertNotIn("prompt:", text)
 
     def test_summary_explains_codex_mechanism_for_troubleshooting(self):

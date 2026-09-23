@@ -56,6 +56,7 @@ from .provider_runtime import ProviderOperationResult
 from .providers import CompatibilityResult
 from .schedule import DAILY, WEEKLY, schedule_summary
 from .diagnostics import technical_summary
+from .history import HistoryStateError
 from .ui_components import (
     Disclosure,
     ElidingLabel,
@@ -972,6 +973,8 @@ class MainWindow(QMainWindow):
             button.setProperty("active", button_index == index)
             button.style().unpolish(button)
             button.style().polish(button)
+        if index == 1:
+            self._update_diagnostics(now=time.time())
 
     def _check_updates_for_model_support(self) -> None:
         self.show_page(1)
@@ -1247,6 +1250,17 @@ class MainWindow(QMainWindow):
         self.thread_pool.start(worker)
         self.refresh_clock()
 
+    def _probe_runtime_is_current(self, provider_id: str, expected_identity: str | None) -> bool:
+        """Recheck the local executable after an in-flight compatibility probe."""
+        try:
+            detected = self.providers[provider_id].detect()
+        except Exception:
+            return False
+        if detected.runtime_identity != expected_identity:
+            self.controller.refresh_local_states()
+            return False
+        return True
+
     def _operation_completed(self, provider_id: str, result: object) -> None:
         action = self.active_operations.pop(provider_id, None)
         if isinstance(result, CompatibilityResult):
@@ -1255,6 +1269,11 @@ class MainWindow(QMainWindow):
                 self.refresh_clock()
                 return
             prior, pending, automatic = context
+            if not self._probe_runtime_is_current(provider_id, pending.runtime_identity):
+                if self.controller.states[provider_id] == pending:
+                    self.controller.update_provider_state(prior)
+                self.refresh_clock()
+                return
             current = self.controller.states[provider_id]
             if (current != pending or result.runtime_identity != pending.runtime_identity or
                     (automatic and (not self.controller.settings.automation_enabled
@@ -1303,6 +1322,11 @@ class MainWindow(QMainWindow):
                 self.refresh_clock()
                 return
             prior, pending, automatic = context
+            if not self._probe_runtime_is_current(provider_id, pending.runtime_identity):
+                if self.controller.states[provider_id] == pending:
+                    self.controller.update_provider_state(prior)
+                self.refresh_clock()
+                return
             current = self.controller.states[provider_id]
             if (current == pending and
                     (not automatic or (self.controller.settings.automation_enabled
@@ -1540,11 +1564,21 @@ class MainWindow(QMainWindow):
             self.weekly_preview_first_value.setText(preview.first_start)
             self.weekly_preview_reset_value.setText(preview.next_reset)
             self.weekly_preview_pause_value.setText(preview.pause_start)
+        events = ()
+        history = self.controller.error_history
+        if self.pages.currentIndex() == 1 and history is not None:
+            reader = getattr(history, "recent_compatibility_events", None)
+            if callable(reader):
+                try:
+                    events = reader(limit=10)
+                except (HistoryStateError, OSError):
+                    events = ()
         self.diagnostic_text.setText(
             technical_summary(
                 self.controller.states,
                 self.controller.settings,
                 persistence_error=self.controller.persistence_error is not None,
+                compatibility_events=events,
             )
         )
 

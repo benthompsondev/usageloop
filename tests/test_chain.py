@@ -97,9 +97,10 @@ def unanchored_with_weekly_limit(limit_id):
 
 
 class FakeTrigger:
-    def __init__(self, result=None):
+    def __init__(self, result=None, *, submitted_at=BOUNDARY + 90.5):
         self.calls = 0
         self.result = result or TriggerRunResult("turn_completed", True)
+        self.submitted_at = submitted_at
 
     def describe(self):
         return TriggerDescription(
@@ -113,7 +114,8 @@ class FakeTrigger:
         self.calls += 1
         if on_request_starting is not None:
             on_request_starting()
-        return self.result
+        return (replace(self.result, submitted_at=self.submitted_at)
+                if self.result.request_possibly_sent else self.result)
 
 
 class ChainCoordinatorTests(unittest.TestCase):
@@ -147,7 +149,7 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertTrue(result.request_possibly_sent)
 
     def test_fixed_old_reset_after_send_is_guarded(self):
-        trigger = FakeTrigger()
+        trigger = FakeTrigger(submitted_at=BOUNDARY + 95)
         preflight = unanchored()
         old_reset = preflight[-1].windows[0].resets_at
         post = [replace(item, windows=(replace(item.windows[0], resets_at=old_reset),
@@ -156,6 +158,22 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
         self.assertEqual("failed_guarded", self.history.trigger_attempts()[-1].state)
         self.assertEqual(1, trigger.calls)
+
+    def test_external_anchor_before_actual_submission_is_not_confirmed(self):
+        preflight = [snapshot(t, t + 18_000) for t in (100, 110, 120, 130)]
+        post = [snapshot(t, 18_140, used=1) for t in (170, 180, 190, 200)]
+        trigger = FakeTrigger(submitted_at=160)
+        result = self.coordinator(trigger).run_bootstrap(preflight, lambda: post, confirmed=True)
+        self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
+        self.assertEqual("failed_guarded", self.history.trigger_attempts()[-1].state)
+
+    def test_same_second_fixed_reset_can_confirm_actual_submission(self):
+        preflight = [snapshot(t, t + 18_000) for t in (100, 110, 120, 130)]
+        post = [snapshot(t, 18_130, used=1) for t in (140, 150, 160, 170)]
+        trigger = FakeTrigger(submitted_at=130.5)
+        result = self.coordinator(trigger).run_bootstrap(preflight, lambda: post, confirmed=True)
+        self.assertEqual("ANCHOR_VERIFIED", result.status)
+        self.assertEqual("verified", self.history.trigger_attempts()[-1].state)
 
     def test_fixed_wrong_bucket_after_send_is_guarded(self):
         trigger = FakeTrigger()
@@ -181,7 +199,7 @@ class ChainCoordinatorTests(unittest.TestCase):
                 self.assertFalse(result.anchored)
 
     def test_transient_exhausted_preflight_never_triggers_then_unanchored_triggers_once(self):
-        trigger = FakeTrigger()
+        trigger = FakeTrigger(submitted_at=BOUNDARY + 110.5)
 
         blocked = self.coordinator(trigger).run(exhausted(), lambda: anchored())
         recovered = self.coordinator(trigger).run(
@@ -194,8 +212,8 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual(1, trigger.calls)
 
     def test_missed_boundary_after_long_sleep_still_uses_verified_history(self):
-        trigger = FakeTrigger()
         much_later = BOUNDARY + (8 * 60 * 60)
+        trigger = FakeTrigger(submitted_at=much_later + 30.5)
 
         result = self.coordinator(trigger).run(
             unanchored(much_later), lambda: anchored(much_later)
@@ -217,7 +235,7 @@ class ChainCoordinatorTests(unittest.TestCase):
 
         self.assertEqual("reserved", self.history.trigger_attempts()[-1].state)
 
-        working = FakeTrigger()
+        working = FakeTrigger(submitted_at=BOUNDARY + 210.5)
         recovered = self.coordinator(working).run(
             unanchored(BOUNDARY + 180), lambda: anchored(BOUNDARY + 180)
         )
@@ -484,6 +502,7 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ATTEMPT_ALREADY_RECORDED", result.status)
         self.assertEqual(0, trigger.calls)
 
+        trigger.submitted_at = BOUNDARY + 210.5
         recovered = ChainCoordinator(
             trigger, SafeHistory(self.history.path), ChainPolicy()
         ).run(unanchored(BOUNDARY + 180), lambda: anchored(BOUNDARY + 180))

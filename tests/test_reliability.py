@@ -12,9 +12,11 @@ from PySide6.QtWidgets import QApplication
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
+from sentinel.classifier import Classification
 from sentinel.history import SafeHistory
 from sentinel.presentation import operational_presentation
-from sentinel.providers import CompatibilityResult
+from sentinel.providers import CodexProvider, CompatibilityResult
+from sentinel.quota import QuotaSnapshot, QuotaWindow
 from sentinel.desktop import MainWindow
 from test_desktop import FakeStartup, FakeThreadPool
 
@@ -24,11 +26,13 @@ class StaticProvider:
 
     def __init__(self, state):
         self.state = state
+        self.probe_calls = 0
 
     def detect(self):
         return self.state
 
     def probe(self):
+        self.probe_calls += 1
         return CompatibilityResult(True, "Waiting", "Compatible.", self.state.runtime_identity)
 
 
@@ -174,6 +178,56 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(1, sum(row.get("event") == "compatibility_blocked_start" for row in rows))
         self.assertEqual([], self.history.trigger_attempts())
 
+    def test_recovery_refresh_keeps_verified_boundary_through_restart(self):
+        clock = [900]
+        provider = CodexProvider(
+            history=self.history, executable_finder=lambda: Path("fake-codex"),
+            identity_reader=lambda _: "runtime:1", version_reader=lambda _: "test",
+            now=lambda: clock[0],
+        )
+        controller = ApplicationController([provider], self.store, error_history=self.history)
+        controller.start()
+        controller.set_automation_enabled(True)
+        controller.update_provider_state(replace(
+            controller.states["codex"], reset_at=940, last_verified_at=900,
+            usage_checked_at=900, weekly_used_percent=10, weekly_reset_at=80_000,
+            quota_state="ANCHORED",
+        ))
+        controller.apply_compatibility("codex", self.failure(), now=1000)
+        for observed_at in (1010, 1020, 1030, 1040):
+            self.history.record_observation(
+                QuotaSnapshot(observed_at, (
+                    QuotaWindow("codex", "primary", 0, 300, observed_at + 18_000, None),
+                    QuotaWindow("codex", "secondary", 10, 10080, 80_000, None),
+                )),
+                Classification("UNANCHORED", "high", "sliding", {"sample_count": 4}),
+                "test",
+            )
+        clock[0] = 1040
+        controller.apply_compatibility("codex", self.success(), now=1040)
+        controller.refresh_local_states()
+        state = controller.states["codex"]
+        self.assertEqual(940, state.reset_at)
+        self.assertEqual(19040, self.history.load_recent(now=1040)[-1].windows[0].resets_at)
+        self.assertEqual("ROLLOVER", controller.decisions(now=1040)["codex"].action)
+        self.assertEqual("due", operational_presentation(controller.settings, state, now=1040).kind)
+        controller = ApplicationController([provider], self.store, error_history=self.history)
+        controller.start()
+        self.assertEqual(940, controller.states["codex"].reset_at)
+        self.assertEqual("ROLLOVER", controller.decisions(now=1040)["codex"].action)
+        day = datetime(2026, 9, 23, 11, 0).timestamp()
+        controller.update_provider_state(replace(
+            controller.states["codex"],
+            reset_at=int(datetime(2026, 9, 23, 5, 0).timestamp()),
+            last_verified_at=day - 6 * 3600,
+        ))
+        controller.set_schedule_mode("daily")
+        controller.set_daily_start_time(4, 30)
+        self.assertEqual("WAIT", controller.decisions(now=day)["codex"].action)
+        controller = ApplicationController([provider], self.store, error_history=self.history)
+        controller.start()
+        self.assertEqual("WAIT", controller.decisions(now=day)["codex"].action)
+
 
 class PresentationTests(unittest.TestCase):
     NOW = datetime(2026, 9, 23, 11, 0).timestamp()
@@ -300,6 +354,51 @@ class LateProbeTests(unittest.TestCase):
         self.window._operation_completed("codex", self.success())
         self.assertEqual("runtime:2", self.controller.states["codex"].runtime_identity)
         self.assertNotIn("codex", self.controller.settings.compatible_runtime_identities)
+
+    def test_provider_identity_change_during_probe_rejects_stale_success(self):
+        self.pending()
+        self.provider.state = replace(self.provider.state, runtime_identity="runtime:2")
+        self.window.evaluate_automation(now=time.time())
+        self.assertEqual("runtime:1", self.controller.states["codex"].runtime_identity)
+        self.assertEqual(1, len(self.window.thread_pool.workers))
+        self.window._operation_completed("codex", self.success())
+        self.assertEqual("runtime:2", self.controller.states["codex"].runtime_identity)
+        self.assertNotIn("codex", self.controller.settings.compatible_runtime_identities)
+        self.assertEqual([], self.notices)
+
+    def test_provider_identity_change_during_probe_rejects_stale_failure(self):
+        self.pending()
+        self.provider.state = replace(self.provider.state, runtime_identity="runtime:2")
+        self.window.evaluate_automation(now=time.time())
+        self.assertEqual(1, len(self.window.thread_pool.workers))
+        self.window._operation_failed("codex", "app_server_timeout")
+        self.assertEqual("runtime:2", self.controller.states["codex"].runtime_identity)
+        self.assertIsNone(self.controller.states["codex"].compatibility_incident_id)
+        self.assertEqual([], self.notices)
+
+    def test_technical_details_show_blocked_and_recovered_incident_after_restart(self):
+        now = time.time()
+        state = replace(self.controller.states["codex"], reset_at=int(now - 100),
+                        last_verified_at=now - 200, weekly_used_percent=10,
+                        weekly_reset_at=int(now + 80_000))
+        self.controller.update_provider_state(state)
+        failure = CompatibilityResult(False, "Needs attention", "Temporary failure.",
+                                      "runtime:1", failure_category="app_server_timeout")
+        self.controller.apply_compatibility("codex", failure, now=now)
+        self.assertTrue(self.controller.record_blocked_opportunity("codex", now=now + 1))
+        self.assertFalse(self.controller.record_blocked_opportunity("codex", now=now + 2))
+        self.controller.apply_compatibility("codex", self.success(), now=now + 3)
+        self.controller.start()
+        self.window.show_page(1)
+        self.window.refresh_clock(now=now + 4)
+        detail = self.window.diagnostic_text.text()
+        self.assertIn("app_server_timeout", detail)
+        self.assertIn("Scheduled start blocked", detail)
+        self.assertIn("Recovered", detail)
+        self.assertEqual(1, sum(row["phase"] == "blocked_start" for row in
+                                self.controller.error_history.recent_compatibility_events()))
+        self.assertEqual([], self.controller.error_history.trigger_attempts())
+        self.assertEqual(0, self.provider.probe_calls)
 
     def test_late_failure_cannot_override_newer_compatibility_success(self):
         self.pending()

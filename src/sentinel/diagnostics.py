@@ -8,7 +8,10 @@ and keeps the raw technical text behind an expander.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from datetime import datetime
+import math
+import re
+from typing import Mapping, Sequence
 
 from .app_state import AppSettings, ProviderViewState
 from .host import is_windows, platform_label
@@ -266,6 +269,7 @@ def technical_summary(
     *,
     app_version: str = PRODUCT.version,
     persistence_error: bool = False,
+    compatibility_events: Sequence[Mapping[str, object]] = (),
 ) -> str:
     """The raw detail, kept for troubleshooting and for the copy button.
 
@@ -317,7 +321,50 @@ def technical_summary(
             "  Codex-triggering activity while off: none",
         ]
     )
+    event_lines = [_compatibility_event_line(row) for row in compatibility_events]
+    event_lines = [line for line in event_lines if line is not None]
+    if event_lines:
+        lines.extend(["", "Recent connection events", *event_lines])
     return "\n".join(lines)
+
+
+def _compatibility_event_line(row: Mapping[str, object]) -> str | None:
+    labels = {
+        "failed": "Check failed", "retry": "Retry failed",
+        "blocked_start": "Scheduled start blocked", "exhausted": "Retries exhausted",
+        "recovered": "Recovered",
+    }
+    phase = row.get("phase")
+    event = row.get("event")
+    if (not isinstance(event, str)
+            or event not in {"compatibility_incident", "compatibility_blocked_start"}
+            or not isinstance(phase, str) or phase not in labels):
+        return None
+    if (phase == "blocked_start") != (event == "compatibility_blocked_start"):
+        return None
+    occurred = _local_event_time(row.get("occurred_at"))
+    if occurred is None:
+        return None
+    category = row.get("category")
+    if not isinstance(category, str) or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", category) is None:
+        category = "unknown"
+    detail = f"  {occurred}: {labels[phase]} ({category})"
+    if phase == "blocked_start":
+        opportunity = _local_event_time(row.get("opportunity_at"))
+        if opportunity is not None:
+            detail += f"; scheduled for {opportunity}"
+    return detail
+
+
+def _local_event_time(value: object) -> str | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    try:
+        if not math.isfinite(value):
+            return None
+        return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M")
+    except (OSError, OverflowError, ValueError):
+        return None
 
 
 def _discovery_order() -> str:

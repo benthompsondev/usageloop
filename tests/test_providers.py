@@ -9,7 +9,7 @@ from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.classifier import Classification, classify
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 from sentinel.providers import CodexProvider, CompatibilityResult
-from sentinel.provider_runtime import ProviderOperationResult
+from sentinel.provider_runtime import CodexOperationRunner, ProviderOperationResult
 
 
 class ProviderAdapterTests(unittest.TestCase):
@@ -50,10 +50,69 @@ class ProviderAdapterTests(unittest.TestCase):
         result = provider.sync_usage(current_state=current)
 
         self.assertEqual("SYNC_INCONCLUSIVE", result.outcome)
-        self.assertEqual("Waiting", result.state.status)
+        self.assertEqual("Needs attention", result.state.status)
         self.assertEqual(1_000, result.state.reset_at)
         self.assertEqual(10, result.state.used_percent)
         self.assertEqual(20, result.state.weekly_used_percent)
+
+    def test_malformed_sync_after_weekly_only_is_not_shown_as_valid_absence(self):
+        from sentinel.app_state import AppSettings
+        from sentinel.presentation import operational_presentation
+
+        weekly_only = {"rateLimitsByLimitId": {"codex": {
+            "limitId": "codex", "secondary": {"usedPercent": 20,
+                "windowDurationMins": 10080, "resetsAt": 900_000},
+        }}}
+        malformed = {"rateLimitsByLimitId": {"codex": {
+            "limitId": "codex", "primary": {"usedPercent": 0,
+                "windowDurationMins": 300},
+            "secondary": {"usedPercent": 20,
+                "windowDurationMins": 10080, "resetsAt": 900_000},
+        }}}
+
+        class Client:
+            reads = 0
+
+            def read_rate_limits(self):
+                self.reads += 1
+                return weekly_only if self.reads <= 4 else malformed
+
+            def drain_rate_limit_notifications(self):
+                return []
+
+        class Session:
+            codex_version = "test"
+
+            def __init__(self, client):
+                self.client = client
+
+            def close(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = Client()
+            times = iter((100, 110, 120, 130, 200, 210, 220, 230))
+            runner = CodexOperationRunner(
+                SafeHistory(Path(directory) / "history.jsonl"),
+                session_factory=lambda: Session(client),
+                clock=lambda: next(times), sleep=lambda _: None,
+            )
+            provider = CodexProvider(operation_runner=runner)
+            initial = ProviderViewState.waiting(
+                "codex", "Codex", installed=True, runtime_identity="runtime:1")
+            first = provider.sync_usage(current_state=initial)
+            self.assertEqual("SYNC_UPDATED", first.outcome)
+            self.assertEqual("valid_weekly_only", first.state.quota_evidence)
+            result = provider.sync_usage(current_state=first.state)
+            settings = AppSettings(automation_enabled=True,
+                                   compatible_runtime_identities={"codex": "runtime:1"})
+            presentation = operational_presentation(settings, result.state, now=240)
+        self.assertEqual("SYNC_INCONCLUSIVE", result.outcome)
+        self.assertEqual("inconclusive", result.state.quota_evidence)
+        self.assertIn(result.state.quota_state, {"UNKNOWN", "ABSENT"})
+        self.assertNotEqual("no_five_hour", presentation.kind)
+        self.assertFalse(presentation.manual_start_visible)
+        self.assertEqual(8, client.reads)
 
     def test_recoverable_rollover_keeps_the_authoritative_old_reset(self) -> None:
         class Runner:

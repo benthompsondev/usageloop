@@ -132,6 +132,19 @@ class ProviderViewState:
         )
 
 
+def preserve_verified_boundary(
+    previous: ProviderViewState, observed: ProviderViewState,
+) -> ProviderViewState:
+    """Keep the scheduling boundary while a newer reading reports a sliding clock."""
+    if (previous.runtime_identity == observed.runtime_identity
+            and previous.reset_at is not None
+            and previous.last_verified_at is not None
+            and observed.quota_state == "UNANCHORED"):
+        return replace(observed, reset_at=previous.reset_at,
+                       last_verified_at=previous.last_verified_at)
+    return observed
+
+
 @dataclass(frozen=True)
 class AutomationDecision:
     action: str

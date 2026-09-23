@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import time
 from typing import Callable, Protocol
 
 from .models import ModelChoice, select_trigger_model
@@ -44,6 +45,7 @@ class TriggerDescription:
 class TriggerRunResult:
     terminal_outcome: str
     request_possibly_sent: bool
+    submitted_at: float | None = None
 
 
 class Trigger(Protocol):
@@ -72,10 +74,12 @@ class AppServerTrigger:
         client: TurnClient,
         workspace: Path,
         config: TriggerConfig | None = None,
+        clock: Callable[[], float] = time.time,
     ):
         self.client = client
         self.workspace = workspace
         self.config = config or TriggerConfig()
+        self._clock = clock
         self._choice: ModelChoice | None = None
         self._resolved = False
 
@@ -145,6 +149,7 @@ class AppServerTrigger:
             except Exception:
                 return TriggerRunResult("reservation_state_failed", False)
 
+        submitted_at = self._clock()
         try:
             self.client.start_turn(self.turn_parameters(thread_id, choice))
         except AppServerRequestRejected as exc:
@@ -153,9 +158,9 @@ class AppServerTrigger:
             # reached the model, so it is treated as possibly sent.
             if exc.rejected_before_dispatch:
                 return TriggerRunResult("turn_start_rejected", False)
-            return TriggerRunResult("turn_start_error", True)
+            return TriggerRunResult("turn_start_error", True, submitted_at)
         except (AppServerProtocolError, SentinelRuntimeError, OSError):
-            return TriggerRunResult("turn_start_unconfirmed", True)
+            return TriggerRunResult("turn_start_unconfirmed", True, submitted_at)
 
         try:
             outcome = self.client.await_turn_end(timeout=self.config.turn_timeout_seconds)
@@ -163,7 +168,7 @@ class AppServerTrigger:
             outcome = "turn_stream_unavailable"
         # Every path below has transmitted one turn. The quota observer, not
         # this lifecycle signal, decides whether the window actually anchored.
-        return TriggerRunResult(outcome, True)
+        return TriggerRunResult(outcome, True, submitted_at)
 
     def _prepare_workspace(self) -> bool:
         try:

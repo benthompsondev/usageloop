@@ -170,6 +170,20 @@ class TriggerParameterTests(unittest.TestCase):
         self.assertEqual("low", client.turn_params["effort"])
         self.assertEqual("codex-window-sentinel", client.turn_params["turnTrigger"])
 
+    def test_submission_time_is_captured_at_turn_start(self):
+        clock = [130.5]
+
+        class TimedClient(FakeClient):
+            def start_turn(self, params):
+                self.call_time = clock[0]
+                clock[0] = 200
+                super().start_turn(params)
+
+        client = TimedClient()
+        result = AppServerTrigger(client, self.workspace, clock=lambda: clock[0]).run()
+        self.assertEqual(130.5, client.call_time)
+        self.assertEqual(130.5, result.submitted_at)
+
     def test_unknown_effort_refuses_before_thread_or_turn(self):
         client = FakeClient(catalog=[catalog_entry("gpt-5.6-luna", default=True, efforts=(), default_effort=None)])
         self.trigger(client).run()
