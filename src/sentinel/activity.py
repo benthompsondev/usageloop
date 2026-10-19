@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
     QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
+from .i18n import tr
+
 from .history import HistoryStateError, SafeHistory
 from .ui_components import StatusPill
 
@@ -43,26 +45,26 @@ START_OUTCOMES = {
 def activity_time(timestamp: float) -> str:
     """Absolute local dates remain understandable across restart and midnight."""
     try:
-        return datetime.fromtimestamp(timestamp).strftime("%a, %b %d, %Y at %I:%M %p").replace(" 0", " ")
+        return datetime.fromtimestamp(timestamp).strftime(tr("%a, %b %d, %Y at %I:%M %p")).replace(" 0", " ")
     except (OSError, OverflowError, ValueError):
-        return "Time unavailable"
+        return tr("Time unavailable")
 
 
 class RecentStartsDialog(QDialog):
     def __init__(self, history: SafeHistory | None, parent=None):
         super().__init__(parent)
         self.history = history
-        self.setWindowTitle("Recent starts · UsageLoop")
+        self.setWindowTitle(tr("Recent starts · UsageLoop"))
         self.setObjectName("appRoot")
         self.resize(660, 640)
         self.setMinimumSize(460, 360)
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(12)
-        title = QLabel("Did my window start?")
+        title = QLabel(tr("Did my window start?"))
         title.setObjectName("pageTitle")
         root.addWidget(title)
-        intro = QLabel("Your latest 10 start attempts, newest first. All times are local to this PC.")
+        intro = QLabel(tr("Your latest 10 start attempts, newest first. All times are local to this PC."))
         intro.setWordWrap(True)
         intro.setProperty("muted", True)
         root.addWidget(intro)
@@ -71,20 +73,20 @@ class RecentStartsDialog(QDialog):
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         root.addWidget(self.scroll, 1)
         note = QLabel(
-            "Only UsageLoop start attempts appear here. Syncs, pauses, and time with the app closed "
-            "or the PC asleep are not recorded as starts. A confirmed start is not a guarantee of remaining quota."
+            tr("Only UsageLoop start attempts appear here. Syncs, pauses, and time with the app closed "
+            "or the PC asleep are not recorded as starts. A confirmed start is not a guarantee of remaining quota.")
         )
         note.setWordWrap(True)
         note.setProperty("muted", True)
         root.addWidget(note)
         actions = QHBoxLayout()
-        refresh = QPushButton("Refresh history")
+        refresh = QPushButton(tr("Refresh history"))
         refresh.setObjectName("secondaryButton")
-        refresh.setToolTip("Reread local history only. Makes no Codex requests.")
+        refresh.setToolTip(tr("Reread local history only. Makes no Codex requests."))
         refresh.clicked.connect(self.refresh)
         actions.addWidget(refresh)
         actions.addStretch()
-        close = QPushButton("Close")
+        close = QPushButton(tr("Close"))
         close.setObjectName("secondaryButton")
         close.clicked.connect(self.close)
         actions.addWidget(close)
@@ -98,12 +100,12 @@ class RecentStartsDialog(QDialog):
         layout.setSpacing(10)
         try:
             attempts = self.history.trigger_attempts() if self.history is not None else []
-            message = "No starts recorded yet. Starts made by UsageLoop will appear here after you use it."
+            message = tr("No starts recorded yet. Starts made by UsageLoop will appear here after you use it.")
         except (OSError, HistoryStateError):
             attempts = []
-            message = "History unavailable. UsageLoop could not read its saved records safely. Nothing has been changed."
+            message = tr("History unavailable. UsageLoop could not read its saved records safely. Nothing has been changed.")
         if not attempts:
-            label = QLabel(message)
+            label = QLabel(tr(message))
             label.setWordWrap(True)
             layout.addWidget(label)
         for attempt in reversed(attempts[-10:]):
@@ -113,7 +115,7 @@ class RecentStartsDialog(QDialog):
             body.setContentsMargins(16, 14, 16, 14)
             body.setSpacing(6)
             header = QHBoxLayout()
-            name = QLabel("Automatic start" if attempt.mode == "rollover" else "Manual first start")
+            name = QLabel(tr("Automatic start" if attempt.mode == "rollover" else "Manual first start"))
             name.setObjectName("sectionTitle")
             name.setWordWrap(True)
             header.addWidget(name)
@@ -124,17 +126,17 @@ class RecentStartsDialog(QDialog):
             header.addWidget(pill)
             body.addLayout(header)
             for text in (activity_time(attempt.created_at), detail):
-                label = QLabel(text)
+                label = QLabel(tr(text))
                 label.setWordWrap(True)
                 body.addWidget(label)
             selection = QLabel(
-                f"Model: {attempt.model or 'Not recorded'} · Reasoning: {attempt.reasoning_effort or 'Not recorded'}"
+                tr('Model: {0} · Reasoning: {1}').format(attempt.model or tr('Not recorded'), attempt.reasoning_effort or tr('Not recorded'))
             )
             selection.setWordWrap(True)
             selection.setProperty("muted", True)
             body.addWidget(selection)
             if attempt.updated_at != attempt.created_at:
-                updated = QLabel(f"Last recorded: {activity_time(attempt.updated_at)}")
+                updated = QLabel(tr('Last recorded: {0}').format(activity_time(attempt.updated_at)))
                 updated.setWordWrap(True)
                 updated.setProperty("muted", True)
                 body.addWidget(updated)

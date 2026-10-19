@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .i18n import tr
+
 from .host import platform_label
 from .linux_update import (
     LinuxUpdateError,
@@ -55,7 +57,7 @@ class UpdateWorker(QRunnable):
             self.signals.failed.emit(self.action, str(exc))
         except Exception:
             self.signals.failed.emit(
-                self.action, "The update step stopped unexpectedly. Your current app was not changed."
+                self.action, tr("The update step stopped unexpectedly. Your current app was not changed.")
             )
         else:
             self.signals.completed.emit(self.action, result)
@@ -96,22 +98,22 @@ class UpdatePanel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
         layout.setSpacing(10)
-        title = QLabel("Updates")
+        title = QLabel(tr("Updates"))
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
         copy = QLabel(
-            "GitHub is checked only when you press the button. Update traffic is separate "
-            "from Codex and cannot use subscription quota."
+            tr("GitHub is checked only when you press the button. Update traffic is separate "
+            "from Codex and cannot use subscription quota.")
         )
         copy.setObjectName("updateIntro")
         copy.setProperty("muted", True)
         copy.setWordWrap(True)
         layout.addWidget(copy)
 
-        installed = QLabel(f"Installed version  {PRODUCT.version}")
+        installed = QLabel(tr('Installed version  {0}').format(PRODUCT.version))
         installed.setObjectName("secondaryMetric")
         layout.addWidget(installed)
-        self.state_label = QLabel("No update check has run.")
+        self.state_label = QLabel(tr("No update check has run."))
         self.state_label.setObjectName("updateState")
         self.state_label.setWordWrap(True)
         layout.addWidget(self.state_label)
@@ -122,10 +124,10 @@ class UpdatePanel(QFrame):
         layout.addWidget(self.notes_label)
 
         actions = QHBoxLayout()
-        self.action_button = QPushButton("Check for updates")
+        self.action_button = QPushButton(tr("Check for updates"))
         self.action_button.setObjectName("primaryButton")
         self.action_button.clicked.connect(self._primary_action)
-        self.dismiss_button = QPushButton("Not now")
+        self.dismiss_button = QPushButton(tr("Not now"))
         self.dismiss_button.clicked.connect(self.reset)
         self.dismiss_button.setVisible(False)
         actions.addWidget(self.action_button)
@@ -147,7 +149,7 @@ class UpdatePanel(QFrame):
         """Fetch and verify, and on Linux unpack under our own validation."""
         release = self.release
         if release is None:
-            raise UpdateError("There is no checked release to download.")
+            raise UpdateError(tr("There is no checked release to download."))
         verified = self.updater.download(release)
         if self.is_windows:
             return verified
@@ -162,13 +164,13 @@ class UpdatePanel(QFrame):
             return
         clipboard = QApplication.clipboard()
         if clipboard is None:
-            self.action_button.setText("Copy failed")
+            self.action_button.setText(tr("Copy failed"))
             return
         clipboard.setText(" ".join(install_command(self.staged)))
-        self.action_button.setText("Copied")
+        self.action_button.setText(tr("Copied"))
 
     def start_check(self) -> None:
-        self._set_busy("checking", "Checking GitHub…")
+        self._set_busy("checking", tr("Checking GitHub…"))
         worker = UpdateWorker("check", self.updater.check)
         worker.signals.completed.connect(self._operation_completed)
         worker.signals.failed.connect(self._operation_failed)
@@ -183,9 +185,9 @@ class UpdatePanel(QFrame):
             return
         self._set_busy(
             "downloading",
-            "Downloading and verifying the Windows installer…"
+            tr("Downloading and verifying the Windows installer…")
             if self.is_windows
-            else "Downloading and verifying the Linux archive…",
+            else tr("Downloading and verifying the Linux archive…"),
         )
         worker = UpdateWorker("download", self._download_operation)
         worker.signals.completed.connect(self._operation_completed)
@@ -205,7 +207,7 @@ class UpdatePanel(QFrame):
         except Exception:
             self._operation_failed(
                 "install",
-                "The install confirmation could not be opened. Try again.",
+                tr("The install confirmation could not be opened. Try again."),
             )
             return
         if not confirmed:
@@ -218,12 +220,12 @@ class UpdatePanel(QFrame):
         except Exception:
             self._operation_failed(
                 "install",
-                "The verified installer could not be started. Your current app is still running.",
+                tr("The verified installer could not be started. Your current app is still running."),
             )
             return
         self._set_state(
             "launching",
-            "Installer started. This app will close so Windows can finish the update.",
+            tr("Installer started. This app will close so Windows can finish the update."),
             status="success",
         )
         self.action_button.setEnabled(False)
@@ -232,58 +234,56 @@ class UpdatePanel(QFrame):
     def _operation_completed(self, action: str, result: object) -> None:
         if action == "check":
             if not isinstance(result, UpdateCheckResult):
-                self._operation_failed(action, "GitHub returned an unsupported release result.")
+                self._operation_failed(action, tr("GitHub returned an unsupported release result."))
                 return
             if result.status == "no_release":
                 self.release = None
                 self._set_state(
                     "no_release",
-                    "No public release is available yet. Your installed app was not changed.",
+                    tr("No public release is available yet. Your installed app was not changed."),
                 )
-                self.action_button.setText("Check again")
+                self.action_button.setText(tr("Check again"))
                 return
             if result.status == "no_artifact":
                 self.release = None
                 unavailable = result.unavailable
-                version = getattr(unavailable, "version", "A newer version")
+                version = getattr(unavailable, "version", tr("A newer version"))
                 self._set_state(
                     "no_release",
-                    f"Version {version} is published, but it does not include a "
-                    f"{self.platform_name} download yet. Your installed app was "
-                    "not changed.",
+                    (tr('Version {0} is published, but it does not include a {1} download yet. Your installed app was not changed.').format(version, self.platform_name)),
                 )
-                self.action_button.setText("Check again")
+                self.action_button.setText(tr("Check again"))
                 return
             if result.status == "latest":
                 self.release = None
-                message = f"You are on the latest version ({PRODUCT.version})."
+                message = tr('You are on the latest version ({0}).').format(PRODUCT.version)
                 if self._checking_model_support:
                     message += (
-                        " Support for the changed Codex model lineup may require "
-                        "a future UsageLoop update."
+                        tr(" Support for the changed Codex model lineup may require "
+                        "a future UsageLoop update.")
                     )
                 self._set_state(
                     "latest",
                     message,
                     status="success",
                 )
-                self.action_button.setText("Check again")
+                self.action_button.setText(tr("Check again"))
                 return
             if result.status != "update_available" or not isinstance(result.release, ReleaseInfo):
-                self._operation_failed(action, "GitHub returned an unsupported release result.")
+                self._operation_failed(action, tr("GitHub returned an unsupported release result."))
                 return
             release = result.release
             self.release = release
             self._set_state(
-                "available", f"Version {release.version} is available.", status="success"
+                "available", (tr('Version {0} is available.').format(release.version)), status="success"
             )
             if release.notes:
                 self.notes_label.setText(
-                    "What changed\n" + "\n".join(f"• {note}" for note in release.notes)
+                    tr("What changed\n") + "\n".join(f'• {note}' for note in release.notes)
                 )
                 self.notes_label.setVisible(True)
             self.action_button.setText(
-                "Download installer" if self.is_windows else "Download update"
+                tr("Download installer" if self.is_windows else "Download update")
             )
             self.dismiss_button.setVisible(True)
             return
@@ -292,38 +292,38 @@ class UpdatePanel(QFrame):
             if self.is_windows:
                 self._set_state(
                     "downloaded",
-                    "Installer downloaded and its SHA-256 checksum matched the release.",
+                    tr("Installer downloaded and its SHA-256 checksum matched the release."),
                     status="success",
                 )
-                self.action_button.setText("Install update")
+                self.action_button.setText(tr("Install update"))
                 self.dismiss_button.setVisible(True)
                 return
-            self._operation_failed(action, "The update result was not understood.")
+            self._operation_failed(action, tr("The update result was not understood."))
             return
         if action == "download" and isinstance(result, StagedUpdate):
             self.staged = result
             if self.managed_install:
                 self._set_state(
                     "downloaded",
-                    "Update downloaded, its SHA-256 checksum matched the release, and it "
-                    "unpacked cleanly. Installing will close UsageLoop and reopen it.",
+                    tr("Update downloaded, its SHA-256 checksum matched the release, and it "
+                    "unpacked cleanly. Installing will close UsageLoop and reopen it."),
                     status="success",
                 )
-                self.action_button.setText("Install and restart")
+                self.action_button.setText(tr("Install and restart"))
             else:
                 # Not our installation to replace. Say exactly what to run.
                 self._set_state(
                     "manual",
-                    "Update downloaded and its SHA-256 checksum matched the release. This "
-                    "copy is not the one install.sh manages, so finish it yourself:\n\n"
+                    tr("Update downloaded and its SHA-256 checksum matched the release. This "
+                    "copy is not the one install.sh manages, so finish it yourself:\n\n")
                     + " ".join(install_command(result))
-                    + "\n\nQuit UsageLoop first. Your settings and history are kept.",
+                    + tr("\n\nQuit UsageLoop first. Your settings and history are kept."),
                     status="success",
                 )
-                self.action_button.setText("Copy command")
+                self.action_button.setText(tr("Copy command"))
             self.dismiss_button.setVisible(True)
             return
-        self._operation_failed(action, "The update result was not understood.")
+        self._operation_failed(action, tr("The update result was not understood."))
 
     def _start_linux_install(self) -> None:
         staged = self.staged
@@ -334,7 +334,7 @@ class UpdatePanel(QFrame):
             confirmed = self.confirm_install(release.version)
         except Exception:
             self._operation_failed(
-                "install", "The install confirmation could not be opened. Try again."
+                "install", tr("The install confirmation could not be opened. Try again.")
             )
             return
         if not confirmed:
@@ -347,12 +347,12 @@ class UpdatePanel(QFrame):
         except Exception:
             self._operation_failed(
                 "install",
-                "The update could not be started. Your current app is still running.",
+                tr("The update could not be started. Your current app is still running."),
             )
             return
         self._set_state(
             "launching",
-            "Installing. UsageLoop will close and reopen on the new version.",
+            tr("Installing. UsageLoop will close and reopen on the new version."),
             status="success",
         )
         self.action_button.setEnabled(False)
@@ -360,18 +360,18 @@ class UpdatePanel(QFrame):
 
     def _operation_failed(self, _action: str, message: str) -> None:
         self._set_state("error", message, status="error")
-        self.action_button.setText("Try again")
+        self.action_button.setText(tr("Try again"))
         self.dismiss_button.setVisible(False)
 
     def _set_busy(self, state: str, message: str) -> None:
         self._set_state(state, message)
-        self.action_button.setText("Working…")
+        self.action_button.setText(tr("Working…"))
         self.action_button.setEnabled(False)
         self.dismiss_button.setVisible(False)
 
     def _set_state(self, state: str, message: str, *, status: str = "") -> None:
         self.state = state
-        self.state_label.setText(message)
+        self.state_label.setText(tr(message))
         self.state_label.setProperty("status", status)
         self.state_label.style().unpolish(self.state_label)
         self.state_label.style().polish(self.state_label)
@@ -385,16 +385,15 @@ class UpdatePanel(QFrame):
         self.notes_label.clear()
         self.notes_label.setVisible(False)
         self.dismiss_button.setVisible(False)
-        self._set_state("idle", "No update check has run.")
+        self._set_state("idle", tr("No update check has run."))
         self.action_button.setEnabled(True)
-        self.action_button.setText("Check for updates")
+        self.action_button.setText(tr("Check for updates"))
 
     def _confirm_install(self, version: str) -> bool:
         answer = QMessageBox.question(
             self,
-            f"Install {PRODUCT.display_name} update?",
-            f"The verified installer for version {version} is ready. {PRODUCT.display_name} will "
-            "close and the normal per-user setup window will open.",
+            tr('Install {0} update?').format(PRODUCT.display_name),
+            tr('The verified installer for version {0} is ready. {1} will close and the normal per-user setup window will open.').format(version, PRODUCT.display_name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )

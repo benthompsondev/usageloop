@@ -39,6 +39,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .i18n import tr
+
+from .i18n import LANGUAGES, language_preference, save_language, tr
+
 from .app_controller import ApplicationController
 from .activity import RecentStartsDialog
 from .app_state import (
@@ -188,7 +192,7 @@ class MainWindow(QMainWindow):
                 range(5),
                 self.weekday_quick_time.time(),
                 self.apply_weekdays,
-                "Apply Mon–Fri",
+                tr("Apply Mon–Fri"),
             )
         )
         self.apply_weekend.clicked.connect(
@@ -196,7 +200,7 @@ class MainWindow(QMainWindow):
                 range(5, 7),
                 self.weekend_quick_time.time(),
                 self.apply_weekend,
-                "Apply Sat–Sun",
+                tr("Apply Sat–Sun"),
             )
         )
         self.clock_timer = QTimer(self)
@@ -240,17 +244,17 @@ class MainWindow(QMainWindow):
         identity.setSpacing(1)
         wordmark = QHBoxLayout()
         wordmark.setSpacing(0)
-        first = QLabel("Usage")
+        first = QLabel('Usage')
         first.setObjectName("wordmarkPrimary")
-        second = QLabel("Loop")
+        second = QLabel('Loop')
         second.setObjectName("wordmarkAccent")
-        for_codex = QLabel("  for Codex")
+        for_codex = QLabel(tr("  for Codex"))
         for_codex.setObjectName("wordmarkQualifier")
         wordmark.addWidget(first)
         wordmark.addWidget(second)
         wordmark.addWidget(for_codex)
         wordmark.addStretch()
-        self.tagline_label = ElidingLabel(PRODUCT.tagline)
+        self.tagline_label = ElidingLabel(tr(PRODUCT.tagline))
         self.tagline_label.setObjectName("appPurpose")
         identity.addLayout(wordmark)
         identity.addWidget(self.tagline_label)
@@ -267,7 +271,7 @@ class MainWindow(QMainWindow):
         controls_layout.setSpacing(6)
         self.nav_buttons: list[QPushButton] = []
         for index, page_name in enumerate(self.PAGE_NAMES):
-            button = QPushButton(page_name)
+            button = QPushButton(tr(page_name))
             button.setObjectName("navButton")
             button.setProperty("active", index == 0)
             button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -277,11 +281,11 @@ class MainWindow(QMainWindow):
             self.nav_buttons.append(button)
             controls_layout.addWidget(button)
 
-        self.trust_chip = QLabel("Local-first")
+        self.trust_chip = QLabel(tr("Local-first"))
         self.trust_chip.setObjectName("trustChip")
         self.trust_chip.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.trust_chip.setToolTip(
-            "Every check runs on this PC. Codex keeps its own sign-in."
+            tr("Every check runs on this PC. Codex keeps its own sign-in.")
         )
         controls_layout.addSpacing(6)
         controls_layout.addWidget(self.trust_chip)
@@ -337,11 +341,11 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(self.HEADER_SIDE_MARGIN, 9, self.HEADER_SIDE_MARGIN, 9)
         layout.setSpacing(12)
         self.footer_promise = ElidingLabel(
-            "Private by design  \u00b7  Local-first  \u00b7  No telemetry  \u00b7  No cloud upload"
+            tr("Private by design  \u00b7  Local-first  \u00b7  No telemetry  \u00b7  No cloud upload")
         )
         self.footer_promise.setObjectName("footerPromise")
         layout.addWidget(self.footer_promise, 1)
-        version = QLabel(f"{PRODUCT.display_name} v{PRODUCT.version}")
+        version = QLabel(f'{PRODUCT.display_name} v{PRODUCT.version}')
         version.setObjectName("footerVersion")
         version.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         layout.addWidget(version, 0)
@@ -361,9 +365,9 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(content)
         root.setContentsMargins(34, 24, 34, 28)
         root.setSpacing(14)
-        title_label = QLabel(title)
+        title_label = QLabel(tr(title))
         title_label.setObjectName("pageTitle")
-        intro_label = QLabel(intro)
+        intro_label = QLabel(tr(intro))
         intro_label.setObjectName("pageIntro")
         intro_label.setWordWrap(True)
         root.addWidget(title_label)
@@ -379,13 +383,13 @@ class MainWindow(QMainWindow):
 
     def _build_dashboard(self) -> QWidget:
         page, root, self.dashboard_intro = self._page(
-            "Your Codex reset clock",
-            "If Codex reports a 5-hour window, using it starts the next reset clock. With this PC awake, "
-            "UsageLoop can start the next one while you’re away, so it is already counting down when you return.",
+            tr("Your Codex reset clock"),
+            tr("If Codex reports a 5-hour window, using it starts the next reset clock. With this PC awake, "
+            "UsageLoop can start the next one while you’re away, so it is already counting down when you return."),
         )
         self.dashboard_clarifier = QLabel(
-            "UsageLoop does not add quota or bypass limits. It uses one minimal request to start "
-            "your normal next window."
+            tr("UsageLoop does not add quota or bypass limits. It uses one minimal request to start "
+            "your normal next window.")
         )
         self.dashboard_clarifier.setProperty("muted", True)
         self.dashboard_clarifier.setWordWrap(True)
@@ -395,7 +399,7 @@ class MainWindow(QMainWindow):
         overall_layout = QHBoxLayout(overall)
         overall_layout.setContentsMargins(22, 17, 22, 17)
         overall_layout.setSpacing(16)
-        self.overall_icon = QLabel("✓")
+        self.overall_icon = QLabel('✓')
         self.overall_icon.setObjectName("overallIcon")
         self.overall_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.overall_icon.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -410,7 +414,7 @@ class MainWindow(QMainWindow):
         self.overall_detail.setWordWrap(True)
         overall_copy.addWidget(self.overall_title)
         overall_copy.addWidget(self.overall_detail)
-        self.recheck_dashboard_button = QPushButton("Recheck Codex compatibility")
+        self.recheck_dashboard_button = QPushButton(tr("Recheck Codex compatibility"))
         self.recheck_dashboard_button.setObjectName("secondaryButton")
         self.recheck_dashboard_button.clicked.connect(self.recheck_compatibility)
         overall_copy.addWidget(self.recheck_dashboard_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -449,7 +453,7 @@ class MainWindow(QMainWindow):
         weekly_layout.setContentsMargins(20, 14, 20, 14)
         weekly_layout.setSpacing(8)
         weekly_header = QHBoxLayout()
-        weekly_title = QLabel("Weekly allowance")
+        weekly_title = QLabel(tr("Weekly allowance"))
         weekly_title.setObjectName("providerName")
         weekly_header.addWidget(weekly_title)
         weekly_header.addStretch()
@@ -487,17 +491,17 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(22, 15, 22, 15)
         layout.setSpacing(26)
         points = (
-            ("Safe and private", "Codex keeps its own sign-in. UsageLoop never reads credentials."),
-            ("Local and lightweight", "Countdowns move on this PC with no Codex polling."),
-            ("Quota protected", "Weekly allowance is checked, and unclear requests are never retried."),
+            (tr("Safe and private"), tr("Codex keeps its own sign-in. UsageLoop never reads credentials.")),
+            (tr("Local and lightweight"), tr("Countdowns move on this PC with no Codex polling.")),
+            (tr("Quota protected"), tr("Weekly allowance is checked, and unclear requests are never retried.")),
         )
         for title, body in points:
             column = QVBoxLayout()
             column.setSpacing(4)
-            heading = QLabel(title)
+            heading = QLabel(tr(title))
             heading.setObjectName("assuranceTitle")
             heading.setWordWrap(True)
-            detail = QLabel(body)
+            detail = QLabel(tr(body))
             detail.setObjectName("assuranceBody")
             detail.setWordWrap(True)
             # A wrapped label otherwise reports its full single-line width as a
@@ -513,29 +517,55 @@ class MainWindow(QMainWindow):
             layout.addLayout(column, 1)
         return strip
 
+    def _language_changed(self, _index: int) -> None:
+        try:
+            save_language(self.language_choice.currentData())
+        except OSError:
+            self.language_choice.blockSignals(True)
+            self.language_choice.setCurrentIndex(
+                self.language_choice.findData(language_preference())
+            )
+            self.language_choice.blockSignals(False)
+            QMessageBox.warning(self, tr("Setting not saved"),
+                                tr("Could not save language preference."))
+
     def _build_settings(
         self,
         updater: GitHubReleaseUpdater,
         confirm_install: Callable[[str], bool] | None,
     ) -> QWidget:
         page, root, _intro = self._page(
-            "Settings",
-            "Choose how UsageLoop keeps your reset clock running.",
+            tr("Settings"),
+            tr("Choose how UsageLoop keeps your reset clock running."),
         )
 
+        language_card, language_layout = make_surface_card(
+            tr("Language"), tr("Language changes take effect after restarting UsageLoop."),
+        )
+        self.language_choice = QComboBox()
+        self.language_choice.setAccessibleName(tr("Language"))
+        for code, label in LANGUAGES:
+            self.language_choice.addItem(label, code)
+        self.language_choice.setCurrentIndex(
+            self.language_choice.findData(language_preference())
+        )
+        self.language_choice.currentIndexChanged.connect(self._language_changed)
+        language_layout.addWidget(self.language_choice)
+        root.addWidget(language_card)
+
         automation_card, automation_layout = make_surface_card(
-            "Automation",
-            "UsageLoop sends no window-start request while this is off.",
+            tr("Automation"),
+            tr("UsageLoop sends no window-start request while this is off."),
         )
         automation_row = QFrame()
         automation_row.setObjectName("settingRow")
         automation_row_layout = QHBoxLayout(automation_row)
         automation_row_layout.setContentsMargins(14, 12, 14, 12)
         automation_copy = QVBoxLayout()
-        self.automation_title_label = QLabel("Keep my 5-hour windows ready")
+        self.automation_title_label = QLabel(tr("Keep my 5-hour windows ready"))
         self.automation_title_label.setObjectName("secondaryMetric")
         automation_hint = QLabel(
-            "Sends one tiny request to Codex, only when a new window needs to start."
+            tr("Sends one tiny request to Codex, only when a new window needs to start.")
         )
         automation_hint.setProperty("muted", True)
         automation_hint.setWordWrap(True)
@@ -543,21 +573,21 @@ class MainWindow(QMainWindow):
         automation_copy.addWidget(automation_hint)
         automation_row_layout.addLayout(automation_copy, 1)
         self.automation_toggle = ToggleSwitch()
-        self.automation_toggle.setAccessibleName("Keep my 5-hour windows ready")
+        self.automation_toggle.setAccessibleName(tr("Keep my 5-hour windows ready"))
         self.automation_toggle.setChecked(self.controller.settings.automation_enabled)
         automation_row_layout.addWidget(self.automation_toggle)
         automation_layout.addWidget(automation_row)
 
         schedule_card, schedule_layout = make_surface_card(
-            "Schedule",
-            "Choose continuous rollover, one daily start time, or a weekly routine.",
+            tr("Schedule"),
+            tr("Choose continuous rollover, one daily start time, or a weekly routine."),
         )
         schedule_row = QFrame()
         schedule_row.setObjectName("settingRow")
         schedule_row_layout = QHBoxLayout(schedule_row)
         schedule_row_layout.setContentsMargins(14, 12, 14, 12)
         mode_copy = QVBoxLayout()
-        self.schedule_mode_title = QLabel("When should the next 5-hour window start?")
+        self.schedule_mode_title = QLabel(tr("When should the next 5-hour window start?"))
         self.schedule_mode_title.setObjectName("secondaryMetric")
         self.schedule_explanation = QLabel()
         self.schedule_explanation.setProperty("muted", True)
@@ -567,10 +597,10 @@ class MainWindow(QMainWindow):
         schedule_row_layout.addLayout(mode_copy, 1)
         self.schedule_mode = QComboBox()
         self.schedule_mode.setObjectName("scheduleModePicker")
-        self.schedule_mode.setAccessibleName("When should the next 5-hour window start?")
-        self.schedule_mode.addItem("Continuous", "continuous")
-        self.schedule_mode.addItem("Once each day", "daily")
-        self.schedule_mode.addItem("Weekly routine", "weekly")
+        self.schedule_mode.setAccessibleName(tr("When should the next 5-hour window start?"))
+        self.schedule_mode.addItem(tr("Continuous"), "continuous")
+        self.schedule_mode.addItem(tr("Once each day"), "daily")
+        self.schedule_mode.addItem(tr("Weekly routine"), "weekly")
         index = self.schedule_mode.findData(self.controller.settings.schedule_mode)
         self.schedule_mode.setCurrentIndex(max(0, index))
         schedule_row_layout.addWidget(self.schedule_mode)
@@ -581,9 +611,9 @@ class MainWindow(QMainWindow):
         time_layout = QHBoxLayout(self.daily_time_row)
         time_layout.setContentsMargins(14, 12, 14, 12)
         time_copy = QVBoxLayout()
-        self.daily_time_title = QLabel("Start time")
+        self.daily_time_title = QLabel(tr("Start time"))
         self.daily_time_title.setObjectName("secondaryMetric")
-        time_hint = QLabel("Local time on this PC. Keep it awake; after restart UsageLoop checks the current schedule.")
+        time_hint = QLabel(tr("Local time on this PC. Keep it awake; after restart UsageLoop checks the current schedule."))
         time_hint.setProperty("muted", True)
         time_hint.setWordWrap(True)
         time_copy.addWidget(self.daily_time_title)
@@ -600,7 +630,7 @@ class MainWindow(QMainWindow):
                 self.controller.settings.daily_start_minute,
             ),
         )
-        self.daily_time.setAccessibleName("Once each day start time")
+        self.daily_time.setAccessibleName(tr("Once each day start time"))
         time_layout.addWidget(self.daily_time)
         schedule_layout.addWidget(self.daily_time_row)
 
@@ -610,7 +640,7 @@ class MainWindow(QMainWindow):
         weekly_layout.setContentsMargins(18, 16, 18, 16)
         weekly_layout.setSpacing(14)
         weekly_intro = QLabel(
-            "Choose when you want your first window to start each day. UsageLoop keeps windows rolling during the day, then pauses overnight so tomorrow's start stays on schedule."
+            tr("Choose when you want your first window to start each day. UsageLoop keeps windows rolling during the day, then pauses overnight so tomorrow's start stays on schedule.")
         )
         weekly_intro.setProperty("muted", True)
         weekly_intro.setWordWrap(True)
@@ -618,30 +648,30 @@ class MainWindow(QMainWindow):
 
         self.weekday_quick_time = self._weekly_time_editor("weekdayQuickTime")
         self.weekend_quick_time = self._weekly_time_editor("weekendQuickTime")
-        self.weekday_quick_time.setAccessibleName("Weekdays start time")
-        self.weekend_quick_time.setAccessibleName("Weekends start time")
-        self.apply_weekdays = QPushButton("Apply Mon–Fri")
+        self.weekday_quick_time.setAccessibleName(tr("Weekdays start time"))
+        self.weekend_quick_time.setAccessibleName(tr("Weekends start time"))
+        self.apply_weekdays = QPushButton(tr("Apply Mon–Fri"))
         self.apply_weekdays.setObjectName("secondaryButton")
-        self.apply_weekdays.setToolTip("Apply this time to Monday through Friday.")
-        self.apply_weekend = QPushButton("Apply Sat–Sun")
+        self.apply_weekdays.setToolTip(tr("Apply this time to Monday through Friday."))
+        self.apply_weekend = QPushButton(tr("Apply Sat–Sun"))
         self.apply_weekend.setObjectName("secondaryButton")
-        self.apply_weekend.setToolTip("Apply this time to Saturday and Sunday.")
+        self.apply_weekend.setToolTip(tr("Apply this time to Saturday and Sunday."))
         quick_row = QHBoxLayout()
         quick_row.setContentsMargins(0, 0, 0, 0)
         quick_row.setSpacing(12)
         self.weekly_group_cards: list[QFrame] = []
         for title, days, editor, button in (
-            ("Weekdays", "Monday through Friday", self.weekday_quick_time, self.apply_weekdays),
-            ("Weekends", "Saturday and Sunday", self.weekend_quick_time, self.apply_weekend),
+            (tr("Weekdays"), tr("Monday through Friday"), self.weekday_quick_time, self.apply_weekdays),
+            (tr("Weekends"), tr("Saturday and Sunday"), self.weekend_quick_time, self.apply_weekend),
         ):
             group = QFrame()
             group.setObjectName("weeklyGroupCard")
             group_layout = QVBoxLayout(group)
             group_layout.setContentsMargins(16, 13, 16, 14)
             group_layout.setSpacing(8)
-            title_label = QLabel(title)
+            title_label = QLabel(tr(title))
             title_label.setObjectName("weeklyGroupTitle")
-            subtitle = QLabel(days)
+            subtitle = QLabel(tr(days))
             subtitle.setProperty("muted", True)
             controls = QHBoxLayout()
             controls.setSpacing(8)
@@ -654,7 +684,7 @@ class MainWindow(QMainWindow):
             quick_row.addWidget(group, 1)
         weekly_layout.addLayout(quick_row)
 
-        self.weekly_custom_days = Disclosure("Customize individual days")
+        self.weekly_custom_days = Disclosure(tr("Customize individual days"))
         day_grid = QGridLayout()
         day_grid.setContentsMargins(0, 2, 0, 0)
         day_grid.setHorizontalSpacing(12)
@@ -662,17 +692,17 @@ class MainWindow(QMainWindow):
         self.weekly_day_times: list[TimeEntry] = []
         self.weekly_day_rows: list[QFrame] = []
         for index, day_name in enumerate(
-            ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+            (tr("Monday"), tr("Tuesday"), tr("Wednesday"), tr("Thursday"), tr("Friday"), tr("Saturday"), tr("Sunday"))
         ):
-            editor = self._weekly_time_editor(f"weekly{day_name}Time")
-            editor.setAccessibleName(f"{day_name} start time")
+            editor = self._weekly_time_editor((tr('weekly{0}Time').format(day_name)))
+            editor.setAccessibleName(tr('{0} start time').format(day_name))
             self.weekly_day_times.append(editor)
             row = QFrame()
             row.setObjectName("weeklyDayRow")
             row_layout = QHBoxLayout(row)
             row_layout.setContentsMargins(12, 8, 12, 8)
             row_layout.setSpacing(10)
-            day_label = QLabel(day_name)
+            day_label = QLabel(tr(day_name))
             day_label.setObjectName("weeklyDayLabel")
             row_layout.addWidget(day_label, 1)
             row_layout.addWidget(editor)
@@ -687,7 +717,7 @@ class MainWindow(QMainWindow):
         preview_layout.setContentsMargins(16, 13, 16, 14)
         preview_layout.setSpacing(10)
         preview_header = QHBoxLayout()
-        preview_title = QLabel("Next routine")
+        preview_title = QLabel(tr("Next routine"))
         preview_title.setObjectName("weeklyGroupTitle")
         self.weekly_preview_day = QLabel()
         self.weekly_preview_day.setObjectName("previewTag")
@@ -700,17 +730,17 @@ class MainWindow(QMainWindow):
         (
             self.weekly_preview_first_title,
             self.weekly_preview_first_value,
-        ) = self._weekly_preview_metric(preview_metrics, "First start")
+        ) = self._weekly_preview_metric(preview_metrics, tr("First start"))
         (
             self.weekly_preview_reset_title,
             self.weekly_preview_reset_value,
-        ) = self._weekly_preview_metric(preview_metrics, "Next reset")
+        ) = self._weekly_preview_metric(preview_metrics, tr("Next reset"))
         (
             self.weekly_preview_pause_title,
             self.weekly_preview_pause_value,
-        ) = self._weekly_preview_metric(preview_metrics, "Overnight pause")
+        ) = self._weekly_preview_metric(preview_metrics, tr("Overnight pause"))
         preview_layout.addLayout(preview_metrics)
-        preview_note = QLabel("Times are approximate and shown in your local time.")
+        preview_note = QLabel(tr("Times are approximate and shown in your local time."))
         preview_note.setProperty("muted", True)
         preview_layout.addWidget(preview_note)
         weekly_layout.addWidget(self.weekly_preview_card)
@@ -718,13 +748,13 @@ class MainWindow(QMainWindow):
         self._sync_weekly_editor()
 
         startup_card, startup_layout = make_surface_card(
-            f"{self.platform_name} startup",
+            tr('{0} startup').format(self.platform_name),
             (
-                "Start in the tray when you sign in to Windows. Applies to your account only, needs no "
-                "administrator rights, and is off until you turn it on."
+                tr("Start in the tray when you sign in to Windows. Applies to your account only, needs no "
+                "administrator rights, and is off until you turn it on.")
                 if self.is_windows
-                else "Start when you sign in to your desktop session. This writes one per-user "
-                "autostart entry, needs no root, and is off until you turn it on."
+                else tr("Start when you sign in to your desktop session. This writes one per-user "
+                "autostart entry, needs no root, and is off until you turn it on.")
             ),
         )
         startup_row = QFrame()
@@ -733,13 +763,13 @@ class MainWindow(QMainWindow):
         row_layout.setContentsMargins(14, 12, 14, 12)
         row_copy = QVBoxLayout()
         row_copy.setSpacing(2)
-        startup_label = f"Start {PRODUCT.display_name} with {self.platform_name}"
-        row_title = QLabel(startup_label)
+        startup_label = tr('Start {0} with {1}').format(PRODUCT.display_name, self.platform_name)
+        row_title = QLabel(tr(startup_label))
         row_title.setObjectName("secondaryMetric")
         row_hint = QLabel(
-            "Opens quietly in the tray, not on screen"
+            tr("Opens quietly in the tray, not on screen"
             if self.is_windows
-            else "Uses the tray if your desktop has one"
+            else "Uses the tray if your desktop has one")
         )
         row_hint.setProperty("muted", True)
         row_copy.addWidget(row_title)
@@ -747,23 +777,23 @@ class MainWindow(QMainWindow):
         row_layout.addLayout(row_copy)
         row_layout.addStretch()
         self.startup_toggle = ToggleSwitch()
-        self.startup_toggle.setAccessibleName(startup_label)
+        self.startup_toggle.setAccessibleName(tr(startup_label))
         self.startup_toggle.setChecked(bool(self.startup_manager.is_enabled()))
         row_layout.addWidget(self.startup_toggle)
         startup_layout.addWidget(startup_row)
 
         technical_card, technical_layout = make_surface_card(
-            "Codex connection",
-            "After updating or signing back in to Codex, recheck here. This reads usage and supported models without sending a model request.",
+            tr("Codex connection"),
+            tr("After updating or signing back in to Codex, recheck here. This reads usage and supported models without sending a model request."),
         )
         self.compatibility_status = QLabel()
         self.compatibility_status.setWordWrap(True)
         technical_layout.addWidget(self.compatibility_status)
-        self.recheck_button = QPushButton("Recheck Codex compatibility")
+        self.recheck_button = QPushButton(tr("Recheck Codex compatibility"))
         self.recheck_button.setObjectName("secondaryButton")
         self.recheck_button.clicked.connect(self.recheck_compatibility)
         technical_layout.addWidget(self.recheck_button)
-        technical = Disclosure("Technical details")
+        technical = Disclosure(tr("Technical details"))
         self.diagnostic_text = QLabel()
         self.diagnostic_text.setObjectName("diagnosticValue")
         self.diagnostic_text.setWordWrap(True)
@@ -772,13 +802,13 @@ class MainWindow(QMainWindow):
         )
         technical.add_widget(self.diagnostic_text)
         privacy_note = QLabel(
-            "Safe to paste into a bug report. No prompts, responses, credentials, or "
-            "account identity are ever recorded."
+            tr("Safe to paste into a bug report. No prompts, responses, credentials, or "
+            "account identity are ever recorded.")
         )
         privacy_note.setProperty("muted", True)
         privacy_note.setWordWrap(True)
         technical.add_widget(privacy_note)
-        self.copy_summary_button = QPushButton("Copy this summary")
+        self.copy_summary_button = QPushButton(tr("Copy this summary"))
         self.copy_summary_button.clicked.connect(self._copy_diagnostics)
         technical.add_widget(self.copy_summary_button)
         technical_layout.addWidget(technical)
@@ -823,8 +853,8 @@ class MainWindow(QMainWindow):
 
     def _build_about(self) -> QWidget:
         page, root, _intro = self._page(
-            f"About {PRODUCT.display_name}",
-            "A small local-first app that keeps your normal Codex reset clock moving.",
+            (tr('About {0}').format(PRODUCT.display_name)),
+            tr("A small local-first app that keeps your normal Codex reset clock moving."),
         )
         about = QFrame()
         about.setObjectName("aboutHero")
@@ -837,16 +867,16 @@ class MainWindow(QMainWindow):
         product_title.setObjectName("aboutProductTitle")
         story.addWidget(product_title)
         version = QLabel(
-            f"Version {PRODUCT.version} \u00b7 {self.platform_name} \u00b7 MIT licensed"
+            tr('Version {0} · {1} · MIT licensed').format(PRODUCT.version, self.platform_name)
         )
         version.setObjectName("secondaryMetric")
         story.addWidget(version)
         self.about_description = QLabel(
-            "If Codex reports a 5-hour window, a new one begins when you use Codex. "
+            tr("If Codex reports a 5-hour window, a new one begins when you use Codex. "
             "If the previous window ends while you’re away, the next reset clock normally waits until "
             "you come back and use Codex again. With this PC awake, UsageLoop can start that next window with one minimal "
             "request, so its reset clock can already be counting down before you return. UsageLoop does "
-            "not increase your quota or bypass limits."
+            "not increase your quota or bypass limits.")
         )
         self.about_description.setProperty("muted", True)
         self.about_description.setWordWrap(True)
@@ -858,24 +888,24 @@ class MainWindow(QMainWindow):
 
         self.about_steps: list[QFrame] = []
         for number, title, detail in (
-            ("1", "Codex reports a 5-hour window", "The clock begins when Codex is used."),
-            ("2", "UsageLoop starts the next one", "One minimal request can begin it while this PC is awake."),
-            ("3", "No shortcuts or extra quota", "Your existing limits and weekly protection still apply."),
+            ("1", tr("Codex reports a 5-hour window"), tr("The clock begins when Codex is used.")),
+            ("2", tr("UsageLoop starts the next one"), tr("One minimal request can begin it while this PC is awake.")),
+            ("3", tr("No shortcuts or extra quota"), tr("Your existing limits and weekly protection still apply.")),
         ):
             step = QFrame()
             step.setObjectName("aboutStep")
             step_layout = QHBoxLayout(step)
             step_layout.setContentsMargins(12, 9, 12, 9)
             step_layout.setSpacing(12)
-            badge = QLabel(number)
+            badge = QLabel(tr(number))
             badge.setObjectName("aboutStepNumber")
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             badge.setFixedSize(28, 28)
             step_copy = QVBoxLayout()
             step_copy.setSpacing(2)
-            step_title = QLabel(title)
+            step_title = QLabel(tr(title))
             step_title.setObjectName("aboutStepTitle")
-            step_detail = QLabel(detail)
+            step_detail = QLabel(tr(detail))
             step_detail.setProperty("muted", True)
             step_detail.setWordWrap(True)
             step_copy.addWidget(step_title)
@@ -891,17 +921,17 @@ class MainWindow(QMainWindow):
         actions = QVBoxLayout(action_panel)
         actions.setContentsMargins(16, 15, 16, 15)
         actions.setSpacing(8)
-        self.about_action_title = QLabel("Project links")
+        self.about_action_title = QLabel(tr("Project links"))
         self.about_action_title.setObjectName("weeklyGroupTitle")
         actions.addWidget(self.about_action_title)
         self.about_link_buttons: dict[str, QPushButton] = {}
         for label, url in (
-            ("View source", PRODUCT.github_url),
-            ("Releases", PRODUCT.releases_url),
-            ("Report a problem", PRODUCT.bug_report_url),
-            ("Request a feature", PRODUCT.feature_request_url),
+            (tr("View source"), PRODUCT.github_url),
+            (tr("Releases"), PRODUCT.releases_url),
+            (tr("Report a problem"), PRODUCT.bug_report_url),
+            (tr("Request a feature"), PRODUCT.feature_request_url),
         ):
-            button = QPushButton(label)
+            button = QPushButton(tr(label))
             button.setObjectName("linkButton")
             button.clicked.connect(
                 lambda checked=False, target=url: QDesktopServices.openUrl(QUrl(target))
@@ -909,18 +939,18 @@ class MainWindow(QMainWindow):
             self.about_link_buttons[label] = button
             actions.addWidget(button)
 
-        star_title = QLabel("Finding UsageLoop useful?")
+        star_title = QLabel(tr("Finding UsageLoop useful?"))
         star_title.setObjectName("secondaryMetric")
         actions.addSpacing(6)
         actions.addWidget(star_title)
         self.star_description = QLabel(
-            "A GitHub star helps other Codex users discover the project and lets us know it’s worth "
-            "continuing to improve."
+            tr("A GitHub star helps other Codex users discover the project and lets us know it’s worth "
+            "continuing to improve.")
         )
         self.star_description.setProperty("muted", True)
         self.star_description.setWordWrap(True)
         actions.addWidget(self.star_description)
-        self.star_button = QPushButton("★ Open GitHub to star UsageLoop")
+        self.star_button = QPushButton(tr("★ Open GitHub to star UsageLoop"))
         self.star_button.setObjectName("primaryButton")
         self.star_button.clicked.connect(
             lambda checked=False: QDesktopServices.openUrl(QUrl(PRODUCT.github_url))
@@ -931,28 +961,28 @@ class MainWindow(QMainWindow):
         root.addWidget(about)
 
         support, support_layout = make_surface_card(
-            "Codex support",
-            "UsageLoop checks that the installed Codex client still supports every action it needs before automation runs.",
+            tr("Codex support"),
+            tr("UsageLoop checks that the installed Codex client still supports every action it needs before automation runs."),
         )
         support_status = QLabel(
-            "UsageLoop is an independent open-source project. It is not affiliated with, endorsed by, "
+            tr("UsageLoop is an independent open-source project. It is not affiliated with, endorsed by, "
             "or sponsored by OpenAI. Codex behavior can evolve, so compatibility is checked by capability "
-            "instead of trusting a version string."
+            "instead of trusting a version string.")
         )
         support_status.setProperty("muted", True)
         support_status.setWordWrap(True)
         support_layout.addWidget(support_status)
         privacy, privacy_layout = make_surface_card(
-            "Privacy and safety",
-            "Codex keeps its own sign-in. UsageLoop never reads tokens, credentials, conversations, "
-            "or account identifiers.",
+            tr("Privacy and safety"),
+            tr("Codex keeps its own sign-in. UsageLoop never reads tokens, credentials, conversations, "
+            "or account identifiers."),
         )
         boundaries = QLabel(
-            "\u2022 Codex automation is off until you switch it on\n"
+            tr("\u2022 Codex automation is off until you switch it on\n"
             "\u2022 Update checks run only when you press the button, and never touch your plan\n"
             "\u2022 Countdowns are calculated locally and cause no Codex traffic\n"
             "\u2022 A request whose outcome is unclear is never retried automatically\n"
-            "\u2022 Weekly limits are respected before any action is considered"
+            "\u2022 Weekly limits are respected before any action is considered")
         )
         boundaries.setObjectName("secondaryMetric")
         boundaries.setWordWrap(True)
@@ -986,7 +1016,7 @@ class MainWindow(QMainWindow):
         paused = self.controller.settings.pause_active(current)
         self._sync_automation_toggles(enabled)
         self.automation_state_label.set_status(
-            "PAUSED · ON" if paused else ("ON" if enabled else "OFF"),
+            tr("PAUSED · ON") if paused else (tr("ON") if enabled else tr("OFF")),
             "info" if paused else ("success" if enabled else "neutral"),
         )
         pause_button = self.schedule_card.pause_button
@@ -994,13 +1024,13 @@ class MainWindow(QMainWindow):
             paused or (self.controller.settings.automation_enabled
                        and self.controller.settings.schedule_mode in {DAILY, WEEKLY})
         )
-        pause_button.setText("Resume automation" if paused else "Pause until tomorrow")
+        pause_button.setText(tr("Resume automation" if paused else "Pause until tomorrow"))
         pause_button.setEnabled(enabled and not self.active_operations)
         target = self.controller.settings.tomorrow_first_start(current)
         pause_button.setToolTip(
-            "Wait for the current operation to finish." if self.active_operations else
+            tr("Wait for the current operation to finish." if self.active_operations else
             ("Return to your saved schedule." if paused else
-             f"Pause until tomorrow's first start: {pause_until_text(target)}" if target is not None else "")
+             (tr("Pause until tomorrow's first start: {0}").format(pause_until_text(target))) if target is not None else ""))
         )
         for provider_id, state in self.controller.states.items():
             operational = operational_presentation(
@@ -1033,14 +1063,14 @@ class MainWindow(QMainWindow):
             )
             for button in (self.recheck_button, self.recheck_dashboard_button):
                 button.setEnabled(codex.installed and not self.active_operations and self.controller.persistence_error is None)
-                button.setText("Checking Codex…" if checking else "Recheck Codex compatibility")
+                button.setText(tr("Checking Codex…" if checking else "Recheck Codex compatibility"))
             self.compatibility_status.setText(
-                "Checking usage and models. Allow about 30 seconds. No model request is sent."
+                tr("Checking usage and models. Allow about 30 seconds. No model request is sent."
                 if checking else
                 "Codex is not detected. Install and open Codex, then reopen UsageLoop."
                 if not codex.installed else
                 codex.detail if needs_check else
-                "Compatibility confirmed. Your saved schedule and safety checks still apply."
+                "Compatibility confirmed. Your saved schedule and safety checks still apply.")
             )
             self.schedule_card.update_schedule(
                 self.controller.settings, codex, now=current,
@@ -1051,33 +1081,33 @@ class MainWindow(QMainWindow):
                 "!" if operational.tone == "warning" else "○",
                 operational.tone,
             )
-            self.overall_title.setText(operational.banner_title)
-            self.overall_detail.setText(operational.banner_detail)
+            self.overall_title.setText(tr(operational.banner_title))
+            self.overall_detail.setText(tr(operational.banner_detail))
 
             if codex.weekly_used_percent is None:
-                self.weekly_value.setText("—")
-                self.weekly_detail.setText("Not available in the last read-only sync")
+                self.weekly_value.setText('—')
+                self.weekly_detail.setText(tr("Not available in the last read-only sync"))
                 self.weekly_bar.setValue(0)
-                self.weekly_status.set_status("NOT CHECKED", "neutral")
+                self.weekly_status.set_status(tr("NOT CHECKED"), "neutral")
             else:
                 try:
                     weekly_reset = (
                         time.strftime(
-                            "%a %I:%M %p", time.localtime(codex.weekly_reset_at)
+                            tr("%a %I:%M %p"), time.localtime(codex.weekly_reset_at)
                         ).replace(" 0", " ")
                         if codex.weekly_reset_at is not None
-                        else "reset time unavailable"
+                        else tr("reset time unavailable")
                     )
                 except (OSError, OverflowError, ValueError):
-                    weekly_reset = "reset time unavailable"
+                    weekly_reset = tr("reset time unavailable")
                 self.weekly_detail.setText(
-                    f"{codex.weekly_used_percent:g}% used · resets {weekly_reset}"
+                    tr('{0:g}% used · resets {1}').format(codex.weekly_used_percent, weekly_reset)
                 )
-                self.weekly_value.setText(f"{codex.weekly_used_percent:g}%")
+                self.weekly_value.setText(f'{codex.weekly_used_percent:g}%')
                 self.weekly_bar.setValue(int(codex.weekly_used_percent))
                 weekly_safe = codex.weekly_used_percent < WEEKLY_PROTECTION_PERCENT
                 self.weekly_status.set_status(
-                    "SAFE" if weekly_safe else "PROTECTED",
+                    tr("SAFE") if weekly_safe else tr("PROTECTED"),
                     "success" if weekly_safe else "warning",
                 )
             self._refresh_last_automatic_start(now=current)
@@ -1105,22 +1135,22 @@ class MainWindow(QMainWindow):
     def _refresh_last_automatic_start(self, *, now: float) -> None:
         history = getattr(self.providers.get("codex"), "history", None)
         if history is None:
-            self.last_action_label.setText("Last automatic start: None yet")
+            self.last_action_label.setText(tr("Last automatic start: None yet"))
             return
         try:
             stat = history.path.stat()
         except FileNotFoundError:
             self._last_history_signature = None
-            self.last_action_label.setText("Last automatic start: None yet")
+            self.last_action_label.setText(tr("Last automatic start: None yet"))
             return
         except OSError:
             self._last_history_signature = None
-            self.last_action_label.setText("Last automatic start: History unavailable")
+            self.last_action_label.setText(tr("Last automatic start: History unavailable"))
             return
         # Clock ticks need no JSONL reread unless history or the displayed day changed.
         signature = (stat.st_mtime_ns, stat.st_size, datetime.fromtimestamp(now).date())
         if signature != self._last_history_signature:
-            self.last_action_label.setText(automatic_start_history_copy(history, now=now))
+            self.last_action_label.setText(tr(automatic_start_history_copy(history, now=now)))
             self._last_history_signature = signature
 
     def toggle_temporary_pause(self, *, now: float | None = None) -> None:
@@ -1144,15 +1174,15 @@ class MainWindow(QMainWindow):
         self.controller.refresh_local_states(exclude=self.active_operations)
         for provider_id in self.controller.expire_compatibility(now=current):
             self._notify_compatibility(provider_id,
-                "Codex connection needs attention",
-                "Read-only retries ended. Automatic starts remain paused.", kind="terminal")
+                tr("Codex connection needs attention"),
+                tr("Read-only retries ended. Automatic starts remain paused."), kind="terminal")
         for provider_id, state in self.controller.states.items():
             if state.compatibility_incident_id and self.controller.record_blocked_opportunity(
                 provider_id, now=current
             ):
                 self._notify_compatibility(provider_id,
-                    "Scheduled start blocked",
-                    "Codex needs a compatibility check. No start was sent.", kind="blocked")
+                    tr("Scheduled start blocked"),
+                    tr("Codex needs a compatibility check. No start was sent."), kind="blocked")
         for provider_id, decision in self.controller.decisions(now=current).items():
             if provider_id in self.active_operations:
                 continue
@@ -1292,11 +1322,11 @@ class MainWindow(QMainWindow):
             saved = self.controller.apply_compatibility(provider_id, result,
                                                           explicit=not automatic)
             if saved and result.compatible and notified:
-                self.notification_requested.emit("Codex connection restored",
-                    "UsageLoop can follow the saved schedule again. Safety checks still apply.")
+                self.notification_requested.emit(tr("Codex connection restored"),
+                    tr("UsageLoop can follow the saved schedule again. Safety checks still apply."))
             elif saved and not result.compatible and self.controller.states[provider_id].compatibility_next_retry_at is None:
-                self._notify_compatibility(provider_id, "Codex connection needs attention",
-                    "Automatic starts are paused. Recheck Codex when ready.", kind="terminal")
+                self._notify_compatibility(provider_id, tr("Codex connection needs attention"),
+                    tr("Automatic starts are paused. Recheck Codex when ready."), kind="terminal")
         elif isinstance(result, ProviderOperationResult):
             if result.state.runtime_identity != self.controller.states[provider_id].runtime_identity:
                 self.refresh_clock()
@@ -1342,8 +1372,8 @@ class MainWindow(QMainWindow):
                     prior.runtime_identity or "unavailable", failure_category=category)
                 if self.controller.apply_compatibility(provider_id, failure, explicit=not automatic):
                     if self.controller.states[provider_id].compatibility_next_retry_at is None:
-                        self._notify_compatibility(provider_id, "Codex connection needs attention",
-                            "Automatic starts are paused. Recheck Codex when ready.", kind="terminal")
+                        self._notify_compatibility(provider_id, tr("Codex connection needs attention"),
+                            tr("Automatic starts are paused. Recheck Codex when ready."), kind="terminal")
             elif current == pending:
                 self.controller.update_provider_state(prior)
             self.refresh_clock()
@@ -1359,7 +1389,7 @@ class MainWindow(QMainWindow):
             replace(
                 state,
                 status="Needs attention",
-                detail=f"The check stopped safely ({category}). Nothing was retried. See Settings for detail.",
+                detail=(tr('The check stopped safely ({0}). Nothing was retried. See Settings for detail.').format(category)),
             )
         )
         self.refresh_clock()
@@ -1393,7 +1423,7 @@ class MainWindow(QMainWindow):
             toggle.blockSignals(False)
 
     def _set_overall_icon(self, glyph: str, tone: str) -> None:
-        self.overall_icon.setText(glyph)
+        self.overall_icon.setText(tr(glyph))
         self.overall_icon.setProperty("tone", tone)
         self.overall_icon.style().unpolish(self.overall_icon)
         self.overall_icon.style().polish(self.overall_icon)
@@ -1408,8 +1438,8 @@ class MainWindow(QMainWindow):
             self.startup_toggle.blockSignals(False)
             QMessageBox.warning(
                 self,
-                "Startup setting not changed",
-                f"{self.platform_name} did not allow the per-user startup setting to be changed.",
+                tr("Startup setting not changed"),
+                tr('{0} did not allow the per-user startup setting to be changed.').format(self.platform_name),
             )
             return
         if not self.controller.set_start_with_windows(enabled):
@@ -1470,7 +1500,7 @@ class MainWindow(QMainWindow):
         metric_layout = QVBoxLayout(metric)
         metric_layout.setContentsMargins(12, 9, 12, 10)
         metric_layout.setSpacing(3)
-        title_label = QLabel(title)
+        title_label = QLabel(tr(title))
         title_label.setObjectName("weeklyPreviewLabel")
         value_label = QLabel()
         value_label.setObjectName("weeklyPreviewValue")
@@ -1524,18 +1554,18 @@ class MainWindow(QMainWindow):
             self._show_persistence_warning()
         else:
             self._sync_weekly_editor()
-            button.setText("Applied")
+            button.setText(tr("Applied"))
             QTimer.singleShot(
                 1_500,
-                lambda: button.setText(normal_text),
+                lambda: button.setText(tr(normal_text)),
             )
         self.refresh_clock()
 
     def _show_persistence_warning(self) -> None:
         QMessageBox.warning(
             self,
-            "Setting not saved",
-            "UsageLoop could not save that setting, so it was changed back. Automatic starts are paused until local state can be written again.",
+            tr("Setting not saved"),
+            tr("UsageLoop could not save that setting, so it was changed back. Automatic starts are paused until local state can be written again."),
         )
 
     def _update_diagnostics(self, *, now: float) -> None:
@@ -1544,32 +1574,32 @@ class MainWindow(QMainWindow):
         self.daily_time_row.setVisible(daily)
         self.weekly_schedule_panel.setVisible(weekly)
         self.schedule_explanation.setText(
-            "Wait for the selected local time after the current window ends."
+            tr("Wait for the selected local time after the current window ends."
             if daily
             else (
                 "Use a first-start time for each day, then keep windows rolling until it is time to pause for tomorrow."
                 if weekly
                 else "Start the next window after the current reset and safety check."
-            )
+            ))
         )
         codex = self.controller.states.get("codex")
         self.daily_schedule_example.setText(
-            daily_schedule_example(
+            tr(daily_schedule_example(
                 codex.reset_at if codex is not None else None,
                 hour=self.controller.settings.daily_start_hour,
                 minute=self.controller.settings.daily_start_minute,
                 now=now,
-            )
+            ))
         )
         if self.controller.settings.weekly_start_times is not None:
             preview = weekly_schedule_preview_details(
                 self.controller.settings.weekly_start_times,
                 now=now,
             )
-            self.weekly_preview_day.setText(preview.day.upper())
-            self.weekly_preview_first_value.setText(preview.first_start)
-            self.weekly_preview_reset_value.setText(preview.next_reset)
-            self.weekly_preview_pause_value.setText(preview.pause_start)
+            self.weekly_preview_day.setText(tr(preview.day).upper())
+            self.weekly_preview_first_value.setText(tr(preview.first_start))
+            self.weekly_preview_reset_value.setText(tr(preview.next_reset))
+            self.weekly_preview_pause_value.setText(tr(preview.pause_start))
         events = ()
         history = self.controller.error_history
         if self.pages.currentIndex() == 1 and history is not None:
@@ -1580,33 +1610,32 @@ class MainWindow(QMainWindow):
                 except (HistoryStateError, OSError):
                     events = ()
         self.diagnostic_text.setText(
-            technical_summary(
+            tr(technical_summary(
                 self.controller.states,
                 self.controller.settings,
                 persistence_error=self.controller.persistence_error is not None,
                 compatibility_events=events,
-            )
+            ))
         )
 
     def _copy_diagnostics(self, _checked: bool = False) -> None:
         try:
             clipboard = QApplication.clipboard()
             if clipboard is None:
-                raise RuntimeError("The desktop clipboard is unavailable")
+                raise RuntimeError(tr("The desktop clipboard is unavailable"))
             clipboard.setText(self.diagnostic_text.text())
         except Exception:
-            self.copy_summary_button.setText("Copy failed")
+            self.copy_summary_button.setText(tr("Copy failed"))
             QMessageBox.warning(
                 self,
-                "Summary not copied",
-                f"{self.platform_name} did not allow UsageLoop to copy the diagnostic summary. "
-                "Try again after closing other clipboard tools.",
+                tr("Summary not copied"),
+                tr('{0} did not allow UsageLoop to copy the diagnostic summary. Try again after closing other clipboard tools.').format(self.platform_name),
             )
             return
-        self.copy_summary_button.setText("Copied")
+        self.copy_summary_button.setText(tr("Copied"))
         QTimer.singleShot(
             2_000,
-            lambda: self.copy_summary_button.setText("Copy this summary"),
+            lambda: self.copy_summary_button.setText(tr("Copy this summary")),
         )
 
     def _exit_for_update(self) -> None:
@@ -1614,7 +1643,7 @@ class MainWindow(QMainWindow):
         if application is None:
             self.update_panel._operation_failed(
                 "install",
-                "The installer started, but UsageLoop could not close automatically. Close it before continuing setup.",
+                tr("The installer started, but UsageLoop could not close automatically. Close it before continuing setup."),
             )
             return
         try:
@@ -1622,7 +1651,7 @@ class MainWindow(QMainWindow):
         except Exception:
             self.update_panel._operation_failed(
                 "install",
-                "The installer started, but UsageLoop could not close automatically. Close it before continuing setup.",
+                tr("The installer started, but UsageLoop could not close automatically. Close it before continuing setup."),
             )
             return
         self.force_close = True
@@ -1630,11 +1659,8 @@ class MainWindow(QMainWindow):
     def _confirm_enable(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Keep your Codex reset clock running?",
-            f"{PRODUCT.display_name} will use your signed-in Codex client only after its safety checks "
-            "pass. It checks weekly allowance, sends one minimal request, then verifies the reset.\n\n"
-            "Starting a window uses a small amount of your plan. An action "
-            "whose outcome is unclear is never retried.",
+            tr("Keep your Codex reset clock running?"),
+            tr('{0} will use your signed-in Codex client only after its safety checks pass. It checks weekly allowance, sends one minimal request, then verifies the reset.\n\nStarting a window uses a small amount of your plan. An action whose outcome is unclear is never retried.').format(PRODUCT.display_name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
@@ -1643,10 +1669,10 @@ class MainWindow(QMainWindow):
     def _confirm_bootstrap(self) -> bool:
         answer = QMessageBox.question(
             self,
-            "Start my first window now?",
-            "UsageLoop first checks quota without spending it. Only if no window is running and "
+            tr("Start my first window now?"),
+            tr("UsageLoop first checks quota without spending it. Only if no window is running and "
             "the safety checks pass will it send one small request and verify the reset clock. "
-            "Your chosen routine then takes over. An unclear start is not retried.",
+            "Your chosen routine then takes over. An unclear start is not retried."),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
@@ -1664,21 +1690,21 @@ class DesktopShell:
     def __init__(self, window: MainWindow):
         self.window = window
         self.tray = QSystemTrayIcon(make_app_icon(), window)
-        self.tray.setToolTip(window.current_tray_tooltip)
+        self.tray.setToolTip(tr(window.current_tray_tooltip))
         self.window.tray_tooltip_changed.connect(self.tray.setToolTip)
         self.window.notification_requested.connect(self.tray.showMessage)
         menu = QMenu()
         self.status_action = menu.addAction(window.current_tray_tooltip)
         self.status_action.setEnabled(False)
-        self.pause_action = menu.addAction("Pause until tomorrow's first start")
+        self.pause_action = menu.addAction(tr("Pause until tomorrow's first start"))
         self.pause_action.triggered.connect(window.toggle_temporary_pause)
         menu.addSeparator()
-        open_action = menu.addAction(f"Open {PRODUCT.display_name}")
+        open_action = menu.addAction(tr('Open {0}').format(PRODUCT.display_name))
         open_action.triggered.connect(self.restore_window)
-        self.history_action = menu.addAction("Recent starts")
+        self.history_action = menu.addAction(tr("Recent starts"))
         self.history_action.triggered.connect(window.show_recent_starts)
         menu.addSeparator()
-        quit_action = menu.addAction(f"Quit {PRODUCT.display_name}")
+        quit_action = menu.addAction(tr('Quit {0}').format(PRODUCT.display_name))
         quit_action.triggered.connect(self.quit)
         self.tray.setContextMenu(menu)
         menu.aboutToShow.connect(self.refresh_menu)
@@ -1701,16 +1727,16 @@ class DesktopShell:
         current = time.time() if now is None else now
         settings = self.window.controller.settings
         paused = settings.pause_active(current)
-        self.status_action.setText(tray_tooltip_text(
+        self.status_action.setText(tr(tray_tooltip_text(
             settings, self.window.controller.states.get("codex"), now=current,
             persistence_error=self.window.controller.persistence_error,
-        ))
+        )))
         target = settings.tomorrow_first_start(current)
         self.pause_action.setVisible(paused or target is not None)
         self.pause_action.setText(
-            "Resume automation" if paused else
-            f"Pause until {pause_until_text(target)}" if target is not None else
-            "Pause until tomorrow's first start"
+            tr("Resume automation" if paused else
+            (tr('Pause until {0}').format(pause_until_text(target))) if target is not None else
+            "Pause until tomorrow's first start")
         )
         self.pause_action.setEnabled(settings.automation_enabled and not self.window.active_operations)
 

@@ -16,6 +16,7 @@ from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow
 from sentinel.history import SafeHistory
+from sentinel.i18n import configure_language
 from sentinel.product import PRODUCT
 from sentinel.providers import CompatibilityResult
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult
@@ -99,6 +100,7 @@ def main() -> int:
         )
     args.output.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
+    configure_language()
     app.setStyle("Fusion")
     # Keep public screenshots stable between runs while expressing the fixture
     # in local time, just like the desktop UI does.
