@@ -166,9 +166,11 @@ def present_provider_state(
 ) -> ProviderPresentation:
     """Map internal Codex evidence onto the five consumer-facing clock states."""
     usage = (
-        (tr('5-hour window  {0:g}% used').format(state.used_percent))
+        tr('5-hour window  {0:g}% remaining · {1:g}% used').format(100 - state.used_percent, state.used_percent)
         if state.used_percent is not None else tr("5-hour window  Not checked")
     )
+    if state.used_percent is not None and state.reset_at is not None and state.reset_at <= now:
+        usage += tr(" · Reset passed; sync to update")
     weekly = (
         (tr('Weekly allowance  {0:g}% used').format(state.weekly_used_percent))
         if state.weekly_used_percent is not None else tr("Weekly allowance  Not available")
@@ -186,10 +188,10 @@ def present_provider_state(
     unanchored_first_window = state.quota_state == "UNANCHORED" and state.last_verified_at is None
     reset = (tr("Reset time not verified") if unanchored_first_window
              else _reset_copy(state.reset_at, now=now))
-    if state.last_verified_at is not None:
-        verified = (tr('Last synced {0}').format(_friendly_time(state.last_verified_at, now=now)))
-    elif state.usage_checked_at is not None:
+    if state.usage_checked_at is not None:
         verified = (tr('Last synced {0}').format(_friendly_time(state.usage_checked_at, now=now)))
+    elif state.last_verified_at is not None:
+        verified = (tr('Last synced {0}').format(_friendly_time(state.last_verified_at, now=now)))
     else:
         verified = tr("Not checked yet")
 
@@ -303,9 +305,11 @@ class ProviderCard(QFrame):
         layout.addWidget(rule)
         self.metadata_label = QLabel()
         self.metadata_label.setProperty("muted", True)
+        self.metadata_label.setWordWrap(True)
         layout.addWidget(self.metadata_label)
         self.usage_label = QLabel()
         self.usage_label.setObjectName("metricLabel")
+        self.usage_label.setWordWrap(True)
         layout.addWidget(self.usage_label)
         self.usage_bar = _metric_bar("usageBar")
         layout.addWidget(self.usage_bar)
@@ -347,7 +351,9 @@ class ProviderCard(QFrame):
         )
         self.metadata_label.setText(tr(presented.verified))
         self.usage_label.setText(tr(presented.usage))
-        self.usage_bar.setValue(int(state.used_percent or 0))
+        self.usage_bar.setEnabled(state.used_percent is not None)
+        self.usage_bar.setValue(int(100 - state.used_percent) if state.used_percent is not None else 0)
+        self.usage_bar.setAccessibleName(presented.usage)
 
     def set_sync_state(self, state: str) -> None:
         messages = {

@@ -94,6 +94,13 @@ updates, admin requirements, and global PATH changes.
 The observer, app-server trigger transport, and live anchoring behavior have
 each been proven on Windows. A packaged build has completed a genuine unattended rollover:
 it observed an unanchored window, reserved once, sent the guarded app-server
-turn, and verified a new fixed reset. A real unattended Linux start has not yet
-been observed. GPT-6 Luna is available in the current Codex catalog but needs
-a supervised fresh-window anchor check before UsageLoop can select it.
+turn, and verified a new fixed reset. The [1.3.4 acceptance record](docs/1.3.4-validation.md)
+also documents one natural Linux rollover on September 5, 2026. That is historical
+evidence for 1.3.4, not fresh acceptance of each later Linux build.
+
+The implemented model policy prefers GPT-6 Luna, then GPT-5.6 Luna, intersected
+with the runtime's supported catalog and reasoning settings. The old statement
+that GPT-6 Luna could not yet be selected was stale. This community update does
+not change that policy or establish new live model acceptance. Current candidate
+checks and the remaining platform gates are recorded in
+[the community release review](docs/community-release-review.md).

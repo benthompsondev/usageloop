@@ -415,8 +415,8 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual("0h 15m", card.countdown_label.text())
         self.assertIn("12% used", card.usage_label.text())
         self.assertIn("34% used", window.weekly_detail.text())
-        self.assertEqual("34%", window.weekly_value.text())
-        self.assertEqual(34, window.weekly_bar.value())
+        self.assertEqual("66% remaining", window.weekly_value.text())
+        self.assertEqual(66, window.weekly_bar.value())
         self.assertIn("Last automatic start", window.last_action_label.text())
         # A cached observation/outcome alone is not an automatic-start record.
         self.assertIn("None yet", window.last_action_label.text())

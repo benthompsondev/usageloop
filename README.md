@@ -36,8 +36,8 @@ your account has no five-hour window, this scheduling feature does not apply.
 
 ![UsageLoop Weekly routine settings showing weekday and weekend start times and the next scheduled reset](docs/screenshots/settings-weekly-expanded.png)
 
-Screenshots show the 1.3.8 interface with synthetic usage data. Both platforms
-use the same interface.
+The dashboard preview uses synthetic usage data from the 1.3.9 candidate.
+Other screenshots show earlier versions. Both platforms use the same interface.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
 - Free and open source under the MIT license
@@ -117,6 +117,13 @@ request. Your existing history is available after upgrading.
 This is a record of start attempts, not a list of missed appointments. It does
 not invent entries for pauses, Sync, or time when the app was closed or the PC
 was asleep. A confirmed start does not guarantee that quota is still available.
+
+## Reading quota
+
+The green bars show **remaining allowance** from the last usage check. Used
+percentages stay visible beside them. The countdown runs locally; quota readings
+update on a usage check. After a saved reset passes, choose **Sync usage** for a
+current reading. An unknown reading is shown as unchecked, never as full quota.
 
 ## Interface language
 

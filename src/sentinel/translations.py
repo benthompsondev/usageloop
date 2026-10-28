@@ -1,6 +1,12 @@
 """Simplified Chinese display catalogue; English source text is the key."""
 
 ZH_CN = {
+    "remaining": "剩余",
+    "5-hour window  {0:g}% remaining · {1:g}% used": "五小时窗口  剩余 {0:g}% · 已用 {1:g}%",
+    "{0:g}% remaining": "剩余 {0:g}%",
+    "Weekly allowance  {0}": "每周额度  {0}",
+    " · Reset passed; sync to update": " · 重置时间已过，请同步更新",
+    "SYNC NEEDED": "需要同步",
     "\n\nQuit UsageLoop first. Your settings and history are kept.": "\n\n请先退出 UsageLoop。设置和历史记录将保留。",
     "  for Codex": "  适用于 Codex",
     " Support for the changed Codex model lineup may require a future UsageLoop update.": " 支持变化后的 Codex 模型列表可能需要后续 UsageLoop 更新。",
