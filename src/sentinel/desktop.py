@@ -25,6 +25,9 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QBoxLayout,
+    QStyle,
+    QStyleOptionComboBox,
     QLabel,
     QMainWindow,
     QMenu,
@@ -172,6 +175,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(app_root)
         QWidget.setTabOrder(self.nav_buttons[2], self.update_panel.action_button)
         QWidget.setTabOrder(self.update_panel.action_button, self.update_panel.dismiss_button)
+        self._fit_page_columns()
 
         self.automation_toggle.toggled.connect(self._automation_toggled)
         self.dashboard_automation_toggle.toggled.connect(
@@ -302,6 +306,38 @@ class MainWindow(QMainWindow):
             self._fit_header()
         return super().eventFilter(watched, event)
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_page_columns()
+
+    def _fit_page_columns(self) -> None:
+        picker = getattr(self, "schedule_mode", None)
+        if picker is not None:
+            # The stylesheet's explicit minimum overrides the natural hint.
+            # Reserve the real text width plus the style's padding/dropdown.
+            picker.ensurePolished()
+            option = QStyleOptionComboBox()
+            picker.initStyleOption(option)
+            contents = picker.style().subControlRect(QStyle.ComplexControl.CC_ComboBox,
+                option, QStyle.SubControl.SC_ComboBoxEditField, picker)
+            text_width = max(picker.fontMetrics().horizontalAdvance(picker.itemText(i))
+                             for i in range(picker.count()))
+            picker.setMinimumWidth(max(picker.minimumWidth(), text_width + picker.width() - contents.width() + 2))
+        direction = (QBoxLayout.Direction.TopToBottom if self.width() < 1000
+                     else QBoxLayout.Direction.LeftToRight)
+        for name in ("dashboard_columns", "settings_columns", "weekly_group_columns", "about_columns", "about_support_columns"):
+            layout = getattr(self, name, None)
+            if layout is not None:
+                layout.setDirection(direction)
+        grid = getattr(self, "weekly_day_grid", None)
+        columns = 1 if self.width() < 1000 else 2
+        if grid is not None and getattr(self, "_weekly_grid_columns", 2) != columns:
+            self._weekly_grid_columns = columns
+            for row in self.weekly_day_rows:
+                grid.removeWidget(row)
+            for index, row in enumerate(self.weekly_day_rows):
+                grid.addWidget(row, index // columns, index % columns)
+
     def _fit_header(self) -> None:
         """Drop decorative header parts before anything can be cut off.
 
@@ -409,6 +445,7 @@ class MainWindow(QMainWindow):
         overall_copy.setSpacing(3)
         self.overall_title = QLabel()
         self.overall_title.setObjectName("overallTitle")
+        self.overall_title.setWordWrap(True)
         self.overall_detail = QLabel()
         self.overall_detail.setProperty("muted", True)
         self.overall_detail.setWordWrap(True)
@@ -425,6 +462,7 @@ class MainWindow(QMainWindow):
         root.addWidget(overall)
 
         provider_row = QHBoxLayout()
+        self.dashboard_columns = provider_row
         provider_row.setSpacing(16)
         for provider_id, state in self.controller.states.items():
             card = ProviderCard(state)
@@ -542,7 +580,7 @@ class MainWindow(QMainWindow):
         self.language_choice = QComboBox()
         self.language_choice.setAccessibleName(tr("Language"))
         for code, label in LANGUAGES:
-            self.language_choice.addItem(label, code)
+            self.language_choice.addItem(tr(label) if code == "system" else label, code)
         self.language_choice.setCurrentIndex(
             self.language_choice.findData(language_preference())
         )
@@ -586,6 +624,7 @@ class MainWindow(QMainWindow):
         mode_copy = QVBoxLayout()
         self.schedule_mode_title = QLabel(tr("When should the next 5-hour window start?"))
         self.schedule_mode_title.setObjectName("secondaryMetric")
+        self.schedule_mode_title.setWordWrap(True)
         self.schedule_explanation = QLabel()
         self.schedule_explanation.setProperty("muted", True)
         self.schedule_explanation.setWordWrap(True)
@@ -654,6 +693,7 @@ class MainWindow(QMainWindow):
         self.apply_weekend.setObjectName("secondaryButton")
         self.apply_weekend.setToolTip(tr("Apply this time to Saturday and Sunday."))
         quick_row = QHBoxLayout()
+        self.weekly_group_columns = quick_row
         quick_row.setContentsMargins(0, 0, 0, 0)
         quick_row.setSpacing(12)
         self.weekly_group_cards: list[QFrame] = []
@@ -683,6 +723,7 @@ class MainWindow(QMainWindow):
 
         self.weekly_custom_days = Disclosure(tr("Customize individual days"))
         day_grid = QGridLayout()
+        self.weekly_day_grid = day_grid
         day_grid.setContentsMargins(0, 2, 0, 0)
         day_grid.setHorizontalSpacing(12)
         day_grid.setVerticalSpacing(8)
@@ -817,6 +858,7 @@ class MainWindow(QMainWindow):
 
         self.settings_top_row = QWidget()
         top_layout = QHBoxLayout(self.settings_top_row)
+        self.settings_columns = top_layout
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.setSpacing(14)
         top_layout.addWidget(automation_card, 1)
@@ -852,6 +894,7 @@ class MainWindow(QMainWindow):
         about = QFrame()
         about.setObjectName("aboutHero")
         about_layout = QHBoxLayout(about)
+        self.about_columns = about_layout
         about_layout.setContentsMargins(24, 22, 24, 22)
         about_layout.setSpacing(26)
         story = QVBoxLayout()
@@ -981,6 +1024,7 @@ class MainWindow(QMainWindow):
         boundaries.setWordWrap(True)
         privacy_layout.addWidget(boundaries)
         support_privacy = QHBoxLayout()
+        self.about_support_columns = support_privacy
         support_privacy.setSpacing(14)
         support_privacy.addWidget(support, 1)
         support_privacy.addWidget(privacy, 1)
@@ -1503,6 +1547,7 @@ class MainWindow(QMainWindow):
         metric_layout.setSpacing(3)
         title_label = QLabel(tr(title))
         title_label.setObjectName("weeklyPreviewLabel")
+        title_label.setWordWrap(True)
         value_label = QLabel()
         value_label.setObjectName("weeklyPreviewValue")
         metric_layout.addWidget(title_label)

@@ -130,10 +130,15 @@ current reading. An unknown reading is shown as unchecked, never as full quota.
 
 ## Interface language
 
-Choose **Settings → Language** to use English, Simplified Chinese, or the system
-default. Fully exit UsageLoop (including the tray app) and reopen it to apply a
-change. Language settings do not enable automation or alter your schedule.
-Language selection is available in version 1.3.9 and later.
+The 1.4.0 candidate offers **English, 简体中文, Español, Português (Brasil),
+Français and 日本語** in **Settings → Language**, plus the system default.
+Fully exit UsageLoop (including the tray app) and reopen it to apply a change.
+Language settings do not enable automation or alter your schedule. The published
+1.3.9 release supports English and Simplified Chinese.
+
+The four new translations are generated and have not had native-language review.
+See the [multilingual quick guide](docs/MULTILINGUAL_GUIDE.md) and
+[six-language previews and validation](docs/1.4.0-multilingual-validation.md).
 
 See [localization development notes](docs/LOCALIZATION.md) to contribute translations.
 

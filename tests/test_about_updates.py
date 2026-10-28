@@ -51,7 +51,7 @@ class AboutUpdatesTests(unittest.TestCase):
 
     def test_version_status_and_actions_fit_both_languages_and_host_surfaces(self):
         self.window.close()
-        for language in ("en", "zh_CN"):
+        for language in ("en", "zh_CN", "es", "pt_BR", "fr", "ja"):
             for host in ("Windows", "Linux"):
                 with self.subTest(language=language, host=host), \
                         patch.object(i18n, "_language", language), \

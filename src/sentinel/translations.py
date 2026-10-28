@@ -189,7 +189,7 @@ ZH_CN = {
     "Local state could not be saved. Automatic starts are paused.": "无法保存本地状态，自动启动已暂停。",
     "Local state unavailable": "本地状态不可用",
     "Local time on this PC. Keep it awake; after restart UsageLoop checks the current schedule.": "使用本机时间。请保持电脑唤醒；重启后 UsageLoop 会检查当前计划。",
-    "Local time. Select the hour, minute, or AM/PM, then type or use arrow keys.": "本地时间。选择小时、分钟或上午/下午，输入数值或使用方向键调整。",
+    "Local time. Select the hour, minute, or AM/PM, then type or use arrow keys.": "本地时间。选择小时或分钟，输入数值或使用方向键调整。",
     "Local-first": "本地优先",
     "Manage schedule": "管理计划",
     "Manual first start": "手动首次启动",
@@ -320,7 +320,7 @@ ZH_CN = {
     "Scheduled first start is due now": "现在应按计划首次启动",
     "Scheduled start blocked": "计划启动已阻止",
     "See which window starts were confirmed, not sent, or left uncertain.": "查看窗口启动是已确认、未发送，还是结果不明确。",
-    "Select the hour, minute, or AM/PM. Type a value or use the arrow controls.": "选择小时、分钟或上午/下午，输入数值或使用箭头调整。",
+    "Select the hour, minute, or AM/PM. Type a value or use the arrow controls.": "选择小时或分钟，输入数值或使用箭头调整。",
     "Sends one tiny request to Codex, only when a new window needs to start.": "仅在需要启动新窗口时，向 Codex 发送一次极小请求。",
     "Set up your routine": "设置启动计划",
     "Setting not saved": "设置未保存",
@@ -559,5 +559,13 @@ ZH_CN = {
     "The {0} could not be downloaded. Try again.": "无法下载{0}，请重试。",
     "The release checksum did not name the expected {0}.": "发布版本的校验文件未指定预期的{0}。",
     "The downloaded archive was rejected: {0}.": "已拒绝下载的压缩包：{0}。",
-    "it did not unpack into a single {0} folder": "解压内容不在单个 {0} 文件夹中"
+    "it did not unpack into a single {0} folder": "解压内容不在单个 {0} 文件夹中",
+    "System default": "跟随系统",
+    "Codex may have received the request, but observations did not prove anchoring; no retry is allowed.": "Codex 可能已收到请求，但观测未能证实重置时刻已固定；不允许重试。",
+    "A request may have been sent, but read-only verification was unavailable; no retry is allowed.": "请求可能已发送，但只读验证不可用；不允许重试。",
+    "A request may already have been sent for this rollover; another will not be sent.": "此次窗口衔接可能已发送请求，不会再次发送。",
+    "A bootstrap request may have been sent within one full five-hour window.": "过去一个完整五小时窗口内可能已发送首次启动请求。",
+    "The Codex compatibility check stopped safely. No automatic request was sent.": "Codex 兼容性检查已安全停止，未发送自动请求。",
+    "The Codex compatibility check failed safely. No automatic request was sent.": "Codex 兼容性检查未通过，已安全停止，未发送自动请求。",
+    "Codex usage could not be confirmed safely.": "无法安全确认 Codex 用量。"
 }
