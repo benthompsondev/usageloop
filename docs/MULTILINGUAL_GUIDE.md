@@ -1,9 +1,13 @@
 # UsageLoop 1.4.0 multilingual quick guide
 
-This describes the local 1.4.0 candidate, not a published release. These
-translations are generated and have not had native-language review. The
+This guide covers the published [1.4.0 release](https://github.com/benthompsondev/usageloop/releases/tag/v1.4.0).
+The four new translations are generated and have not had native-language review. The
 [English](../README.md) and [Chinese](../README.zh-CN.md) READMEs include full
-installation instructions. Download links still serve published 1.3.9.
+installation instructions and current downloads.
+
+Upgrading from 1.3.9? Find **Updates** under **Settings**. After upgrading to
+1.4.0, future update checks are at the top of **About**. Checks and downloads
+are manual and do not consume Codex allowance.
 
 ## Español
 

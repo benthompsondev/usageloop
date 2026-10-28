@@ -22,7 +22,7 @@ UsageLoop **不会增加额度、绕过限制、购买积分、提前重置正�
 
 从 1.3.9 起，发布的 Windows 与 Linux 版本均包含简体中文界面。
 
-![中文概览，使用模拟用量数据](docs/screenshots/zh-CN/dashboard.png)
+![1.4.0 中文概览，使用模拟用量数据](docs/screenshots/1.4.0/public/zh_CN-dashboard.png)
 
 ## 安装与运行条件
 
@@ -61,7 +61,7 @@ $actual -eq $expected
 
 “最近启动记录”展示最多 10 次尝试及其结果，包括已确认、未发送或结果不明确。请求可能已发送而结果不明确时，UsageLoop 不会自动重试。启动成功也不代表一定还有可用额度。
 
-![中文每周计划，使用模拟数据](docs/screenshots/zh-CN/settings-weekly.png)
+![1.4.0 中文每周计划，使用模拟数据](docs/screenshots/1.4.0/public/zh_CN-settings-weekly-expanded.png)
 
 ## 工作方式与隐私
 

@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://benthompsondev.github.io/usageloop/social-preview.png">
 
   <link rel="icon" href="favicon.ico" sizes="any">
-  <link rel="stylesheet" href="styles.css?v=lightbox">
+  <link rel="stylesheet" href="styles.css?v=1.4.0-public">
   <script src="lightbox.js?v=lightbox" defer></script>
 
   <script type="application/ld+json">
@@ -41,7 +41,7 @@
     "url": "https://benthompsondev.github.io/usageloop/",
     "downloadUrl": "https://github.com/benthompsondev/usageloop/releases/latest",
     "codeRepository": "https://github.com/benthompsondev/usageloop",
-    "image": "https://benthompsondev.github.io/usageloop/screenshots/dashboard-1600x900.png",
+    "image": "https://benthompsondev.github.io/usageloop/screenshots/1.4.0/public/en-dashboard.png",
     "author": {
       "@type": "Person",
       "name": "Ben Thompson",
@@ -73,6 +73,7 @@
         <p class="eyebrow">Local-first Codex window scheduler for Windows and Linux</p>
         <h1 id="hero-title">Plan when your Codex day starts.</h1>
         <p class="lede">If your Codex account has a 5-hour usage window, UsageLoop can start its next reset clock with one small request at a time you choose. Set weekday and weekend times so the clock is already running when you sit down.</p>
+        <p class="small language-note"><strong>Six interface languages:</strong> English, 简体中文, Español, Português (Brasil), Français and 日本語. <a href="https://github.com/benthompsondev/usageloop/blob/main/docs/MULTILINGUAL_GUIDE.md">Choose your language</a>.</p>
         <p class="boundary"><strong>It does not add quota or bypass limits.</strong> Each automatic start uses some of your subscription allowance to start the normal next window.</p>
         <div class="hero-actions">
           <a class="button primary" href="#download">Download</a>
@@ -86,8 +87,8 @@
           <li>Open source</li>
         </ul>
       </div>
-      <a class="hero-shot" href="screenshots/dashboard-1600x900.png" aria-label="Open the full UsageLoop dashboard screenshot" data-lightbox>
-        <img src="screenshots/dashboard-1600x900.png" width="1600" height="900" alt="UsageLoop dashboard showing a running Codex 5-hour window, weekly usage, and the next scheduled action">
+      <a class="hero-shot" href="screenshots/1.4.0/public/en-dashboard.png" aria-label="Open the full UsageLoop 1.4.0 dashboard screenshot with synthetic data" data-lightbox>
+        <img src="screenshots/1.4.0/public/en-dashboard.png" width="1600" height="900" alt="UsageLoop 1.4.0 dashboard with a running five-hour window, remaining allowance and weekly routine; synthetic data">
       </a>
     </section>
 
@@ -109,21 +110,37 @@
         <h2 id="does-title">What UsageLoop does</h2>
       </div>
       <ul class="plain-list">
-        <li>Shows the current 5-hour countdown, reset time, and last-known usage.</li>
+        <li>Shows the current 5-hour countdown, reset time, and last-known usage. A running window can appear alongside an earlier unconfirmed start; it does not prove UsageLoop caused that window.</li>
         <li>Shows weekly usage and blocks automatic starts when the weekly limit is nearly exhausted.</li>
         <li>Starts the next window one of three ways: <strong>as soon as the current one resets</strong>, <strong>at a set time each day</strong>, or on a <strong>weekly routine</strong> with its own time per day.</li>
         <li>After sleep, restart, or sign-in, checks the current schedule and safety conditions before any start.</li>
       </ul>
     </section>
 
+    <section class="section split" id="updates" aria-labelledby="updates-title">
+      <div class="prose">
+        <p class="section-number">03</p>
+        <h2 id="updates-title">Updates, now in About</h2>
+        <p>Find your installed version, update status and next action together at the top of About. Checks and downloads are manual and do not consume Codex allowance. Installation still needs your confirmation.</p>
+        <p class="small"><strong>Coming from 1.3.9?</strong> Use Settings → Updates to get 1.4.0. After upgrading, use About for future updates.</p>
+        <p class="small">Choose your language in Settings, then fully exit and reopen the app. The four new translations have automated review, not native-speaker review.</p>
+      </div>
+      <figure class="update-preview">
+        <a href="screenshots/1.4.0/public/about-windows.png" aria-label="Open the UsageLoop 1.4.0 About and Updates screenshot" data-lightbox>
+          <img class="product-shot" src="screenshots/1.4.0/public/about-windows.png" width="720" height="560" loading="lazy" alt="UsageLoop 1.4.0 About page with installed version 1.4.0 and the manual Check for updates button at the top">
+        </a>
+        <figcaption>Actual 1.4.0 Windows package, shown at its minimum window size. All application screenshots use synthetic data.</figcaption>
+      </figure>
+    </section>
+
     <section class="section product-view" id="weekly" aria-labelledby="weekly-title">
       <div class="section-heading">
-        <p class="section-number">03</p>
+        <p class="section-number">04</p>
         <h2 id="weekly-title">Set a routine that matches your week</h2>
         <p>Most people do not start work at the same time seven days a week. Give weekdays one first-start time and weekends another, then override any single day if you want to.</p>
       </div>
-      <a href="screenshots/settings-weekly-expanded.png" aria-label="Open the full UsageLoop Weekly routine screenshot" data-lightbox>
-        <img class="product-shot" src="screenshots/settings-weekly-expanded.png" width="1366" height="900" loading="lazy" alt="UsageLoop Weekly routine settings with separate weekday and weekend first-start times, per-day overrides for all seven days, and a Next routine card showing first start, next reset, and overnight pause">
+      <a href="screenshots/1.4.0/public/en-settings-weekly-expanded.png" aria-label="Open the full UsageLoop 1.4.0 Weekly routine screenshot" data-lightbox>
+        <img class="product-shot" src="screenshots/1.4.0/public/en-settings-weekly-expanded.png" width="1366" height="900" loading="lazy" alt="UsageLoop 1.4.0 Weekly routine settings with weekday and weekend start times, all seven day overrides and the next routine; synthetic data">
       </a>
       <div class="weekly-points">
         <p><strong>Weekdays and weekends.</strong><br>Set a time, press Apply Mon–Fri or Apply Sat–Sun, and the button confirms with “Applied”.</p>
@@ -133,14 +150,14 @@
       </div>
       <p>Need a day off? <strong>Pause until tomorrow</strong> waits until tomorrow's configured first-start time without changing your routine. You can resume early from the Dashboard or tray.</p>
       <p><strong>Recent starts</strong> shows your last ten window-start attempts from the Dashboard or tray. See which starts were confirmed, not sent, or left uncertain. It reads existing local history and makes no Codex requests.</p>
-      <a class="screenshot-link" href="screenshots/recent-starts.png" aria-label="Open the Recent starts screenshot" data-lightbox>
-        <img class="product-shot" src="screenshots/recent-starts.png" alt="Recent starts showing a confirmed window start and an earlier unconfirmed attempt" loading="lazy" width="660" height="640" style="max-width: 660px">
+      <a class="screenshot-link" href="screenshots/1.4.0/public/en-recent-starts.png" aria-label="Open the UsageLoop 1.4.0 Recent starts screenshot" data-lightbox>
+        <img class="product-shot" src="screenshots/1.4.0/public/en-recent-starts.png" alt="UsageLoop 1.4.0 Recent starts with a confirmed start and an earlier unconfirmed attempt; synthetic data" loading="lazy" width="660" height="640" style="max-width: 660px">
       </a>
     </section>
 
     <section class="section boundary-section" aria-labelledby="not-title">
       <div>
-        <p class="section-number">04</p>
+        <p class="section-number">05</p>
         <h2 id="not-title">What it does not do</h2>
       </div>
       <div class="boundary-grid">
@@ -153,7 +170,7 @@
 
     <section class="section download" id="download" aria-labelledby="download-title">
       <div>
-        <p class="section-number">05</p>
+        <p class="section-number">06</p>
         <h2 id="download-title">Download</h2>
         <p>Either build needs the ChatGPT desktop app in Codex mode or the Codex CLI already installed and signed in. Both are 64-bit Intel or AMD.</p>
       </div>
@@ -186,7 +203,7 @@
 
     <section class="section split" id="privacy" aria-labelledby="privacy-title">
       <div>
-        <p class="section-number">06</p>
+        <p class="section-number">07</p>
         <h2 id="privacy-title">Local-first by design</h2>
       </div>
       <div class="prose">
@@ -198,7 +215,7 @@
 
     <section class="section how" aria-labelledby="how-title">
       <div class="section-heading">
-        <p class="section-number">07</p>
+        <p class="section-number">08</p>
         <h2 id="how-title">How it works, without the protocol tour</h2>
       </div>
       <ol class="steps">
@@ -210,7 +227,7 @@
 
     <section class="section faq" id="faq" aria-labelledby="faq-title">
       <div class="section-heading">
-        <p class="section-number">08</p>
+        <p class="section-number">09</p>
         <h2 id="faq-title">Short answers</h2>
       </div>
       <div class="faq-list">
@@ -263,7 +280,7 @@
 
     <section class="section final-cta" aria-labelledby="links-title">
       <div>
-        <p class="section-number">09</p>
+        <p class="section-number">10</p>
         <h2 id="links-title">Try it, inspect it, or tell me what broke</h2>
       </div>
       <div class="final-links">
