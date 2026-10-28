@@ -167,6 +167,24 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
         self.assertEqual("failed_guarded", self.history.trigger_attempts()[-1].state)
 
+    def test_clock_offset_and_stale_external_anchor_are_indistinguishable_and_guarded(self):
+        # Identical inputs: either the server is two seconds behind and our
+        # request anchors at 160, or preflight is stale by two seconds and an
+        # external request anchors at 158. Relative-reset compensation would
+        # accept both. A fixed clock alone cannot establish which occurred.
+        preflight = [snapshot(t, t + 18_000 - 2) for t in (100, 110, 120, 130)]
+        post = [snapshot(t, 18_158, used=1) for t in (170, 180, 190, 200)]
+        trigger = FakeTrigger(submitted_at=160)
+        result = self.coordinator(trigger).run_bootstrap(preflight, lambda: post, confirmed=True)
+        self.assertEqual("ANCHORED", result.classification.state)
+        self.assertEqual("ANCHOR_NOT_VERIFIED", result.status)
+        self.assertEqual("failed_guarded", self.history.trigger_attempts()[-1].state)
+        again = self.coordinator(trigger).run_bootstrap(
+            unanchored(210), lambda: anchored(210), confirmed=True,
+        )
+        self.assertEqual("BOOTSTRAP_COOLDOWN", again.status)
+        self.assertEqual(1, trigger.calls)
+
     def test_same_second_fixed_reset_can_confirm_actual_submission(self):
         preflight = [snapshot(t, t + 18_000) for t in (100, 110, 120, 130)]
         post = [snapshot(t, 18_130, used=1) for t in (140, 150, 160, 170)]

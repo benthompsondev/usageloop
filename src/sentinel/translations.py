@@ -546,5 +546,18 @@ ZH_CN = {
     "• Codex automation is off until you switch it on\n• Update checks run only when you press the button, and never touch your plan\n• Countdowns are calculated locally and cause no Codex traffic\n• A request whose outcome is unclear is never retried automatically\n• Weekly limits are respected before any action is considered": "• Codex 自动启动默认关闭，需手动开启\n• 仅点击按钮时检查更新，不消耗订阅额度\n• 倒计时在本机计算，不产生 Codex 流量\n• 结果不明确的请求绝不会自动重试\n• 任何操作前都会检查每周额度限制",
     "★ Open GitHub to star UsageLoop": "★ 前往 GitHub 为 UsageLoop 点星",
     "Check your installed version and updates, or learn how UsageLoop works.": "查看当前版本和应用更新，或了解 UsageLoop 的工作原理。",
-    "Updates are easier to find in About.": "在“关于”页面中更容易找到更新。"
+    "Updates are easier to find in About.": "在“关于”页面中更容易找到更新。",
+    "A five-hour window is running": "五小时窗口正在运行",
+    "Read-only observations confirmed this reset clock. The earlier start remains unconfirmed and will not be retried.": "只读检查已确认此重置计时。较早的启动结果仍未确认，不会重试。",
+    "The earlier start is still unconfirmed. That attempt will not be retried.": "较早的启动结果仍未确认，不会重试该次请求。",
+    "Clock running · {0} left · Earlier start unconfirmed": "窗口计时中 · 剩余 {0} · 较早的启动未确认",
+    "The release included duplicate {0} files.": "发布版本包含重复的 {0} 文件。",
+    "The release is missing its verified {0}.": "发布版本缺少可校验的{0}。",
+    "GitHub replied with an error ({0}). Try again later.": "GitHub 返回错误（{0}），请稍后重试。",
+    "The {0} download was unexpectedly large.": "{0}下载文件过大。",
+    "The {0} checksum did not match the release.": "{0}的校验值与发布版本不一致。",
+    "The {0} could not be downloaded. Try again.": "无法下载{0}，请重试。",
+    "The release checksum did not name the expected {0}.": "发布版本的校验文件未指定预期的{0}。",
+    "The downloaded archive was rejected: {0}.": "已拒绝下载的压缩包：{0}。",
+    "it did not unpack into a single {0} folder": "解压内容不在单个 {0} 文件夹中"
 }

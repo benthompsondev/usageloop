@@ -172,6 +172,8 @@ class UpdatePanel(QFrame):
         self.action_button.setText(tr("Copied"))
 
     def start_check(self) -> None:
+        if self.state not in {"idle", "latest", "error", "no_release"}:
+            return
         self._set_busy("checking", tr("Checking GitHub…"))
         worker = UpdateWorker("check", self.updater.check)
         worker.signals.completed.connect(self._operation_completed)
@@ -179,6 +181,8 @@ class UpdatePanel(QFrame):
         self.thread_pool.start(worker)
 
     def start_model_support_check(self) -> None:
+        if self.state not in {"idle", "latest", "error", "no_release"}:
+            return
         self._checking_model_support = True
         self.start_check()
 

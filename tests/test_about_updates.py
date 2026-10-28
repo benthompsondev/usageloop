@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QLabel
 from sentinel import i18n
 from sentinel.product import PRODUCT
 from sentinel.update_ui import UpdatePanel
-from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult
+from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult, VerifiedInstaller
 from test_layout import SUPPORTED_SIZES, build_window
 
 
@@ -134,3 +134,37 @@ class AboutUpdatesTests(unittest.TestCase):
         self.window.show_page(2)
         self.assertEqual("latest", panel.state)
         self.assertEqual(status, panel.state_label.text())
+
+    def test_available_update_buttons_are_adjacent_in_both_tab_directions(self):
+        panel = self.window.update_panel
+        panel._operation_completed("check", UpdateCheckResult("update_available", ReleaseInfo(
+            "1.4.1", (), PRODUCT.releases_url,
+            ReleaseAsset("synthetic", "https://example.invalid/unused"),
+            ReleaseAsset("synthetic.sha256", "https://example.invalid/unused"),
+        )))
+        self.window.show_page(2)
+        self.window.show()
+        self.settle()
+        panel.action_button.setFocus()
+        QTest.keyClick(panel.action_button, Qt.Key.Key_Tab)
+        self.assertIs(self.window.focusWidget(), panel.dismiss_button)
+        QTest.keyClick(panel.dismiss_button, Qt.Key.Key_Backtab)
+        self.assertIs(self.window.focusWidget(), panel.action_button)
+
+    def test_dashboard_shortcut_preserves_pending_and_prepared_updates(self):
+        panel = self.window.update_panel
+        panel.release = ReleaseInfo("1.4.1", (), PRODUCT.releases_url,
+            ReleaseAsset("synthetic", "https://example.invalid/unused"),
+            ReleaseAsset("synthetic.sha256", "https://example.invalid/unused"))
+        panel.installer = VerifiedInstaller(Path("synthetic-installer.exe"), "0" * 64)
+        for state in ("checking", "downloading", "available", "downloaded", "manual", "launching"):
+            with self.subTest(state=state):
+                panel.state = state
+                before = (panel.release, panel.installer, panel.staged, panel.action_button.text())
+                self.window.show_page(0)
+                with patch.object(panel.thread_pool, "start") as start:
+                    self.window._check_updates_for_model_support()
+                    start.assert_not_called()
+                self.assertEqual(2, self.window.pages.currentIndex())
+                self.assertEqual(state, panel.state)
+                self.assertEqual(before, (panel.release, panel.installer, panel.staged, panel.action_button.text()))

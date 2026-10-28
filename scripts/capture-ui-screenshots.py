@@ -75,6 +75,7 @@ def main() -> int:
     parser.add_argument("output", type=Path)
     parser.add_argument("--interactive", action="store_true", help="Keep the synthetic app open; no provider traffic.")
     parser.add_argument("--updates-only", action="store_true", help="Capture About updates at multiple sizes and the revised Settings page.")
+    parser.add_argument("--guarded-clock", action="store_true", help="Preview a running clock alongside an unconfirmed earlier start.")
     parser.add_argument(
         "--platform",
         choices=("Windows", "Linux"),
@@ -111,6 +112,9 @@ def main() -> int:
         "codex-runtime", "0.96.0", int(now + 3 * 3600 + 42 * 60), now - 60,
         "Anchor verified", 18, now - 60, 34, int(now + 4 * 24 * 3600),
     )
+    if args.guarded_clock:
+        codex = replace(codex, last_action="ANCHOR_NOT_VERIFIED", outcome_category="GUARDED",
+                        quota_state="ANCHORED")
     with tempfile.TemporaryDirectory() as directory, \
             patch("sentinel.i18n.QSettings") as settings_factory:
         # Language controls in the preview must never save over the installed
@@ -123,6 +127,8 @@ def main() -> int:
         provider = PreviewProvider(codex)
         provider.history = SafeHistory(Path(directory) / "history.jsonl")
         for offset, outcome in ((-86400, "failed_guarded"), (-3 * 3600, "verified")):
+            if args.guarded_clock:
+                outcome = "failed_guarded"
             attempt = provider.history.reserve_trigger(
                 mode="rollover", idempotency_key=f"preview:{abs(offset)}", boundary_reset_at=None,
                 model="gpt-5.6-luna", reasoning_effort="low", now=now + offset,
@@ -162,6 +168,15 @@ def main() -> int:
             window.resize(1040, 750)
             window.show()
             return app.exec()
+        if args.guarded_clock:
+            window.resize(1366, 900)
+            save(window, args.output / "dashboard-guarded-clock.png", app)
+            window.show_recent_starts()
+            save(window.recent_starts_dialog, args.output / "recent-starts-guarded.png", app)
+            window.recent_starts_dialog.close()
+            (args.output / "technical-summary.txt").write_text(window.diagnostic_text.text(), encoding="utf-8")
+            window.close()
+            return 0
         if args.updates_only:
             window.show_page(2)
             for state in ("idle", "available"):

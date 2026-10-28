@@ -171,6 +171,7 @@ class MainWindow(QMainWindow):
         shell.addWidget(self._build_footer())
         self.setCentralWidget(app_root)
         QWidget.setTabOrder(self.nav_buttons[2], self.update_panel.action_button)
+        QWidget.setTabOrder(self.update_panel.action_button, self.update_panel.dismiss_button)
 
         self.automation_toggle.toggled.connect(self._automation_toggled)
         self.dashboard_automation_toggle.toggled.connect(
