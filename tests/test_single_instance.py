@@ -2,6 +2,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import json
+import gc
 import subprocess
 import sys
 import time
@@ -9,7 +10,8 @@ import unittest
 import uuid
 from unittest.mock import Mock
 
-from PySide6.QtNetwork import QLocalServer
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication
 
 from sentinel.single_instance import (
@@ -81,6 +83,31 @@ class ActivationChannelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_closed_channels_can_be_collected_between_connections(self) -> None:
+        # Exercise teardown while Qt still has deferred socket deletions. The
+        # old socket-capturing closures could crash on a later processEvents().
+        for _ in range(6):
+            channel = ActivationChannel(f"UsageLoop-gc-test-{uuid.uuid4().hex}")
+            activations = []
+            channel.activation_requested.connect(lambda: activations.append(True))
+            self.assertTrue(channel.start_primary())
+            client = QLocalSocket()
+            client.connectToServer(channel.name)
+            self.assertTrue(client.waitForConnected(1000))
+            client.write(b"activate\n")
+            client.flush()
+            deadline = time.monotonic() + 1
+            while not activations and time.monotonic() < deadline:
+                self.app.processEvents()
+            self.assertEqual([True], activations)
+            client.abort()
+            self.app.processEvents()
+            channel.close()
+            del channel
+            gc.collect()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            self.app.processEvents()
 
     def test_normal_second_launch_activates_primary_once(self) -> None:
         name = f"UsageLoop-activate-test-{uuid.uuid4().hex}"
