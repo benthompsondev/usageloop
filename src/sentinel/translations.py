@@ -544,5 +544,7 @@ ZH_CN = {
     "{0} will use your signed-in Codex client only after its safety checks pass. It checks weekly allowance, sends one minimal request, then verifies the reset.\n\nStarting a window uses a small amount of your plan. An action whose outcome is unclear is never retried.": "{0} 仅在通过安全检查后，才会使用已登录的 Codex 客户端。它会检查每周额度，发送一次极小请求，再验证重置。\n\n启动窗口会消耗少量订阅额度，结果不明确的操作绝不会重试。",
     "{0}: first start around {1} · next reset around {2}\nOvernight pause begins around {3}.": "{0}：预计首次启动于 {1} · 下次重置约在 {2}\n夜间暂停约从 {3} 开始。",
     "• Codex automation is off until you switch it on\n• Update checks run only when you press the button, and never touch your plan\n• Countdowns are calculated locally and cause no Codex traffic\n• A request whose outcome is unclear is never retried automatically\n• Weekly limits are respected before any action is considered": "• Codex 自动启动默认关闭，需手动开启\n• 仅点击按钮时检查更新，不消耗订阅额度\n• 倒计时在本机计算，不产生 Codex 流量\n• 结果不明确的请求绝不会自动重试\n• 任何操作前都会检查每周额度限制",
-    "★ Open GitHub to star UsageLoop": "★ 前往 GitHub 为 UsageLoop 点星"
+    "★ Open GitHub to star UsageLoop": "★ 前往 GitHub 为 UsageLoop 点星",
+    "Check your installed version and updates, or learn how UsageLoop works.": "查看当前版本和应用更新，或了解 UsageLoop 的工作原理。",
+    "Updates are easier to find in About.": "在“关于”页面中更容易找到更新。"
 }

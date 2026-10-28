@@ -186,7 +186,7 @@ class ProductMetadataTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        for version in ("1.1.2", "1.1.3", "1.1.4", "1.3.8"):
+        for version in ("1.1.2", "1.1.3", "1.1.4", "1.3.8", "1.3.9"):
             with self.subTest(version=version):
                 self.assertIn(f"'{version}'", verifier)
                 self.assertIn(f'"{version}"', workflow)

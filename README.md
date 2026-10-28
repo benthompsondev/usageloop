@@ -28,6 +28,9 @@ your weekly allowance.
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
+The downloads are the published 1.3.9 release. This branch develops 1.4.0;
+see the [changes, previews and remaining checks](docs/1.4.0-development-review.md).
+
 No API key needed. Requires Codex already installed and signed in, through the
 ChatGPT desktop app in Codex mode or the Codex CLI. Your computer must be awake and signed in,
 with UsageLoop running, for a scheduled start. The Windows installer is unsigned;
@@ -149,8 +152,9 @@ Download the latest stable per-user installer and its matching checksum:
 - [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256)
 
 The installer does not need administrator rights or change the global PATH.
-Already installed? Open **Settings**, scroll to **Updates**, and choose
-**Check for updates**. Checks and installation are manual; UsageLoop does not
+Already installed? In 1.4.0, open **About** to find **Updates** at the top.
+In the published 1.3.9 and earlier versions, open **Settings** and scroll to
+**Updates**. Choose **Check for updates**. Checks and installation are manual; UsageLoop does not
 update itself in the background.
 
 > [!IMPORTANT]
@@ -229,7 +233,8 @@ does not ship one by default; without an AppIndicator extension UsageLoop runs
 as a normal window, and closing the window exits the app. Pause, Recent starts,
 and Sync are all on the Dashboard, so nothing is tray-only.
 
-**Updates.** Open **Settings** and press **Check for updates**. UsageLoop asks
+**Updates.** In 1.4.0, open **About** and press **Check for updates** at the top.
+In 1.3.9 and earlier, Updates is at the bottom of Settings. UsageLoop asks
 GitHub only when you press it, shows what changed, downloads the Linux archive,
 and checks its SHA-256 against the published checksum before doing anything with
 it. If you installed with `install.sh`, **Install and restart** finishes the job:
@@ -314,8 +319,10 @@ sleeps, powers off, or you sign out, no start runs during that time. When
 UsageLoop runs again, it checks the current schedule and safety gates. It does
 not install a Windows service or store your Windows password.
 
-Settings contains the schedule, start at sign-in, manual updates, and collapsed
-technical diagnostics. Update checks contact GitHub only after a button click
+Settings contains the language, schedule, start at sign-in, and collapsed
+technical diagnostics. In 1.4.0, About starts with the installed version and
+manual update controls, followed by project and safety information.
+Update checks contact GitHub only after a button click
 and never affect quota.
 
 ### Try it on your next workday

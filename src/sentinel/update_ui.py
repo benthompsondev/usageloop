@@ -121,7 +121,6 @@ class UpdatePanel(QFrame):
         self.notes_label.setProperty("muted", True)
         self.notes_label.setWordWrap(True)
         self.notes_label.setVisible(False)
-        layout.addWidget(self.notes_label)
 
         actions = QHBoxLayout()
         self.action_button = QPushButton(tr("Check for updates"))
@@ -134,6 +133,9 @@ class UpdatePanel(QFrame):
         actions.addWidget(self.dismiss_button)
         actions.addStretch()
         layout.addLayout(actions)
+        # Release notes can be long. Keep the next action above them, including
+        # at the minimum window height and with translated copy.
+        layout.addWidget(self.notes_label)
 
     def _primary_action(self) -> None:
         if self.state in {"idle", "latest", "error", "no_release"}:

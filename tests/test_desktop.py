@@ -1201,18 +1201,17 @@ class DesktopTests(unittest.TestCase):
 
         # Same user-initiated check as Windows, different artifact and wording.
         self.assertIsNotNone(window.update_panel)
-        self.assertIs(window.updates_widget, window.update_panel)
+        self.assertTrue(window.pages.widget(2).isAncestorOf(window.update_panel))
         self.assertFalse(window.update_panel.is_windows)
         self.assertEqual(
             "Check for updates", window.update_panel.action_button.text()
         )
         copy = " ".join(
-            label.text() for label in window.updates_widget.findChildren(QLabel)
+            label.text() for label in window.update_panel.findChildren(QLabel)
         )
         self.assertIn("Updates", copy)
         self.assertIn("cannot use subscription quota", copy)
-        # The card still occupies the same slot, so Settings keeps its layout.
-        self.assertEqual(2, window.settings_bottom_row.layout().count())
+        self.assertFalse(window.pages.widget(1).isAncestorOf(window.update_panel))
 
     def _prepare_install(self, window, updater):
         window.update_panel.updater = updater

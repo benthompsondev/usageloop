@@ -163,13 +163,14 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.provider_cards: dict[str, ProviderCard] = {}
         self.pages.addWidget(self._build_dashboard())
+        self.pages.addWidget(self._build_settings())
         self.pages.addWidget(
-            self._build_settings(updater or GitHubReleaseUpdater(), confirm_install)
+            self._build_about(updater or GitHubReleaseUpdater(), confirm_install)
         )
-        self.pages.addWidget(self._build_about())
         shell.addWidget(self.pages, 1)
         shell.addWidget(self._build_footer())
         self.setCentralWidget(app_root)
+        QWidget.setTabOrder(self.nav_buttons[2], self.update_panel.action_button)
 
         self.automation_toggle.toggled.connect(self._automation_toggled)
         self.dashboard_automation_toggle.toggled.connect(
@@ -528,11 +529,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("Setting not saved"),
                                 tr("Could not save language preference."))
 
-    def _build_settings(
-        self,
-        updater: GitHubReleaseUpdater,
-        confirm_install: Callable[[str], bool] | None,
-    ) -> QWidget:
+    def _build_settings(self) -> QWidget:
         page, root, _intro = self._page(
             tr("Settings"),
             tr("Choose how UsageLoop keeps your reset clock running."),
@@ -812,24 +809,10 @@ class MainWindow(QMainWindow):
         technical.add_widget(self.copy_summary_button)
         technical_layout.addWidget(technical)
 
-        # Both hosts get the same user-initiated check. Only the final step
-        # differs: Windows runs a verified setup executable, Linux replaces its
-        # per-user bundle through the installer that shipped inside it.
-        self.update_panel = UpdatePanel(
-            updater,
-            confirm_install=confirm_install,
-            parent=self,
-            platform_name=self.platform_name,
-        )
-        self.update_panel.installer_launched.connect(self._exit_for_update)
-        updates_widget: QWidget = self.update_panel
-        self.updates_widget = updates_widget
-        updates_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
-        )
         technical_card.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
         )
+        self.settings_connection_card = technical_card
 
         self.settings_top_row = QWidget()
         top_layout = QHBoxLayout(self.settings_top_row)
@@ -840,21 +823,31 @@ class MainWindow(QMainWindow):
         root.addWidget(self.settings_top_row)
         root.addWidget(schedule_card)
 
-        self.settings_bottom_row = QWidget()
-        bottom_layout = QHBoxLayout(self.settings_bottom_row)
-        bottom_layout.setContentsMargins(0, 0, 0, 0)
-        bottom_layout.setSpacing(14)
-        bottom_layout.addWidget(self.updates_widget, 1, Qt.AlignmentFlag.AlignTop)
-        bottom_layout.addWidget(technical_card, 1, Qt.AlignmentFlag.AlignTop)
-        root.addWidget(self.settings_bottom_row)
+        root.addWidget(technical_card)
         root.addStretch()
         return page
 
-    def _build_about(self) -> QWidget:
+    def _build_about(
+        self,
+        updater: GitHubReleaseUpdater,
+        confirm_install: Callable[[str], bool] | None,
+    ) -> QWidget:
         page, root, _intro = self._page(
             (tr('About {0}').format(PRODUCT.display_name)),
-            tr("A small local-first app that keeps your normal Codex reset clock moving."),
+            tr("Check your installed version and updates, or learn how UsageLoop works."),
         )
+        # Create the single updater here before refresh_clock can use its signals.
+        # Opening About itself never starts a check or any provider work.
+        self.update_panel = UpdatePanel(
+            updater,
+            confirm_install=confirm_install,
+            platform_name=self.platform_name,
+        )
+        self.update_panel.installer_launched.connect(self._exit_for_update)
+        self.update_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
+        )
+        root.addWidget(self.update_panel)
         about = QFrame()
         about.setObjectName("aboutHero")
         about_layout = QHBoxLayout(about)
@@ -1004,9 +997,13 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
         if index == 1:
             self._update_diagnostics(now=time.time())
+        elif index == 2:
+            # A return visit must reveal the update action even after reading
+            # the longer project and safety information further down About.
+            self.pages.widget(2).verticalScrollBar().setValue(0)
 
     def _check_updates_for_model_support(self) -> None:
-        self.show_page(1)
+        self.show_page(2)
         self.update_panel.start_model_support_check()
 
     def refresh_clock(self, *, now: float | None = None) -> None:
