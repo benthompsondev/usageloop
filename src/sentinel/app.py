@@ -13,6 +13,7 @@ from .app_controller import ApplicationController
 from .app_state import AppStateStore
 from .desktop import DesktopShell, MainWindow
 from .history import SafeHistory
+from .i18n import configure_language
 from .product import PRODUCT
 from .providers import CodexProvider
 from .single_instance import ActivationChannel, InstanceCoordinator, SingleInstanceGuard
@@ -76,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     coordinator = InstanceCoordinator(instance_guard, activation_channel)
     if not coordinator.claim(background=args.background):
         return 0
+    configure_language()
     application.setApplicationName(PRODUCT.display_name)
     application.setApplicationVersion(PRODUCT.version)
     application.setOrganizationName(PRODUCT.publisher)

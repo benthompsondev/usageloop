@@ -7,13 +7,15 @@ from datetime import datetime, timedelta, tzinfo
 import re
 import time
 
-from PySide6.QtCore import QPointF, QSize, QTime, Qt
+from PySide6.QtCore import QLocale, QPointF, QSize, QTime, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractSpinBox, QCheckBox, QFrame, QHBoxLayout, QLabel, QProgressBar,
     QPushButton, QSizePolicy, QStyle, QStyleOptionSpinBox, QTimeEdit, QVBoxLayout,
     QWidget,
 )
+
+from .i18n import current_language, format_datetime, tr
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
 from .history import SafeHistory, HistoryStateError
@@ -84,7 +86,8 @@ class TimeEntry(QTimeEdit):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(value or QTime(0, 0), parent)
-        self.setDisplayFormat("h:mm AP")
+        self.setLocale(QLocale("zh_CN" if current_language() == "zh_CN" else "en_US"))
+        self.setDisplayFormat(tr("h:mm AP"))
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.setAccelerated(True)
         self.setWrapping(True)
@@ -93,10 +96,10 @@ class TimeEntry(QTimeEdit):
             QAbstractSpinBox.CorrectionMode.CorrectToNearestValue
         )
         self.setToolTip(
-            "Select the hour, minute, or AM/PM. Type a value or use the arrow controls."
+            tr("Select the hour, minute, or AM/PM. Type a value or use the arrow controls.")
         )
         self.setAccessibleDescription(
-            "Local time. Select the hour, minute, or AM/PM, then type or use arrow keys."
+            tr("Local time. Select the hour, minute, or AM/PM, then type or use arrow keys.")
         )
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -163,84 +166,84 @@ def present_provider_state(
 ) -> ProviderPresentation:
     """Map internal Codex evidence onto the five consumer-facing clock states."""
     usage = (
-        f"5-hour window  {state.used_percent:g}% used"
-        if state.used_percent is not None else "5-hour window  Not checked"
+        (tr('5-hour window  {0:g}% used').format(state.used_percent))
+        if state.used_percent is not None else tr("5-hour window  Not checked")
     )
     weekly = (
-        f"Weekly allowance  {state.weekly_used_percent:g}% used"
-        if state.weekly_used_percent is not None else "Weekly allowance  Not available"
+        (tr('Weekly allowance  {0:g}% used').format(state.weekly_used_percent))
+        if state.weekly_used_percent is not None else tr("Weekly allowance  Not available")
     )
     if state.weekly_reset_at is not None:
-        weekly += f"  ·  {_reset_copy(state.weekly_reset_at, now=now)}"
+        weekly += f'  ·  {_reset_copy(state.weekly_reset_at, now=now)}'
     action = _automatic_action_copy(state, now=now)
     if not state.installed:
         return ProviderPresentation(
-            "NEEDS ATTENTION", "error", "Codex is not installed", "No reset information",
-            "Install and sign in to Codex, then reopen UsageLoop.", "No local status yet",
+            tr("NEEDS ATTENTION"), "error", tr("Codex is not installed"), tr("No reset information"),
+            tr("Install and sign in to Codex, then reopen UsageLoop."), tr("No local status yet"),
             usage, weekly, action,
         )
 
     unanchored_first_window = state.quota_state == "UNANCHORED" and state.last_verified_at is None
-    reset = ("Reset time not verified" if unanchored_first_window
+    reset = (tr("Reset time not verified") if unanchored_first_window
              else _reset_copy(state.reset_at, now=now))
     if state.last_verified_at is not None:
-        verified = f"Last synced {_friendly_time(state.last_verified_at, now=now)}"
+        verified = (tr('Last synced {0}').format(_friendly_time(state.last_verified_at, now=now)))
     elif state.usage_checked_at is not None:
-        verified = f"Last synced {_friendly_time(state.usage_checked_at, now=now)}"
+        verified = (tr('Last synced {0}').format(_friendly_time(state.usage_checked_at, now=now)))
     else:
-        verified = "Not checked yet"
+        verified = tr("Not checked yet")
 
     if state.status == "Needs attention":
         if state.detail == LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL:
             return ProviderPresentation(
-                "AUTOMATIC STARTS PAUSED", "error",
-                "No supported lightweight Codex model", reset,
+                tr("AUTOMATIC STARTS PAUSED"), "error",
+                tr("No supported lightweight Codex model"), reset,
                 state.detail, verified, usage, weekly, action,
             )
         return ProviderPresentation(
-            "NEEDS ATTENTION", "error", "A safe check needs attention", reset,
-            "Nothing was retried. Diagnostics has the technical reason.",
+            tr("NEEDS ATTENTION"), "error", tr("A safe check needs attention"), reset,
+            tr("Nothing was retried. Diagnostics has the technical reason."),
             verified, usage, weekly, action,
         )
     if state.status == "Checking":
         return ProviderPresentation(
-            "CHECKING CONNECTION", "info", "Checking Codex compatibility", reset,
-            "Reading usage and supported models. No model request is sent.",
+            tr("CHECKING CONNECTION"), "info", tr("Checking Codex compatibility"), reset,
+            tr("Reading usage and supported models. No model request is sent."),
             verified, usage, weekly, action,
         )
     if state.status == "Starting":
         return ProviderPresentation(
-            "STARTING NEXT WINDOW", "info", "Starting the next reset clock", reset,
-            "One minimal Codex request is in progress. It will not be retried automatically.",
+            tr("STARTING NEXT WINDOW"), "info", tr("Starting the next reset clock"), reset,
+            tr("One minimal Codex request is in progress. It will not be retried automatically."),
             verified, usage, weekly, action,
         )
     if state.reset_at is None or unanchored_first_window:
         return ProviderPresentation(
-            "WAITING FOR RESET" if automation_enabled else "AUTOMATION OFF",
+            tr("WAITING FOR RESET") if automation_enabled else tr("AUTOMATION OFF"),
             "info" if automation_enabled else "neutral",
-            "No clock running yet" if unanchored_first_window else "No reset clock verified yet", reset,
+            tr("No clock running yet") if unanchored_first_window else tr("No reset clock verified yet"), reset,
             (
-                "UsageLoop will check Codex and start the first window only after every safety gate passes."
+                tr("UsageLoop will check Codex and start the first window only after every safety gate passes.")
                 if automation_enabled
-                else "Turn on UsageLoop when you want it to start and maintain the Codex reset clock."
+                else tr("Turn on UsageLoop when you want it to start and maintain the Codex reset clock.")
             ),
             verified, usage, weekly, action,
         )
     if state.status == "Ready":
         return ProviderPresentation(
-            "CLOCK RUNNING" if automation_enabled else "AUTOMATION OFF",
+            tr("CLOCK RUNNING") if automation_enabled else tr("AUTOMATION OFF"),
             "success" if automation_enabled else "neutral",
             format_countdown(state.reset_at, now), reset,
-            "Codex confirms this reset time. The countdown runs locally with no Codex traffic.",
+            tr("Codex confirms this reset time. The countdown runs locally with no Codex traffic."),
             verified, usage, weekly, action,
         )
     return ProviderPresentation(
-        "WAITING FOR RESET" if automation_enabled else "AUTOMATION OFF",
+        tr("WAITING FOR RESET") if automation_enabled else tr("AUTOMATION OFF"),
         "info" if automation_enabled else "neutral", format_countdown(state.reset_at, now), reset,
         (
-            "The previous clock ended. UsageLoop will start the next one after the reset buffer and safety checks."
+            tr("The previous clock ended. UsageLoop will start the next one after the reset buffer and safety checks.")
             if automation_enabled else
-            "The previous clock ended. Turn UsageLoop on to keep the next one ready."
+            tr("The previous clock ended. Turn UsageLoop on to keep the next one ready.")
         ),
         verified, usage, weekly, action,
     )
@@ -253,7 +256,7 @@ class StatusPill(QLabel):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
     def set_status(self, text: str, tone: str) -> None:
-        self.setText(text)
+        self.setText(tr(text))
         self.setProperty("tone", tone)
         self.style().unpolish(self)
         self.style().polish(self)
@@ -270,7 +273,7 @@ class ProviderCard(QFrame):
         layout.setSpacing(8)
 
         header = QHBoxLayout()
-        self.name_label = QLabel("Current 5-hour window")
+        self.name_label = QLabel(tr("Current 5-hour window"))
         self.name_label.setObjectName("providerName")
         self.status_label = StatusPill()
         header.addWidget(self.name_label)
@@ -287,7 +290,7 @@ class ProviderCard(QFrame):
         self.detail_label.setObjectName("detail")
         self.detail_label.setWordWrap(True)
         layout.addWidget(self.detail_label)
-        self.update_button = QPushButton("Check for updates")
+        self.update_button = QPushButton(tr("Check for updates"))
         self.update_button.setObjectName("secondaryButton")
         self.update_button.setVisible(False)
         layout.addWidget(self.update_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -308,14 +311,14 @@ class ProviderCard(QFrame):
         layout.addWidget(self.usage_bar)
         layout.addSpacing(2)
         sync_row = QHBoxLayout()
-        self.sync_button = QPushButton("Sync usage")
+        self.sync_button = QPushButton(tr("Sync usage"))
         self.sync_button.setObjectName("secondaryButton")
-        self.sync_status = QLabel("")
+        self.sync_status = QLabel('')
         self.sync_status.setProperty("muted", True)
         sync_row.addWidget(self.sync_button, 0)
         sync_row.addWidget(self.sync_status, 1)
         layout.addLayout(sync_row)
-        self.action_button = QPushButton("Start my first window now")
+        self.action_button = QPushButton(tr("Start my first window now"))
         self.action_button.setObjectName("primaryButton")
         self.action_button.setVisible(False)
         layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -336,25 +339,25 @@ class ProviderCard(QFrame):
             self.setProperty("tone", presented.tone)
             self.style().unpolish(self)
             self.style().polish(self)
-        self.countdown_label.setText(presented.headline)
-        self.reset_label.setText(presented.reset)
-        self.detail_label.setText(presented.detail)
+        self.countdown_label.setText(tr(presented.headline))
+        self.reset_label.setText(tr(presented.reset))
+        self.detail_label.setText(tr(presented.detail))
         self.update_button.setVisible(
             state.detail == LIGHTWEIGHT_MODEL_UNAVAILABLE_DETAIL
         )
-        self.metadata_label.setText(presented.verified)
-        self.usage_label.setText(presented.usage)
+        self.metadata_label.setText(tr(presented.verified))
+        self.usage_label.setText(tr(presented.usage))
         self.usage_bar.setValue(int(state.used_percent or 0))
 
     def set_sync_state(self, state: str) -> None:
         messages = {
             "idle": "",
-            "syncing": "Syncing…",
-            "updated": "Sync complete",
-            "inconclusive": "Couldn’t confirm Codex usage",
-            "unavailable": "Codex not available",
+            "syncing": tr("Syncing…"),
+            "updated": tr("Sync complete"),
+            "inconclusive": tr("Couldn’t confirm Codex usage"),
+            "unavailable": tr("Codex not available"),
         }
-        self.sync_status.setText(messages[state])
+        self.sync_status.setText(tr(messages[state]))
         self.sync_button.setEnabled(state != "syncing")
 
 
@@ -371,11 +374,11 @@ class ScheduleCard(QFrame):
         layout.setSpacing(9)
 
         header = QHBoxLayout()
-        name = QLabel("Automation")
+        name = QLabel(tr("Automation"))
         name.setObjectName("providerName")
         self.automation_toggle = ToggleSwitch()
-        self.automation_toggle.setAccessibleName("Keep my 5-hour windows ready")
-        self.automation_toggle.setToolTip("Turn UsageLoop automation on or off")
+        self.automation_toggle.setAccessibleName(tr("Keep my 5-hour windows ready"))
+        self.automation_toggle.setToolTip(tr("Turn UsageLoop automation on or off"))
         header.addWidget(name)
         header.addStretch()
         header.addWidget(self.automation_toggle)
@@ -390,23 +393,23 @@ class ScheduleCard(QFrame):
         layout.addWidget(self.detail_label)
         layout.addStretch(1)
 
-        next_title = QLabel("NEXT ACTION")
+        next_title = QLabel(tr("NEXT ACTION"))
         next_title.setObjectName("eyebrow")
         layout.addWidget(next_title)
         self.next_label = QLabel()
         self.next_label.setObjectName("scheduleNext")
         self.next_label.setWordWrap(True)
         layout.addWidget(self.next_label)
-        self.pause_button = QPushButton("Pause until tomorrow")
+        self.pause_button = QPushButton(tr("Pause until tomorrow"))
         self.pause_button.setObjectName("secondaryButton")
         layout.addWidget(self.pause_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.manage_button = QPushButton("Manage schedule")
+        self.manage_button = QPushButton(tr("Manage schedule"))
         self.manage_button.setObjectName("secondaryButton")
         actions = QHBoxLayout()
         actions.addWidget(self.manage_button)
-        self.history_button = QPushButton("Recent starts")
+        self.history_button = QPushButton(tr("Recent starts"))
         self.history_button.setObjectName("secondaryButton")
-        self.history_button.setToolTip("See which window starts were confirmed, not sent, or left uncertain.")
+        self.history_button.setToolTip(tr("See which window starts were confirmed, not sent, or left uncertain."))
         actions.addWidget(self.history_button)
         actions.addStretch()
         layout.addLayout(actions)
@@ -435,38 +438,39 @@ class ScheduleCard(QFrame):
     ) -> None:
         enabled = settings.automation_enabled
         if settings.schedule_mode == DAILY:
-            time_text = datetime(2000, 1, 1, settings.daily_start_hour, settings.daily_start_minute).strftime(
-                "%I:%M %p"
-            ).lstrip("0")
-            self.mode_label.setText(f"At {time_text} each day")
+            time_text = format_datetime(
+                datetime(2000, 1, 1, settings.daily_start_hour, settings.daily_start_minute),
+                "%I:%M %p",
+            )
+            self.mode_label.setText(tr('At {0} each day').format(time_text))
             self.detail_label.setText(
-                "Starts only after the current window ends and this local time arrives."
+                tr("Starts only after the current window ends and this local time arrives.")
             )
         elif settings.schedule_mode == WEEKLY:
-            self.mode_label.setText("Weekly routine")
+            self.mode_label.setText(tr("Weekly routine"))
             self.detail_label.setText(
-                "Keeps windows rolling during the day, then pauses so tomorrow's first start stays on schedule."
+                tr("Keeps windows rolling during the day, then pauses so tomorrow's first start stays on schedule.")
             )
         else:
-            self.mode_label.setText("As soon as reset passes")
+            self.mode_label.setText(tr("As soon as reset passes"))
             self.detail_label.setText(
-                "Starts the next window after the current reset and safety buffer."
+                tr("Starts the next window after the current reset and safety buffer.")
             )
 
         if next_action is not None:
-            self.next_label.setText(next_action)
+            self.next_label.setText(tr(next_action))
             return
         if not enabled:
-            self.next_label.setText("No automatic requests while automation is off")
+            self.next_label.setText(tr("No automatic requests while automation is off"))
             return
 
         if settings.pause_active(now):
-            self.detail_label.setText("Automation stays on.\nYour routine is unchanged.")
-            self.next_label.setText(f"Resumes {pause_until_text(settings.automation_paused_until)}")
+            self.detail_label.setText(tr("Automation stays on.\nYour routine is unchanged."))
+            self.next_label.setText(tr('Resumes {0}').format(pause_until_text(settings.automation_paused_until)))
             return
 
         if state.reset_at is None:
-            self.next_label.setText("First window starts only when you ask")
+            self.next_label.setText(tr("First window starts only when you ask"))
             return
         summary = schedule_summary(
             settings.schedule_mode,
@@ -479,46 +483,46 @@ class ScheduleCard(QFrame):
         if settings.schedule_mode == WEEKLY and summary.phase == "overnight_pause":
             target = _schedule_time(summary.next_action_at, now=now)
             target = target[0].lower() + target[1:]
-            self.next_label.setText(f"Overnight pause · first start {target}")
+            self.next_label.setText(tr('Overnight pause · first start {0}').format(target))
         elif settings.schedule_mode == WEEKLY and summary.phase == "active_window":
             self.next_label.setText(
-                "Current window stays active until it resets"
+                tr("Current window stays active until it resets")
             )
         elif summary.due and summary.phase == "scheduled_first_start":
-            self.next_label.setText("Scheduled first start is due now")
+            self.next_label.setText(tr("Scheduled first start is due now"))
         elif summary.due and summary.phase == "continuous_rollover":
-            self.next_label.setText("Daytime rollover safety checks are due now")
+            self.next_label.setText(tr("Daytime rollover safety checks are due now"))
         elif summary.due:
-            self.next_label.setText("Safety checks are due now")
+            self.next_label.setText(tr("Safety checks are due now"))
         elif summary.next_action_at is not None:
-            self.next_label.setText(_schedule_time(summary.next_action_at, now=now))
+            self.next_label.setText(tr(_schedule_time(summary.next_action_at, now=now)))
 
 
 def pause_until_text(timestamp: float) -> str:
-    return datetime.fromtimestamp(timestamp).strftime("%a, %b %d, %Y at %I:%M %p").replace(" 0", " ")
+    return format_datetime(datetime.fromtimestamp(timestamp), "%a, %b %d, %Y at %I:%M %p")
 
 
 def automatic_start_history_copy(history: SafeHistory | None, *, now: float) -> str:
     """Use existing rollover records, never a quota-observation timestamp."""
     if history is None:
-        return "Last automatic start: None yet"
+        return tr("Last automatic start: None yet")
     try:
         attempts = [item for item in history.trigger_attempts() if item.mode == "rollover"]
     except (OSError, HistoryStateError):
-        return "Last automatic start: History unavailable"
+        return tr("Last automatic start: History unavailable")
     if not attempts:
-        return "Last automatic start: None yet"
+        return tr("Last automatic start: None yet")
     attempt = attempts[-1]
     outcome = {
-        "reserved": "Preparing",
-        "launch_attempted": "Starting",
-        "request_possibly_sent": "Outcome unclear · No retry",
-        "verified": "Successful",
-        "failed_recoverable": "Stopped before sending",
-        "failed_guarded": "Not verified · No retry",
+        "reserved": tr("Preparing"),
+        "launch_attempted": tr("Starting"),
+        "request_possibly_sent": tr("Outcome unclear · No retry"),
+        "verified": tr("Successful"),
+        "failed_recoverable": tr("Stopped before sending"),
+        "failed_guarded": tr("Not verified · No retry"),
     }[attempt.state]
     when = _schedule_time(attempt.updated_at, now=now)
-    return f"Last automatic start: {when} · {outcome}"
+    return (tr('Last automatic start: {0} · {1}').format(when, outcome))
 
 
 def _schedule_time(
@@ -528,13 +532,13 @@ def _schedule_time(
         local = _local_datetime(timestamp, timezone)
         current = _local_datetime(now, timezone)
     except (OSError, OverflowError, ValueError):
-        return "After the current reset"
-    time_text = local.strftime("%I:%M %p").lstrip("0")
+        return tr("After the current reset")
+    time_text = format_datetime(local, "%I:%M %p")
     if local.date() == current.date():
-        return f"Today at {time_text}"
+        return (tr('Today at {0}').format(time_text))
     if local.date() == current.date() + timedelta(days=1):
-        return f"Tomorrow at {time_text}"
-    return local.strftime("%a, %b %d at %I:%M %p").replace(" 0", " ")
+        return (tr('Tomorrow at {0}').format(time_text))
+    return format_datetime(local, "%a, %b %d at %I:%M %p")
 
 
 def daily_schedule_example(
@@ -547,15 +551,10 @@ def daily_schedule_example(
 ) -> str:
     """Explain the selected daily schedule using the current cached reset."""
     current = time.time() if now is None else float(now)
-    selected = (
-        datetime(2000, 1, 1, hour, minute)
-        .strftime("%I:%M %p")
-        .lstrip("0")
-    )
+    selected = format_datetime(datetime(2000, 1, 1, hour, minute), "%I:%M %p")
     if reset_at is None:
         return (
-            "After the current window ends, UsageLoop will start the next one "
-            f"at {selected}."
+            (tr('After the current window ends, UsageLoop will start the next one at {0}.').format(selected))
         )
     try:
         summary = schedule_summary(
@@ -568,31 +567,27 @@ def daily_schedule_example(
         )
     except (OSError, OverflowError, ValueError):
         return (
-            "After the current window ends, UsageLoop will start the next one "
-            f"at {selected}."
+            (tr('After the current window ends, UsageLoop will start the next one at {0}.').format(selected))
         )
     reset = _inline_schedule_time(float(reset_at), now=current, timezone=timezone)
     if reset is None:
         return (
-            "After the current window ends, UsageLoop will start the next one "
-            f"at {selected}."
+            (tr('After the current window ends, UsageLoop will start the next one at {0}.').format(selected))
         )
-    tense = "previous window ended" if reset_at <= current else "current window ends"
+    tense = tr("previous window ended") if reset_at <= current else tr("current window ends")
     if summary.due:
-        next_action = "UsageLoop is due to start the next one now."
+        next_action = tr("UsageLoop is due to start the next one now.")
     else:
         scheduled = _inline_schedule_time(
             summary.next_action_at, now=current, timezone=timezone
         )
         if scheduled is None:
             return (
-                "After the current window ends, UsageLoop will start the next one "
-                f"at {selected}."
+                (tr('After the current window ends, UsageLoop will start the next one at {0}.').format(selected))
             )
-        next_action = f"UsageLoop will start the next one {scheduled}."
+        next_action = tr('UsageLoop will start the next one {0}.').format(scheduled)
     return (
-        f"Your {tense} {reset}. "
-        f"{next_action}"
+        tr('Your {0} {1}. {2}').format(tense, reset, next_action)
     )
 
 
@@ -607,9 +602,7 @@ def weekly_schedule_preview(
         weekly_times, now=now, timezone=timezone
     )
     return (
-        f"{details.day}: first start around {details.first_start} · "
-        f"next reset around {details.next_reset}\n"
-        f"Overnight pause begins around {details.pause_start}."
+        (tr('{0}: first start around {1} · next reset around {2}\nOvernight pause begins around {3}.').format(details.day, details.first_start, details.next_reset, details.pause_start))
     )
 
 
@@ -624,16 +617,16 @@ def weekly_schedule_preview_details(
     target = next_weekly_start_after(current, weekly_times, timezone=timezone)
 
     def clock(timestamp: float) -> str:
-        return _local_datetime(timestamp, timezone).strftime("%I:%M %p").lstrip("0")
+        return format_datetime(_local_datetime(timestamp, timezone), "%I:%M %p")
 
     target_local = _local_datetime(target, timezone)
     current_local = _local_datetime(current, timezone)
     if target_local.date() == current_local.date():
-        day = "Today"
+        day = tr("Today")
     elif target_local.date() == current_local.date() + timedelta(days=1):
-        day = "Tomorrow"
+        day = tr("Tomorrow")
     else:
-        day = target_local.strftime("%A")
+        day = tr(("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[target_local.weekday()])
     return WeeklySchedulePreview(
         day=day,
         first_start=clock(target),
@@ -654,9 +647,9 @@ def _inline_schedule_time(
     if timestamp is None:
         return None
     label = _schedule_time(timestamp, now=now, timezone=timezone)
-    if label == "After the current reset":
+    if label == tr("After the current reset"):
         return None
-    if label.startswith(("Today", "Tomorrow")):
+    if label.startswith((tr("Today"), tr("Tomorrow"))):
         return label[0].lower() + label[1:]
     return label
 
@@ -664,22 +657,22 @@ def _inline_schedule_time(
 def _automatic_action_copy(state: ProviderViewState, *, now: float) -> str:
     action = state.last_action
     if not action:
-        return "Last automatic start: None yet"
+        return tr("Last automatic start: None yet")
     outcome = re.sub(r"[^A-Z0-9]+", "_", action.upper()).strip("_")
     if outcome == "ANCHOR_VERIFIED":
-        return "Last automatic start: Successful"
+        return tr("Last automatic start: Successful")
     if outcome in CHAIN_OUTCOME_COPY:
-        return f"Last automatic start: {CHAIN_OUTCOME_COPY[outcome]}"
+        return (tr('Last automatic start: {0}').format(tr(CHAIN_OUTCOME_COPY[outcome])))
     normalized = action.casefold()
     if "unclear" in normalized or "not verified" in normalized:
-        return "Last automatic start: Outcome unclear · No retry"
+        return tr("Last automatic start: Outcome unclear · No retry")
     if "before" in normalized and "sent" in normalized:
-        return "Last automatic start: Stopped before sending"
+        return tr("Last automatic start: Stopped before sending")
     if "preparing" in normalized or "starting" in normalized:
-        return "Automatic start in progress"
+        return tr("Automatic start in progress")
     if "verified" in normalized or "successful" in normalized:
-        return "Last automatic start: Successful"
-    return "Last automatic start: Action recorded · See Technical details"
+        return tr("Last automatic start: Successful")
+    return tr("Last automatic start: Action recorded · See Technical details")
 
 
 def _metric_bar(name: str) -> QProgressBar:
@@ -699,11 +692,11 @@ def make_surface_card(
     layout = QVBoxLayout(card)
     layout.setContentsMargins(22, 20, 22, 20)
     layout.setSpacing(10)
-    title_label = QLabel(title)
+    title_label = QLabel(tr(title))
     title_label.setObjectName("sectionTitle")
     layout.addWidget(title_label)
     if description:
-        description_label = QLabel(description)
+        description_label = QLabel(tr(description))
         description_label.setProperty("muted", True)
         description_label.setWordWrap(True)
         layout.addWidget(description_label)
@@ -712,44 +705,44 @@ def make_surface_card(
 
 def _reset_copy(reset_at: int | None, *, now: float) -> str:
     if reset_at is None:
-        return "Reset time not verified"
+        return tr("Reset time not verified")
     try:
         local = datetime.fromtimestamp(reset_at).astimezone()
         current = datetime.fromtimestamp(now).astimezone()
     except (OSError, OverflowError, ValueError):
-        return "Reset time unavailable"
+        return tr("Reset time unavailable")
     if reset_at <= now:
-        return f"Previous window ended {local.strftime('%a at %I:%M %p').replace(' 0', ' ')}"
+        return (tr('Previous window ended {0}').format(format_datetime(local, "%a at %I:%M %p")))
     if local.date() == current.date():
-        return f"Resets at {local.strftime('%I:%M %p').lstrip('0')}"
-    return f"Resets {local.strftime('%a at %I:%M %p').replace(' 0', ' ')}"
+        return (tr('Resets at {0}').format(format_datetime(local, "%I:%M %p")))
+    return (tr('Resets {0}').format(format_datetime(local, "%a at %I:%M %p")))
 
 
 def _friendly_time(timestamp: float | None, *, now: float) -> str:
     if timestamp is None:
-        return "at an unknown time"
+        return tr("at an unknown time")
     try:
         local = datetime.fromtimestamp(timestamp).astimezone()
         current = datetime.fromtimestamp(now).astimezone()
     except (OSError, OverflowError, ValueError):
-        return "at an unknown time"
+        return tr("at an unknown time")
     if local.date() == current.date():
-        return local.strftime("%I:%M %p").lstrip("0")
-    return local.strftime("%b %d at %I:%M %p").replace(" 0", " ")
+        return format_datetime(local, "%I:%M %p")
+    return format_datetime(local, "%b %d at %I:%M %p")
 
 
 class ElidingLabel(QLabel):
     def __init__(self, text: str = "", parent: QWidget | None = None):
         super().__init__(parent)
-        self._full_text = text
+        self._full_text = tr(text)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        super().setText(text)
+        super().setText(tr(text))
 
     def full_text(self) -> str:
         return self._full_text
 
     def setText(self, text: str) -> None:  # noqa: N802
-        self._full_text = text
+        self._full_text = tr(text)
         self._apply_elision()
 
     def sizeHint(self):
@@ -767,7 +760,7 @@ class ElidingLabel(QLabel):
             self._full_text, Qt.TextElideMode.ElideRight, max(0, self.width())
         )
         if elided != super().text():
-            super().setText(elided)
+            super().setText(tr(elided))
 
 
 class HealthRowWidget(QFrame):
@@ -795,8 +788,8 @@ class HealthRowWidget(QFrame):
         layout.addWidget(self.badge, 0, Qt.AlignmentFlag.AlignTop)
 
     def update_row(self, row) -> None:
-        self.label.setText(row.label)
-        self.detail.setText(row.detail)
+        self.label.setText(tr(row.label))
+        self.detail.setText(tr(row.detail))
         self.badge.set_status(row.status.upper(), row.tone)
 
 
@@ -806,7 +799,7 @@ class Disclosure(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        self.toggle = QPushButton(f"▸  {title}")
+        self.toggle = QPushButton(f'▸  {title}')
         self.toggle.setObjectName("disclosureToggle")
         self.toggle.setCheckable(True)
         self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -822,7 +815,7 @@ class Disclosure(QWidget):
 
     def _on_toggled(self, checked: bool) -> None:
         self.body.setVisible(checked)
-        self.toggle.setText(f"{'▾' if checked else '▸'}  {self._title}")
+        self.toggle.setText(f"{('▾' if checked else '▸')}  {self._title}")
 
     def add_widget(self, widget: QWidget) -> None:
         self.body_layout.addWidget(widget)

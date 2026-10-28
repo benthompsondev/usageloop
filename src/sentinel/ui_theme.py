@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .i18n import current_language
+
 
 @dataclass(frozen=True)
 class ThemeTokens:
@@ -44,10 +46,14 @@ TOKENS = ThemeTokens()
 def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
     """Return the one app-wide style sheet built from semantic tokens."""
 
+    font_family = (
+        '"Microsoft YaHei UI", "Noto Sans CJK SC", "Noto Sans SC", "Segoe UI"'
+        if current_language() == "zh_CN" else '"Segoe UI Variable", "Segoe UI"'
+    )
     return f"""
     QWidget {{
         color: {tokens.text};
-        font-family: "Segoe UI Variable", "Segoe UI";
+        font-family: {font_family};
         font-size: 14px;
     }}
     QMainWindow, QWidget#appRoot, QScrollArea, QScrollArea > QWidget > QWidget {{

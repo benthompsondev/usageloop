@@ -2,6 +2,8 @@
 
 [![Latest release](https://img.shields.io/github/v/release/benthompsondev/usageloop?sort=semver)](https://github.com/benthompsondev/usageloop/releases/latest) [![Windows and Linux verification](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml/badge.svg)](https://github.com/benthompsondev/usageloop/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 **Plan when your Codex day starts.**
 
 For Codex accounts with a five-hour usage window, the next reset clock normally
@@ -115,6 +117,15 @@ request. Your existing history is available after upgrading.
 This is a record of start attempts, not a list of missed appointments. It does
 not invent entries for pauses, Sync, or time when the app was closed or the PC
 was asleep. A confirmed start does not guarantee that quota is still available.
+
+## Interface language
+
+Choose **Settings → Language** to use English, Simplified Chinese, or the system
+default. Fully exit UsageLoop (including the tray app) and reopen it to apply a
+change. Language settings do not enable automation or alter your schedule.
+Availability depends on the installed version; source builds include this feature.
+
+See [localization development notes](docs/LOCALIZATION.md) to contribute translations.
 
 ## Install
 
