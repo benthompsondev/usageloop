@@ -465,6 +465,7 @@ class MainWindow(QMainWindow):
         weekly_metrics.addWidget(self.weekly_value)
         self.weekly_detail = QLabel()
         self.weekly_detail.setProperty("muted", True)
+        self.weekly_detail.setWordWrap(True)
         weekly_metrics.addWidget(self.weekly_detail, 1, Qt.AlignmentFlag.AlignVCenter)
         weekly_layout.addLayout(weekly_metrics)
         self.weekly_bar = QProgressBar()
@@ -1099,13 +1100,19 @@ class MainWindow(QMainWindow):
                 self.weekly_detail.setText(
                     tr('{0:g}% used · resets {1}').format(codex.weekly_used_percent, weekly_reset)
                 )
-                self.weekly_value.setText(f'{codex.weekly_used_percent:g}%')
-                self.weekly_bar.setValue(int(codex.weekly_used_percent))
+                remaining = 100 - codex.weekly_used_percent
+                self.weekly_value.setText(tr('{0:g}% remaining').format(remaining))
+                self.weekly_bar.setValue(int(remaining))
                 weekly_safe = codex.weekly_used_percent < WEEKLY_PROTECTION_PERCENT
+                reset_passed = codex.weekly_reset_at is not None and codex.weekly_reset_at <= current
+                if reset_passed:
+                    self.weekly_detail.setText(self.weekly_detail.text() + tr(" · Reset passed; sync to update"))
                 self.weekly_status.set_status(
-                    tr("SAFE") if weekly_safe else tr("PROTECTED"),
-                    "success" if weekly_safe else "warning",
+                    tr("PROTECTED") if not weekly_safe else tr("SYNC NEEDED") if reset_passed else tr("SAFE"),
+                    "warning" if not weekly_safe else "neutral" if reset_passed else "success",
                 )
+            self.weekly_bar.setEnabled(codex.weekly_used_percent is not None)
+            self.weekly_bar.setAccessibleName(tr('Weekly allowance  {0}').format(self.weekly_value.text()))
             self._refresh_last_automatic_start(now=current)
             self.schedule_card.fit_wrapped_text()
         self._update_diagnostics(now=current)
