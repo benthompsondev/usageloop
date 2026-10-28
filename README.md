@@ -24,7 +24,7 @@ It does not redeem banked resets, buy credits, or reset an active window or
 your weekly allowance.
 
 **[Download for Windows](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
-· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.3.8/UsageLoop-1.3.8-linux-x86_64.tar.gz)**
+· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.3.9/UsageLoop-1.3.9-linux-x86_64.tar.gz)**
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
@@ -36,7 +36,7 @@ your account has no five-hour window, this scheduling feature does not apply.
 
 ![UsageLoop Weekly routine settings showing weekday and weekend start times and the next scheduled reset](docs/screenshots/settings-weekly-expanded.png)
 
-The dashboard preview uses synthetic usage data from the 1.3.9 candidate.
+The dashboard preview uses synthetic usage data from 1.3.9.
 Other screenshots show earlier versions. Both platforms use the same interface.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
@@ -130,7 +130,7 @@ current reading. An unknown reading is shown as unchecked, never as full quota.
 Choose **Settings → Language** to use English, Simplified Chinese, or the system
 default. Fully exit UsageLoop (including the tray app) and reopen it to apply a
 change. Language settings do not enable automation or alter your schedule.
-Availability depends on the installed version; source builds include this feature.
+Language selection is available in version 1.3.9 and later.
 
 See [localization development notes](docs/LOCALIZATION.md) to contribute translations.
 
@@ -187,15 +187,15 @@ alone would report Codex as missing on a machine that clearly has it.
 
 Download the archive and matching checksum:
 
-- [UsageLoop-1.3.8-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.3.8/UsageLoop-1.3.8-linux-x86_64.tar.gz)
-- [UsageLoop-1.3.8-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.3.8/UsageLoop-1.3.8-linux-x86_64.tar.gz.sha256)
+- [UsageLoop-1.3.9-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.3.9/UsageLoop-1.3.9-linux-x86_64.tar.gz)
+- [UsageLoop-1.3.9-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.3.9/UsageLoop-1.3.9-linux-x86_64.tar.gz.sha256)
 
 From the folder containing both downloads:
 
 ```bash
-sha256sum -c UsageLoop-1.3.8-linux-x86_64.tar.gz.sha256
-tar -xzf UsageLoop-1.3.8-linux-x86_64.tar.gz
-cd UsageLoop-1.3.8-linux-x86_64
+sha256sum -c UsageLoop-1.3.9-linux-x86_64.tar.gz.sha256
+tar -xzf UsageLoop-1.3.9-linux-x86_64.tar.gz
+cd UsageLoop-1.3.9-linux-x86_64
 ./UsageLoop/UsageLoop
 ```
 
@@ -217,8 +217,9 @@ The Dashboard, schedule, Pause, and Recent starts are the same as the Windows
 screenshots above. The startup card names your desktop session, and updates use the Linux archive
 instead of the Windows installer.
 
-The Linux build is newer. I have not yet observed an unattended start on a real
-Linux desktop, so its automatic start path is less proven than Windows.
+The [1.3.4 acceptance record](docs/1.3.4-validation.md) includes a real unattended
+start on Linux. Version 1.3.9 passes Linux CI package checks; a fresh Linux desktop
+GUI/tray check was not performed for this release.
 
 ARM64 is not built yet. Nothing in the app blocks it, it just has not been built
 or tested, so there is no artifact to download.

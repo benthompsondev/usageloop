@@ -1,5 +1,10 @@
 # Maintainer checklist for 1.3.9
 
+Completed release:
+[v1.3.9](https://github.com/benthompsondev/usageloop/releases/tag/v1.3.9). PR #5 is
+merged and the stable assets are published and verified. The checklist below retains the
+release procedure for reference.
+
 Updated after PR #4 merged at `8b5ad0a`. Localization and its correction are
 already on main with hefengq's original commit and credit preserved. The steps
 below concern only the remaining release candidate.

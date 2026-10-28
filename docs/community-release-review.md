@@ -1,5 +1,11 @@
 # 1.3.9 release candidate review
 
+Published October 28, 2026:
+[v1.3.9](https://github.com/benthompsondev/usageloop/releases/tag/v1.3.9). PR #5 merged
+at `c178500b`; final-main CI passed all 20 jobs. The Windows 1.3.8 upgrade preserved
+synthetic settings/history, and all four public asset downloads matched the CI
+checksums. The remaining sections are the earlier preparation record.
+
 Updated October 28, 2026 after PR #4 merged. This release candidate remains local;
 no branch push, new PR, workflow approval or release is authorized by this step.
 
