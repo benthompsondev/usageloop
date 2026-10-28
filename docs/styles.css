@@ -413,6 +413,20 @@ h2 {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
 }
 
+.update-preview {
+  margin: 0;
+}
+
+.language-note strong {
+  color: var(--accent);
+}
+
+.update-preview figcaption {
+  margin-top: 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
 .lightbox {
   width: 100vw;
   max-width: none;

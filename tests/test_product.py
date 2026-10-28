@@ -211,7 +211,7 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertIn("**Plan when your Codex day starts.**", readme)
         self.assertIn(example, readme.replace("\n", " "))
         self.assertIn("UsageLoop does not add quota or bypass limits", readme)
-        self.assertEqual(1, readme.count("docs/screenshots/dashboard.png"))
+        self.assertEqual(1, readme.count("docs/screenshots/1.4.0/public/en-dashboard.png"))
         self.assertIn("Consider starring the repository", readme)
 
     def test_readme_documents_every_schedule_mode_the_app_offers(self) -> None:
@@ -229,7 +229,7 @@ class ProductMetadataTests(unittest.TestCase):
             self.assertIn(mode, flat)
         self.assertIn("## Set your weekly routine", readme)
         self.assertEqual(
-            1, readme.count("docs/screenshots/settings-weekly-expanded.png")
+            1, readme.count("docs/screenshots/1.4.0/public/en-settings-weekly-expanded.png")
         )
         for weekly_term in ("Apply Mon", "Customize individual days", "Next routine"):
             self.assertIn(weekly_term, flat)
@@ -242,8 +242,8 @@ class ProductMetadataTests(unittest.TestCase):
         self.assertNotIn("quota tracker", index)
         self.assertIn("Plan when your Codex day starts.", index)
         self.assertIn('id="weekly"', index)
-        self.assertIn("screenshots/settings-weekly-expanded.png", index)
-        self.assertIn("screenshots/dashboard-1600x900.png", index)
+        self.assertIn("screenshots/1.4.0/public/en-settings-weekly-expanded.png", index)
+        self.assertIn("screenshots/1.4.0/public/en-dashboard.png", index)
         for weekly_term in ("Apply Mon", "Customize individual days", "Next routine"):
             self.assertIn(weekly_term, index)
         self.assertIn("does not add quota or bypass limits", index)

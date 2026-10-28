@@ -38,10 +38,11 @@ with UsageLoop running, for a scheduled start. The Windows installer is unsigned
 [check the download and SmartScreen guidance](#windows) before running it. If
 your account has no five-hour window, this scheduling feature does not apply.
 
-![UsageLoop Weekly routine settings showing weekday and weekend start times and the next scheduled reset](docs/screenshots/settings-weekly-expanded.png)
+![UsageLoop 1.4.0 Weekly routine settings showing weekday and weekend start times and the next scheduled reset](docs/screenshots/1.4.0/public/en-settings-weekly-expanded.png)
 
-The dashboard preview uses synthetic usage data from 1.3.9.
-Other screenshots show earlier versions. Both platforms use the same interface.
+These are real 1.4.0 application captures using synthetic data. Windows captures
+use native Qt rendering; the Linux Settings capture comes from X11/Xvfb in CI.
+No installed user data or live Codex requests were used.
 
 - Native x64 Windows and Linux builds with a quiet system tray mode
 - Free and open source under the MIT license
@@ -111,7 +112,7 @@ Open **Recent starts** from the Dashboard or tray to see the last ten window-sta
 attempts. Each entry shows when it happened, whether it was automatic or a manual
 first start, and whether Codex confirmed the new reset clock.
 
-![Recent starts showing a confirmed start and an earlier unconfirmed attempt](docs/screenshots/recent-starts.png)
+![UsageLoop 1.4.0 Recent starts showing a confirmed start and an earlier unconfirmed attempt](docs/screenshots/1.4.0/public/en-recent-starts.png)
 
 An uncertain outcome stays **Not confirmed**, with an explanation of why
 UsageLoop will not retry it. **Not sent** means no start request reached Codex.
@@ -220,11 +221,11 @@ no root, touches no system files, and changes no `PATH`:
 `./install.sh --uninstall` removes the app, its launcher, and any autostart
 entry. It leaves your settings and start history alone.
 
-![UsageLoop Settings on Linux showing the Linux startup card with a per-user autostart toggle](docs/screenshots/settings-linux.png)
+![UsageLoop 1.4.0 Settings on Linux showing language selection and automation controls, captured under X11/Xvfb](docs/screenshots/1.4.0/public/settings-linux.png)
 
-The Dashboard, schedule, Pause, and Recent starts are the same as the Windows
-screenshots above. The startup card names your desktop session, and updates use the Linux archive
-instead of the Windows installer.
+The Linux capture shows the same language and automation controls as Windows.
+Further down Settings, the startup card names your desktop session. Updates use
+the Linux archive instead of the Windows installer.
 
 The [1.3.4 acceptance record](docs/1.3.4-validation.md) includes a real unattended
 start on Linux. Version 1.4.0 checks the packaged multilingual UI under X11/Xvfb
@@ -274,7 +275,7 @@ five hours of continuous model work. The weekly limit still applies. OpenAI
 controls these limits, and account behavior can change; check the limits your
 Codex app actually shows.
 
-![UsageLoop dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/dashboard.png)
+![UsageLoop 1.4.0 dashboard showing an active five-hour window and the next scheduled action](docs/screenshots/1.4.0/public/en-dashboard.png)
 
 The dashboard shows:
 

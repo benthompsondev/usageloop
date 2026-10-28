@@ -29,7 +29,7 @@ body:
     attributes:
       label: Versions (if known)
       description: UsageLoop version from About, Windows version or Linux distribution, and Codex version if available. No account details needed.
-      placeholder: "UsageLoop 1.3.4; Windows 11 or Ubuntu 24.04; Codex version if known"
+      placeholder: "UsageLoop 1.4.0; Windows 11 or Ubuntu 24.04; Codex version if known"
   - type: textarea
     id: anything_else
     attributes:
