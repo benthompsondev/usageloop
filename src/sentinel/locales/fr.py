@@ -336,7 +336,7 @@ MESSAGES = {
     "Start blocked while Codex reconnects. Next check ": "Démarrage bloqué pendant la reconnexion à Codex. Prochaine vérification ",
     "Start could not be confirmed · No retry": "Démarrage non confirmé · Aucun nouvel essai",
     "Start in the tray when you sign in to Windows. Applies to your account only, needs no administrator rights, and is off until you turn it on.": "Démarre dans la zone de notification à l’ouverture de session Windows. Concerne votre compte uniquement, sans droits administrateur, et reste désactivé jusqu’à votre activation.",
-    "Start my first window now": "Démarrer ma première fenêtre",
+    "Start my first window now": "Démarrer ma première fenêtre maintenant",
     "Start my first window now?": "Démarrer ma première fenêtre maintenant ?",
     "Start not confirmed": "Démarrage non confirmé",
     "Start not verified; no retry": "Démarrage non vérifié ; aucun nouvel essai",

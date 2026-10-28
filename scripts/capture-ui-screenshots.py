@@ -201,9 +201,9 @@ def main() -> int:
                         window.update_panel.action_button.setText(tr("Install update" if window.is_windows else "Install and restart"))
                     window.show_page(2)
                     save(window, args.output / f"about-{state}-{width}x{height}.png", app)
-            dialog = QMessageBox(QMessageBox.Icon.Question, tr("Install {0} update?").format("1.4.1"),
+            dialog = QMessageBox(QMessageBox.Icon.Question, tr("Install {0} update?").format(PRODUCT.display_name),
                 tr("The verified installer for version {0} is ready. {1} will close and the normal per-user setup window will open.").format("1.4.1", PRODUCT.display_name)
-                if window.is_windows else tr("Update downloaded, its SHA-256 checksum matched the release, and it unpacked cleanly. Installing will close UsageLoop and reopen it."),
+                if window.is_windows else tr("Version {0} is available.").format("1.4.1") + "\n\n" + tr("Update downloaded, its SHA-256 checksum matched the release, and it unpacked cleanly. Installing will close UsageLoop and reopen it."),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel, window)
             save(dialog, args.output / "install-confirmation.png", app)
             dialog.close()

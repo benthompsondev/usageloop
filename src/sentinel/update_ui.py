@@ -399,7 +399,11 @@ class UpdatePanel(QFrame):
         answer = QMessageBox.question(
             self,
             tr('Install {0} update?').format(PRODUCT.display_name),
-            tr('The verified installer for version {0} is ready. {1} will close and the normal per-user setup window will open.').format(version, PRODUCT.display_name),
+            tr('The verified installer for version {0} is ready. {1} will close and the normal per-user setup window will open.').format(version, PRODUCT.display_name)
+            if self.is_windows else
+            tr("Version {0} is available.").format(version) + "\n\n" +
+            tr("Update downloaded, its SHA-256 checksum matched the release, and it "
+               "unpacked cleanly. Installing will close UsageLoop and reopen it."),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
