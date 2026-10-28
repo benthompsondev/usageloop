@@ -48,7 +48,9 @@ def desktop_stylesheet(tokens: ThemeTokens = TOKENS) -> str:
 
     font_family = (
         '"Microsoft YaHei UI", "Noto Sans CJK SC", "Noto Sans SC", "Segoe UI"'
-        if current_language() == "zh_CN" else '"Segoe UI Variable", "Segoe UI"'
+        if current_language() == "zh_CN" else
+        '"Yu Gothic UI", "Noto Sans CJK JP", "Noto Sans JP", "Meiryo", "Segoe UI"'
+        if current_language() == "ja" else '"Segoe UI Variable", "Segoe UI"'
     )
     return f"""
     QWidget {{

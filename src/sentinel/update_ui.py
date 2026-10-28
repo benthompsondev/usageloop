@@ -121,7 +121,6 @@ class UpdatePanel(QFrame):
         self.notes_label.setProperty("muted", True)
         self.notes_label.setWordWrap(True)
         self.notes_label.setVisible(False)
-        layout.addWidget(self.notes_label)
 
         actions = QHBoxLayout()
         self.action_button = QPushButton(tr("Check for updates"))
@@ -134,6 +133,9 @@ class UpdatePanel(QFrame):
         actions.addWidget(self.dismiss_button)
         actions.addStretch()
         layout.addLayout(actions)
+        # Release notes can be long. Keep the next action above them, including
+        # at the minimum window height and with translated copy.
+        layout.addWidget(self.notes_label)
 
     def _primary_action(self) -> None:
         if self.state in {"idle", "latest", "error", "no_release"}:
@@ -170,6 +172,8 @@ class UpdatePanel(QFrame):
         self.action_button.setText(tr("Copied"))
 
     def start_check(self) -> None:
+        if self.state not in {"idle", "latest", "error", "no_release"}:
+            return
         self._set_busy("checking", tr("Checking GitHub…"))
         worker = UpdateWorker("check", self.updater.check)
         worker.signals.completed.connect(self._operation_completed)
@@ -177,6 +181,8 @@ class UpdatePanel(QFrame):
         self.thread_pool.start(worker)
 
     def start_model_support_check(self) -> None:
+        if self.state not in {"idle", "latest", "error", "no_release"}:
+            return
         self._checking_model_support = True
         self.start_check()
 
@@ -393,7 +399,11 @@ class UpdatePanel(QFrame):
         answer = QMessageBox.question(
             self,
             tr('Install {0} update?').format(PRODUCT.display_name),
-            tr('The verified installer for version {0} is ready. {1} will close and the normal per-user setup window will open.').format(version, PRODUCT.display_name),
+            tr('The verified installer for version {0} is ready. {1} will close and the normal per-user setup window will open.').format(version, PRODUCT.display_name)
+            if self.is_windows else
+            tr("Version {0} is available.").format(version) + "\n\n" +
+            tr("Update downloaded, its SHA-256 checksum matched the release, and it "
+               "unpacked cleanly. Installing will close UsageLoop and reopen it."),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )

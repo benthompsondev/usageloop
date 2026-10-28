@@ -38,7 +38,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
-            libxcb-shape0 libxcb-xinerama0 desktop-file-utils
+            libxcb-shape0 libxcb-xinerama0 desktop-file-utils fonts-noto-cjk
       - name: Install
         run: python -m pip install --editable ".[test]"
       - name: Test
@@ -59,7 +59,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libegl1 libxkbcommon-x11-0 libxcb-cursor0 desktop-file-utils
+            libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 desktop-file-utils fonts-noto-cjk xvfb xauth
       - name: Install build tools
         run: python -m pip install --editable ".[build]"
       - name: Build Linux package
@@ -78,6 +80,72 @@ jobs:
           test -x "$XDG_DATA_HOME/usageloop/UsageLoop"
           (cd "$root" && ./install.sh --uninstall)
           test ! -e "$XDG_DATA_HOME/applications/usageloop.desktop"
+      - name: Upgrade published Linux 1.3.9 without changing user state
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp -d "$RUNNER_TEMP/usageloop-upgrade139.XXXXXX")"
+          export XDG_DATA_HOME="$fixture/data"
+          export XDG_CONFIG_HOME="$fixture/config"
+          export XDG_STATE_HOME="$fixture/state"
+          old="UsageLoop-1.3.9-linux-x86_64.tar.gz"
+          url="https://github.com/benthompsondev/usageloop/releases/download/v1.3.9"
+          curl --fail --location "$url/$old" --output "$fixture/$old"
+          curl --fail --location "$url/$old.sha256" --output "$fixture/$old.sha256"
+          (cd "$fixture" && sha256sum --check "$old.sha256")
+          tar -xzf "$fixture/$old" -C "$fixture"
+          (cd "$fixture/UsageLoop-1.3.9-linux-x86_64" && ./install.sh)
+          test -x "$XDG_DATA_HOME/usageloop/UsageLoop"
+          mkdir -p "$XDG_STATE_HOME/usageloop"
+          python - <<'PY'
+          from sentinel.app_state import AppSettings, AppStateStore
+          from sentinel.history import SafeHistory
+          from sentinel.i18n import save_language
+          AppStateStore().save(AppSettings(automation_enabled=True, start_with_windows=True,
+              first_run_complete=True, schedule_mode="daily", daily_start_hour=6,
+              daily_start_minute=45), {})
+          SafeHistory().record_error("linux_upgrade139_synthetic")
+          save_language("zh_CN")
+          PY
+          test -x "$XDG_DATA_HOME/usageloop/UsageLoop"
+          sha256sum "$XDG_STATE_HOME/usageloop/app-state.json" \
+            "$XDG_STATE_HOME/usageloop/sentinel.jsonl" \
+            "$XDG_CONFIG_HOME/UsageLoop/UsageLoop.conf" > "$fixture/state-before.sha256"
+          root="$(find dist/linux -maxdepth 1 -mindepth 1 -type d | head -1)"
+          (cd "$root" && ./install.sh)
+          sha256sum --check "$fixture/state-before.sha256"
+          cmp "$root/UsageLoop/UsageLoop" "$XDG_DATA_HOME/usageloop/UsageLoop"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from sentinel.app_state import AppStateStore
+          from sentinel.i18n import language_preference
+          state = AppStateStore().load()
+          assert state.automation_enabled and state.start_with_windows
+          assert state.schedule_mode == "daily"
+          assert (state.daily_start_hour, state.daily_start_minute) == (6, 45)
+          assert language_preference() == "zh_CN"
+          evidence = Path("artifacts/linux-packaged-ui")
+          evidence.mkdir(parents=True, exist_ok=True)
+          (evidence / "upgrade139.json").write_text(json.dumps({"from": "1.3.9",
+              "to": "1.4.0", "state_history_language_unchanged": True,
+              "automation_enabled_preserved": True, "language": "zh_CN",
+              "production_app_started": False}, indent=2))
+          PY
+          (cd "$root" && ./install.sh --uninstall)
+          sha256sum --check "$fixture/state-before.sha256"
+      - name: Open actual packaged pages in all languages under X11
+        run: |
+          set -euo pipefail
+          root="$(find dist/linux -maxdepth 1 -mindepth 1 -type d | head -1)"
+          QT_QPA_PLATFORM=xcb xvfb-run -a -s '-screen 0 1600x1000x24' \
+            "$root/UsageLoop/UsageLoop" --ui-acceptance artifacts/linux-packaged-ui
+          python -c 'import json; r=json.load(open("artifacts/linux-packaged-ui/acceptance.json")); assert r["passed"] and r["qt_platform"] == "xcb"; assert r["languages"][-1]["japanese_glyphs"] > 0'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-ui-evidence
+          path: artifacts/linux-packaged-ui/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: linux-package
@@ -114,7 +182,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [fresh, "0.9.1", "1.0.0", "1.0.1", "1.0.2", "1.1.2", "1.1.3", "1.1.4", "1.2.0", "1.3.0", "1.3.2", "1.3.3", "1.3.8", recent-chain, legacy-chain, broken-registration]
+        scenario: [fresh, "0.9.1", "1.0.0", "1.0.1", "1.0.2", "1.1.2", "1.1.3", "1.1.4", "1.2.0", "1.3.0", "1.3.2", "1.3.3", "1.3.8", "1.3.9", recent-chain, legacy-chain, broken-registration]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -141,6 +209,7 @@ jobs:
             '1.3.2' { @('1.3.2') }
             '1.3.3' { @('1.3.3') }
             '1.3.8' { @('1.3.8') }
+            '1.3.9' { @('1.3.9') }
             'recent-chain' { @('1.1.2', '1.1.3', '1.1.4') }
             'broken-registration' { @('1.0.2') }
             'legacy-chain' { @('0.9.1', '1.0.0', '1.0.1') }
@@ -150,6 +219,15 @@ jobs:
             Invoke-WebRequest `
               -Uri "https://github.com/benthompsondev/usageloop/releases/download/v$version/UsageLoop-Setup.exe" `
               -OutFile "$env:RUNNER_TEMP\UsageLoop-Setup-$version.exe"
+            if ($version -eq '1.3.9') {
+              Invoke-WebRequest `
+                -Uri "https://github.com/benthompsondev/usageloop/releases/download/v$version/UsageLoop-Setup.exe.sha256" `
+                -OutFile "$env:RUNNER_TEMP\UsageLoop-Setup-$version.exe.sha256"
+              $expected = (Get-Content "$env:RUNNER_TEMP\UsageLoop-Setup-$version.exe.sha256" -Raw).Split(' ')[0].Trim()
+              if ((Get-FileHash "$env:RUNNER_TEMP\UsageLoop-Setup-$version.exe" -Algorithm SHA256).Hash -ne $expected) {
+                throw 'Published 1.3.9 installer checksum mismatch.'
+              }
+            }
           }
       - name: Verify Windows installation integration
         run: |
@@ -166,6 +244,7 @@ jobs:
             '1.3.2' { @('1.3.2') }
             '1.3.3' { @('1.3.3') }
             '1.3.8' { @('1.3.8') }
+            '1.3.9' { @('1.3.9') }
             'recent-chain' { @('1.1.2', '1.1.3', '1.1.4') }
             'broken-registration' { @('1.0.2') }
             'legacy-chain' { @('0.9.1', '1.0.0', '1.0.1') }

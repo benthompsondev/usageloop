@@ -1,5 +1,6 @@
 """Language fallback, persistence, dynamic copy and automation invariants."""
 from dataclasses import replace
+import ast
 import os
 from pathlib import Path
 from datetime import datetime
@@ -72,6 +73,51 @@ class LocalizationTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertTrue(translated)
                 self.assertEqual(fields(source), fields(translated))
+
+    def test_literal_translation_calls_have_catalogue_entries(self):
+        def literals(node):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                yield node.value
+            elif isinstance(node, ast.IfExp):
+                yield from literals(node.body)
+                yield from literals(node.orelse)
+
+        missing = []
+        for path in Path(i18n.__file__).parent.glob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == "tr" and node.args):
+                    for source in literals(node.args[0]):
+                        if source and not source.isdigit() and source not in i18n.ZH_CN:
+                            missing.append((path.name, node.lineno, source))
+        self.assertEqual([], missing)
+
+    def test_formatted_update_errors_are_translated_before_values_are_inserted(self):
+        from urllib.error import HTTPError
+        from sentinel.updates import GitHubReleaseUpdater, UpdateError, parse_release
+        from test_updates import release_payload
+
+        def unavailable(_request, _timeout):
+            raise HTTPError("https://example.invalid", 503, "unavailable", {}, None)
+
+        with self.assertRaises(UpdateError) as error:
+            GitHubReleaseUpdater(opener=unavailable).check()
+        self.assertIn("503", str(error.exception))
+        self.assertNotIn("GitHub replied with", str(error.exception))
+        for windows, platforms in ((True, ("windows",)), (False, ("linux",))):
+            with self.subTest(windows=windows), self.assertRaises(UpdateError) as error:
+                parse_release(release_payload(version="1.4.1", include_checksum=False,
+                                              platforms=platforms),
+                              installed_version="1.4.0", windows=windows)
+            self.assertNotIn("The release is missing", str(error.exception))
+
+    def test_linux_archive_rejection_is_translated_without_changing_the_guard(self):
+        from sentinel.linux_update import LinuxUpdateError, _safe_member_path
+        with self.assertRaises(LinuxUpdateError) as error:
+            _safe_member_path("../outside")
+        self.assertNotIn("The downloaded archive was rejected", str(error.exception))
+        self.assertNotIn("it tried to write", str(error.exception))
 
     def test_ui_and_language_choice_do_not_start_requests_or_modify_schedule(self):
         state = ProviderViewState.waiting("codex", "Codex", installed=True)

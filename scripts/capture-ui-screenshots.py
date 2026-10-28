@@ -8,15 +8,16 @@ import os
 from datetime import datetime
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
-from PySide6.QtCore import QTime, Qt
-from PySide6.QtWidgets import QApplication, QDateTimeEdit, QScrollArea, QWidget
+from PySide6.QtCore import QSettings, QTime, Qt
+from PySide6.QtWidgets import QApplication, QDateTimeEdit, QMessageBox, QScrollArea, QWidget
 
 from sentinel.app_controller import ApplicationController
 from sentinel.app_state import AppStateStore, ProviderViewState
 from sentinel.desktop import MainWindow
 from sentinel.history import SafeHistory
-from sentinel.i18n import configure_language
+from sentinel.i18n import configure_language, tr
 from sentinel.product import PRODUCT
 from sentinel.providers import CompatibilityResult
 from sentinel.updates import ReleaseAsset, ReleaseInfo, UpdateCheckResult
@@ -73,6 +74,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
     parser.add_argument("--interactive", action="store_true", help="Keep the synthetic app open; no provider traffic.")
+    parser.add_argument("--updates-only", action="store_true", help="Capture About updates at multiple sizes and the revised Settings page.")
+    parser.add_argument("--guarded-clock", action="store_true", help="Preview a running clock alongside an unconfirmed earlier start.")
+    parser.add_argument("--language-review", action="store_true", help="Capture translated pages, update states and confirmation dialogs.")
     parser.add_argument(
         "--platform",
         choices=("Windows", "Linux"),
@@ -100,7 +104,6 @@ def main() -> int:
         )
     args.output.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
-    configure_language()
     app.setStyle("Fusion")
     # Keep public screenshots stable between runs while expressing the fixture
     # in local time, just like the desktop UI does.
@@ -110,10 +113,23 @@ def main() -> int:
         "codex-runtime", "0.96.0", int(now + 3 * 3600 + 42 * 60), now - 60,
         "Anchor verified", 18, now - 60, 34, int(now + 4 * 24 * 3600),
     )
-    with tempfile.TemporaryDirectory() as directory:
+    if args.guarded_clock or args.language_review:
+        codex = replace(codex, last_action="ANCHOR_NOT_VERIFIED", outcome_category="GUARDED",
+                        quota_state="ANCHORED")
+    with tempfile.TemporaryDirectory() as directory, \
+            patch("sentinel.i18n.QSettings") as settings_factory:
+        # Language controls in the preview must never save over the installed
+        # app's preferences, even when the interactive harness is used.
+        preferences = QSettings(str(Path(directory) / "language.ini"), QSettings.Format.IniFormat)
+        preferences.setValue("language", os.environ.get("USAGELOOP_LANGUAGE", "system"))
+        settings_factory.return_value = preferences
+        settings_factory.Status = QSettings.Status
+        configure_language()
         provider = PreviewProvider(codex)
         provider.history = SafeHistory(Path(directory) / "history.jsonl")
         for offset, outcome in ((-86400, "failed_guarded"), (-3 * 3600, "verified")):
+            if args.guarded_clock or args.language_review:
+                outcome = "failed_guarded"
             attempt = provider.history.reserve_trigger(
                 mode="rollover", idempotency_key=f"preview:{abs(offset)}", boundary_reset_at=None,
                 model="gpt-5.6-luna", reasoning_effort="low", now=now + offset,
@@ -153,20 +169,88 @@ def main() -> int:
             window.resize(1040, 750)
             window.show()
             return app.exec()
+        if args.language_review:
+            for width, height in ((720, 560), (1366, 768)):
+                window.resize(width, height)
+                window.refresh_clock(now=now)
+                window.show_page(0)
+                save(window, args.output / f"dashboard-{width}x{height}.png", app)
+                window.show_page(1)
+                save(window, args.output / f"settings-{width}x{height}.png", app)
+                for mode in ("daily", "weekly"):
+                    window.schedule_mode.setCurrentIndex(window.schedule_mode.findData(mode))
+                    window.weekly_custom_days.toggle.setChecked(mode == "weekly")
+                    window.refresh_clock(now=now)
+                    for _ in range(4): app.processEvents()
+                    settings_page = window.pages.widget(1)
+                    settings_page.ensureWidgetVisible(window.daily_time_row if mode == "daily" else window.weekly_group_cards[0], 10, 20)
+                    save(window, args.output / f"{mode}-{width}x{height}.png", app)
+                window.show_page(2)
+                for state in ("idle", "available", "error", "downloaded"):
+                    window.update_panel.reset()
+                    if state == "available":
+                        window.update_panel._operation_completed("check", UpdateCheckResult("update_available", ReleaseInfo(
+                            "1.4.1", (tr("Updates are easier to find in About."),), PRODUCT.releases_url,
+                            ReleaseAsset("preview", "https://example.invalid/unused"),
+                            ReleaseAsset("preview.sha256", "https://example.invalid/unused"))))
+                    elif state == "error":
+                        window.update_panel._operation_failed("check", tr("GitHub replied with an error ({0}). Try again later.").format(503))
+                    elif state == "downloaded":
+                        window.update_panel._set_state("downloaded", tr("Installer downloaded and its SHA-256 checksum matched the release.")
+                            if window.is_windows else tr("Update downloaded, its SHA-256 checksum matched the release, and it unpacked cleanly. Installing will close UsageLoop and reopen it."))
+                        window.update_panel.action_button.setText(tr("Install update" if window.is_windows else "Install and restart"))
+                    window.show_page(2)
+                    save(window, args.output / f"about-{state}-{width}x{height}.png", app)
+            dialog = QMessageBox(QMessageBox.Icon.Question, tr("Install {0} update?").format(PRODUCT.display_name),
+                tr("The verified installer for version {0} is ready. {1} will close and the normal per-user setup window will open.").format("1.4.1", PRODUCT.display_name)
+                if window.is_windows else tr("Version {0} is available.").format("1.4.1") + "\n\n" + tr("Update downloaded, its SHA-256 checksum matched the release, and it unpacked cleanly. Installing will close UsageLoop and reopen it."),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel, window)
+            save(dialog, args.output / "install-confirmation.png", app)
+            dialog.close()
+            window.show_recent_starts()
+            save(window.recent_starts_dialog, args.output / "recent-starts.png", app)
+            window.recent_starts_dialog.close()
+            window.close()
+            return 0
+        if args.guarded_clock:
+            window.resize(1366, 900)
+            save(window, args.output / "dashboard-guarded-clock.png", app)
+            window.show_recent_starts()
+            save(window.recent_starts_dialog, args.output / "recent-starts-guarded.png", app)
+            window.recent_starts_dialog.close()
+            (args.output / "technical-summary.txt").write_text(window.diagnostic_text.text(), encoding="utf-8")
+            window.close()
+            return 0
+        if args.updates_only:
+            window.show_page(2)
+            for state in ("idle", "available"):
+                window.update_panel.reset()
+                if state == "available":
+                    window.update_panel._operation_completed("check", UpdateCheckResult(
+                        "update_available", ReleaseInfo(
+                            "1.4.1", (tr("Updates are easier to find in About."),),
+                            PRODUCT.releases_url,
+                            ReleaseAsset("preview", "https://example.invalid/unused"),
+                            ReleaseAsset("preview.sha256", "https://example.invalid/unused"),
+                        ),
+                    ))
+                for width, height in ((720, 560), (1024, 768), (1280, 720),
+                                      (1366, 768), (1600, 900), (1920, 1080)):
+                    window.resize(width, height)
+                    window.show_page(2)
+                    save(window, args.output / f"about-{state}-{width}x{height}.png", app)
+            window.resize(1366, 768)
+            window.show_page(1)
+            save(window, args.output / "settings-1366x768.png", app)
+            window.close()
+            return 0
         if args.platform == "Linux":
-            # Only Settings and About differ on Linux: the startup card names
-            # the session and the Windows-only updater is replaced by a notice.
-            # Every other page is the same UI, so it stays one set of images.
+            # Settings names the Linux session; About uses the Linux updater.
             window.resize(1366, 768)
             window.show_page(1)
             save(window, args.output / "settings-linux.png", app)
-            settings = window.pages.widget(1)
-            if isinstance(settings, QScrollArea):
-                settings.verticalScrollBar().setValue(
-                    settings.verticalScrollBar().maximum()
-                )
-            save(window, args.output / "updates-linux.png", app)
             window.show_page(2)
+            save(window, args.output / "updates-linux.png", app)
             save(window, args.output / "about-linux.png", app)
             window.close()
             return 0
@@ -234,21 +318,19 @@ def main() -> int:
         save(window, args.output / "settings-weekly-expanded-1024x768.png", app)
         window.weekly_custom_days.toggle.setChecked(False)
         release = ReleaseInfo(
-            "1.2.0",
+            "1.4.1",
             (
                 "UsageLoop now keeps working safely if its local state files become unreadable.",
                 "Daily start times are checked before they are saved.",
             ),
-            "https://github.com/example/usage-loop/releases/tag/v1.2.0",
+            "https://example.invalid/preview",
             ReleaseAsset(PRODUCT.installer_filename, "https://github.com/example/installer"),
             ReleaseAsset(PRODUCT.checksum_filename, "https://github.com/example/checksum"),
         )
         window.update_panel._operation_completed(
             "check", UpdateCheckResult("update_available", release)
         )
-        settings = window.pages.widget(1)
-        if isinstance(settings, QScrollArea):
-            settings.verticalScrollBar().setValue(settings.verticalScrollBar().maximum())
+        window.show_page(2)
         save(window, args.output / "updates.png", app)
 
         window.show_page(2)

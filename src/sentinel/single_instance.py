@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from ctypes import wintypes
 
-from PySide6.QtCore import QIODevice, QObject, Signal
+from PySide6.QtCore import QIODevice, QObject, Signal, Slot
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 from .host import xdg_home, xdg_runtime_dir
@@ -174,11 +174,23 @@ class ActivationChannel(QObject):
                 continue
             self._clients.add(socket)
             self._buffers[socket] = b""
-            socket.readyRead.connect(lambda current=socket: self._read(current))
-            socket.disconnected.connect(
-                lambda current=socket: self._discard(current)
-            )
+            # Context-bound Qt slots avoid closures retaining both the socket
+            # and its owner across deferred C++ deletion and Python collection.
+            socket.readyRead.connect(self._read_sender)
+            socket.disconnected.connect(self._discard_sender)
             self._read(socket)
+
+    @Slot()
+    def _read_sender(self) -> None:
+        socket = self.sender()
+        if isinstance(socket, QLocalSocket):
+            self._read(socket)
+
+    @Slot()
+    def _discard_sender(self) -> None:
+        socket = self.sender()
+        if isinstance(socket, QLocalSocket):
+            self._discard(socket)
 
     def _read(self, socket: QLocalSocket) -> None:
         payload = self._buffers.get(socket, b"") + bytes(socket.readAll())

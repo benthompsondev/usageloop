@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', '1.1.2', '1.1.3', '1.1.4', '1.2.0', '1.3.0', '1.3.2', '1.3.3', '1.3.8', 'recent-chain', 'legacy-chain', 'broken-registration')]
+    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', '1.1.2', '1.1.3', '1.1.4', '1.2.0', '1.3.0', '1.3.2', '1.3.3', '1.3.8', '1.3.9', 'recent-chain', 'legacy-chain', 'broken-registration')]
     [string]$Scenario = 'fresh',
     [string[]]$PreviousInstallers = @(),
     [switch]$SkipDesktopActivation
@@ -21,6 +21,7 @@ $stateDir = Join-Path $env:LOCALAPPDATA $product.app_data_folder
 $stateFile = Join-Path $stateDir 'app-state.json'
 $historyFile = Join-Path $stateDir 'sentinel.jsonl'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$languageKey = 'HKCU:\Software\UsageLoop\UsageLoop'
 $appId = $product.app_id.Trim('{}')
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{$appId}_is1"
 $shortcutDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$($product.display_name)"
@@ -33,7 +34,8 @@ $evidenceDir = Join-Path $repoRoot 'artifacts\install-acceptance'
 if ((Test-Path -LiteralPath $canonicalDir) -or
     (Test-Path -LiteralPath $legacyDir) -or
     (Test-Path -LiteralPath $stateDir) -or
-    (Test-Path -LiteralPath $uninstallKey)) {
+    (Test-Path -LiteralPath $uninstallKey) -or
+    (Test-Path -LiteralPath $languageKey)) {
     throw 'Use a disposable Windows environment with no existing UsageLoop installation or state.'
 }
 New-Item -ItemType Directory -Path $evidenceDir -Force | Out-Null
@@ -135,6 +137,13 @@ function Assert-IconResource([string]$Path) {
 if (-not (Test-Path -LiteralPath $installer)) {
     throw "Required build artifact is missing: $installer"
 }
+$checksumText = (Get-Content -LiteralPath (Join-Path $repoRoot "dist\$($product.checksum_filename)") -Raw).Trim()
+$checksumMatch = [regex]::Match($checksumText, '^([0-9a-fA-F]{64})\s+\*?(.+)$')
+if (-not $checksumMatch.Success -or $checksumMatch.Groups[2].Value -ne $product.installer_filename -or
+    (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $checksumMatch.Groups[1].Value) {
+    throw 'Candidate installer checksum or asset name mismatch.'
+}
+Write-Output 'Candidate installer checksum and asset name verified.'
 
 New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
 @'
@@ -153,6 +162,11 @@ New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
   "providers": {}
 }
 '@ | Set-Content -LiteralPath $stateFile -Encoding utf8
+# Exercise an enabled preference without ever starting its real scheduler.
+if ($Scenario -eq '1.3.9') {
+    (Get-Content -LiteralPath $stateFile -Raw).Replace('"automation_enabled": false', '"automation_enabled": true') |
+        Set-Content -LiteralPath $stateFile -Encoding utf8
+}
 ('{"event":"error","timestamp":"2026-01-01T00:00:00Z","sentinel_version":"0.9.1","category":"' + $fixtureMarker + '"}') |
     Set-Content -LiteralPath $historyFile -Encoding ascii
 
@@ -163,6 +177,10 @@ if ($Scenario -eq '0.9.1' -or $Scenario -eq 'legacy-chain') {
 foreach ($previous in $PreviousInstallers) {
     Invoke-Installer $previous
 }
+
+# 1.3.9 supports Chinese. This preference is separate from app-state.json.
+New-Item -Path $languageKey -Force | Out-Null
+New-ItemProperty -LiteralPath $languageKey -Name language -Value 'zh_CN' -PropertyType String -Force | Out-Null
 
 $savedStateHash = (Get-FileHash -LiteralPath $stateFile -Algorithm SHA256).Hash
 $savedHistoryHash = (Get-FileHash -LiteralPath $historyFile -Algorithm SHA256).Hash
@@ -207,6 +225,10 @@ if ((Get-FileHash -LiteralPath $stateFile -Algorithm SHA256).Hash -ne $savedStat
     throw 'The installer changed existing UsageLoop state or history bytes.'
 }
 Write-Output 'Existing UsageLoop state and history preserved byte-for-byte.'
+if ((Get-ItemProperty -LiteralPath $languageKey -Name language).language -ne 'zh_CN') {
+    throw 'The selected language was not preserved through upgrade.'
+}
+Write-Output 'Selected language preserved: zh_CN.'
 
 if (-not (Test-Path -LiteralPath $canonicalExe)) { throw 'Canonical executable was not installed.' }
 if (Test-Path -LiteralPath $legacyDir) { throw 'Legacy install directory was not removed.' }
@@ -265,7 +287,7 @@ if ($PreviousInstallers.Count -gt 0) {
 }
 
 $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
-if ($state.settings.automation_enabled -ne $false) { throw 'Automation setting was not preserved.' }
+if ($state.settings.automation_enabled -ne ($Scenario -eq '1.3.9')) { throw 'Automation setting was not preserved.' }
 if ($state.settings.start_with_windows -ne $true) { throw 'Startup preference was not preserved.' }
 if ($state.settings.schedule_mode -ne 'daily') { throw 'Daily schedule mode was not preserved.' }
 if ($state.settings.daily_start_hour -ne 6 -or $state.settings.daily_start_minute -ne 45) {
@@ -273,6 +295,30 @@ if ($state.settings.daily_start_hour -ne 6 -or $state.settings.daily_start_minut
 }
 if (-not (Select-String -LiteralPath $historyFile -Pattern $fixtureMarker -Quiet)) {
     throw 'Safe history was not preserved.'
+}
+
+if ($Scenario -in @('fresh', '1.3.9')) {
+    $uiEvidence = Join-Path $evidenceDir 'packaged-ui'
+    $env:QT_QPA_PLATFORM = 'offscreen'
+    $acceptance = Start-Process -FilePath $canonicalExe -WindowStyle Hidden -PassThru -ArgumentList @(
+        '--ui-acceptance', ('"{0}"' -f $uiEvidence)
+    )
+    if (-not $acceptance.WaitForExit(120000)) {
+        Stop-Process -Id $acceptance.Id -Force
+        throw 'Packaged UI acceptance timed out.'
+    }
+    if ($acceptance.ExitCode -ne 0) { throw 'Packaged UI acceptance failed. See acceptance.json.' }
+    $uiResult = Get-Content -LiteralPath (Join-Path $uiEvidence 'acceptance.json') -Raw | ConvertFrom-Json
+    if (-not $uiResult.passed -or $uiResult.languages.Count -ne 6) { throw 'Incomplete packaged UI acceptance.' }
+    Write-Output "Actual installed MainWindow accepted in all six languages ($($uiResult.qt_platform))."
+}
+
+# The enabled preference has already been verified byte-for-byte. Disable only
+# this synthetic fixture before the normal shortcut launch, preventing traffic.
+if ($Scenario -eq '1.3.9') {
+    $state.settings.automation_enabled = $false
+    $state | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $stateFile -Encoding utf8
+    Write-Output 'Disabled the synthetic automation fixture before normal app launch.'
 }
 
 $env:QT_QPA_PLATFORM = 'offscreen'

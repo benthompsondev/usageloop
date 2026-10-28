@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, tzinfo
 import re
 import time
 
-from PySide6.QtCore import QLocale, QPointF, QSize, QTime, Qt
+from PySide6.QtCore import QPointF, QSize, QTime, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractSpinBox, QCheckBox, QFrame, QHBoxLayout, QLabel, QProgressBar,
@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .i18n import current_language, format_datetime, tr
+from .i18n import format_datetime, tr, ui_locale
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
 from .history import SafeHistory, HistoryStateError
@@ -86,7 +86,7 @@ class TimeEntry(QTimeEdit):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(value or QTime(0, 0), parent)
-        self.setLocale(QLocale("zh_CN" if current_language() == "zh_CN" else "en_US"))
+        self.setLocale(ui_locale())
         self.setDisplayFormat(tr("h:mm AP"))
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.setAccelerated(True)

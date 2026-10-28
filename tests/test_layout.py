@@ -316,7 +316,7 @@ class SettingsSurfaceTests(unittest.TestCase):
         for _ in range(4):
             self.app.processEvents()
 
-    def test_consumer_settings_show_automation_schedule_startup_and_updates(self):
+    def test_consumer_settings_show_automation_schedule_and_startup(self):
         self.assertEqual(
             "Keep my 5-hour windows ready", self.window.automation_title_label.text()
         )
@@ -325,18 +325,17 @@ class SettingsSurfaceTests(unittest.TestCase):
             self.window.schedule_mode.currentText(),
         )
         self.assertIsNotNone(self.window.startup_toggle)
-        self.assertEqual("Check for updates", self.window.update_panel.action_button.text())
+        self.assertFalse(self.window.update_panel.isVisible())
 
     def test_settings_groups_related_cards_into_balanced_columns(self):
         self.assertEqual(2, self.window.settings_top_row.layout().count())
-        self.assertEqual(2, self.window.settings_bottom_row.layout().count())
         for width, height in ((1024, 768), (1366, 768)):
             with self.subTest(size=f"{width}x{height}"):
                 self.window.resize(width, height)
                 self.app.processEvents()
                 for row in (
                     self.window.settings_top_row,
-                    self.window.settings_bottom_row,
+                    self.window.settings_connection_card,
                 ):
                     self.assertLessEqual(
                         row.width(), self.window.pages.widget(1).viewport().width()
@@ -381,9 +380,8 @@ class SettingsSurfaceTests(unittest.TestCase):
         self.assertTrue(self.window.weekly_custom_days.body.isHidden())
         self.assertTrue(self.window.weekly_preview_card.isVisible())
 
-    def test_updates_and_advanced_cards_use_content_height(self):
-        for index in range(self.window.settings_bottom_row.layout().count()):
-            widget = self.window.settings_bottom_row.layout().itemAt(index).widget()
+    def test_connection_and_update_cards_use_content_height(self):
+        for widget in (self.window.settings_connection_card, self.window.update_panel):
             self.assertEqual(
                 QSizePolicy.Policy.Maximum,
                 widget.sizePolicy().verticalPolicy(),
@@ -423,11 +421,12 @@ class LinuxSettingsSurfaceTests(unittest.TestCase):
         for _ in range(4):
             self.app.processEvents()
 
-    def test_settings_keeps_two_balanced_rows_with_the_linux_updater(self):
+    def test_linux_updates_move_to_about_and_settings_keeps_related_controls(self):
         self.assertIsNotNone(self.window.update_panel)
         self.assertFalse(self.window.update_panel.is_windows)
         self.assertEqual(2, self.window.settings_top_row.layout().count())
-        self.assertEqual(2, self.window.settings_bottom_row.layout().count())
+        self.assertFalse(self.window.update_panel.isVisible())
+        self.assertTrue(self.window.pages.widget(2).isAncestorOf(self.window.update_panel))
 
     def test_startup_control_is_named_for_the_linux_session(self):
         self.assertEqual(
@@ -442,7 +441,7 @@ class LinuxSettingsSurfaceTests(unittest.TestCase):
                     self.app.processEvents()
                 for row in (
                     self.window.settings_top_row,
-                    self.window.settings_bottom_row,
+                    self.window.settings_connection_card,
                 ):
                     # A word-wrapped label's preferred width is not its
                     # rendered width, and varies with the host's fonts.

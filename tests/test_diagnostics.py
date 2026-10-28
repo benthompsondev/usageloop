@@ -233,6 +233,13 @@ class SummaryTests(unittest.TestCase):
 
 
 class TechnicalSummaryTests(unittest.TestCase):
+    def test_summary_keeps_window_evidence_separate_from_start_outcome(self):
+        text = technical_summary({"codex": state(
+            quota_state="ANCHORED", last_action="ANCHOR_NOT_VERIFIED",
+        )}, AppSettings())
+        self.assertIn("Quota state: ANCHORED", text)
+        self.assertIn("Last start outcome: ANCHOR_NOT_VERIFIED", text)
+
     def test_summary_reports_sanitized_persistence_failure(self):
         text = technical_summary(
             {"codex": state()},

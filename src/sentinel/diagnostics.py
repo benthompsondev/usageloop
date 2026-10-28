@@ -310,6 +310,8 @@ def technical_summary(
                 f"  Compatibility: {compatibility}",
                 f"  Raw state: {state.status}",
                 f"  Outcome category: {state.outcome_category or 'not recorded'}",
+                f"  Quota state: {state.quota_state or 'not recorded'}",
+                f"  Last start outcome: {state.last_action or 'not recorded'}",
                 f"  Detail: {state.detail}",
             ]
         )

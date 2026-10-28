@@ -10,8 +10,13 @@ from PySide6.QtCore import QLocale, QSettings, QTranslator
 from PySide6.QtWidgets import QApplication
 
 from .translations import ZH_CN
+from .locales import CATALOGUES, DIALOG_BUTTONS
 
-LANGUAGES = (("system", "System default / 跟随系统"), ("en", "English"), ("zh_CN", "简体中文"))
+LANGUAGES = (
+    ("system", "System default"), ("en", "English"), ("zh_CN", "简体中文"),
+    ("es", "Español"), ("pt_BR", "Português (Brasil)"),
+    ("fr", "Français"), ("ja", "日本語"),
+)
 
 def language_preference() -> str:
     value = str(QSettings("UsageLoop", "UsageLoop").value("language", "system"))
@@ -32,8 +37,14 @@ def save_language(value: str) -> None:
 def resolved_language() -> str:
     value = os.environ.get("USAGELOOP_LANGUAGE") or language_preference()
     if value == "system":
-        value = "zh_CN" if QLocale.system().script() == QLocale.Script.SimplifiedHanScript else "en"
-    return value if value in {"en", "zh_CN"} else "en"
+        locale = QLocale.system()
+        if locale.script() == QLocale.Script.SimplifiedHanScript:
+            return "zh_CN"
+        value = {
+            QLocale.Language.Spanish: "es", QLocale.Language.Portuguese: "pt_BR",
+            QLocale.Language.French: "fr", QLocale.Language.Japanese: "ja",
+        }.get(locale.language(), "en")
+    return value if value == "en" or value in CATALOGUES else "en"
 
 # Stable during a session: switching language cannot change active automation.
 _language = "en"
@@ -59,10 +70,13 @@ class DialogTranslator(QTranslator):
         return False
 
     def translate(self, context, sourceText, disambiguation=None, n=-1):
-        if _language == "zh_CN" and context in {"QPlatformTheme", "QDialogButtonBox", "QMessageBox"}:
-            return {"&Yes": "是(&Y)", "Yes": "是", "&No": "否(&N)",
-                    "No": "否", "Cancel": "取消", "&Cancel": "取消(&C)",
-                    "OK": "确定", "Close": "关闭"}.get(sourceText)
+        if _language in DIALOG_BUTTONS and context in {"QPlatformTheme", "QDialogButtonBox", "QMessageBox"}:
+            yes, no, cancel, ok, close = DIALOG_BUTTONS[_language]
+            def mnemonic(label, key):
+                return label + f"(&{key})" if _language in {"zh_CN", "ja"} else "&" + label
+            return {"&Yes": mnemonic(yes, "Y"), "Yes": yes, "&No": mnemonic(no, "N"),
+                    "No": no, "Cancel": cancel, "&Cancel": mnemonic(cancel, "C"),
+                    "OK": ok, "Close": close}.get(sourceText)
         return None
 
 def current_language() -> str:
@@ -70,14 +84,19 @@ def current_language() -> str:
 
 
 def tr(text: str) -> str:
-    if _language != "zh_CN" or not isinstance(text, str):
+    if not isinstance(text, str):
         return text
-    return ZH_CN.get(text, text)
+    return CATALOGUES.get(_language, {}).get(text, text)
+
+
+def ui_locale() -> QLocale:
+    """A widget locale only; never change the scheduler's process locale."""
+    return QLocale("en_US" if _language == "en" else _language)
 
 
 def format_datetime(value: datetime, pattern: str) -> str:
-    """Keep 24-hour zeroes; English alone removes AM/PM-style padding."""
+    """Use catalogue date patterns; English alone removes AM/PM padding."""
     text = value.strftime(tr(pattern))
-    return text if current_language() == "zh_CN" else text.lstrip("0").replace(" 0", " ")
+    return text if current_language() != "en" else text.lstrip("0").replace(" 0", " ")
 
 

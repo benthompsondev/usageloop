@@ -285,6 +285,35 @@ class PresentationTests(unittest.TestCase):
         self.assertEqual("No clock running yet", result.card_headline)
         self.assertNotIn("resets", result.next_action.lower())
 
+    def test_running_clock_and_uncertain_start_are_reported_separately(self):
+        state = self.state(
+            status="Ready", quota_state="ANCHORED", reset_at=int(self.NOW + 3600),
+            last_verified_at=self.NOW - 10, usage_checked_at=self.NOW - 10,
+            weekly_used_percent=20, last_action="ANCHOR_NOT_VERIFIED",
+        )
+        result = operational_presentation(self.settings(), state, now=self.NOW)
+        self.assertEqual("active_window_guarded", result.kind)
+        self.assertEqual("1h 00m", result.card_headline)
+        self.assertIn("unconfirmed", result.banner_detail)
+        self.assertIn("not be retried", result.banner_detail)
+        self.assertIn("unconfirmed", result.tray_text)
+        self.assertFalse(result.manual_start_visible)
+        self.assertEqual("ANCHOR_NOT_VERIFIED", state.last_action)
+        self.assertNotIn("Successful", result.banner_detail)
+
+    def test_guarded_sliding_expired_or_unverified_clock_stays_unconfirmed(self):
+        state = self.state(status="Waiting", outcome_category="GUARDED",
+                           last_action="ANCHOR_NOT_VERIFIED", weekly_used_percent=20)
+        for changes in (
+            dict(quota_state="UNANCHORED", reset_at=int(self.NOW + 18000), last_verified_at=self.NOW),
+            dict(quota_state="ANCHORED", reset_at=int(self.NOW - 1), last_verified_at=self.NOW - 3600),
+            dict(quota_state="ANCHORED", reset_at=int(self.NOW + 3600), last_verified_at=None),
+        ):
+            with self.subTest(changes=changes):
+                result = operational_presentation(self.settings(), replace(state, **changes), now=self.NOW)
+                self.assertEqual("guarded", result.kind)
+                self.assertFalse(result.manual_start_visible)
+
     def test_normal_daily_wait_and_weekly_pause_have_no_alarm_or_manual_start(self):
         daily = self.state(reset_at=int(datetime(2026, 9, 23, 5).timestamp()),
                            quota_state="UNANCHORED", usage_checked_at=self.NOW,

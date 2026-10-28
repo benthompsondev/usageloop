@@ -94,7 +94,10 @@ class QuotaDisplayTests(unittest.TestCase):
         window.refresh_clock(now=1000)
         card = window.provider_cards["codex"]
         self.assertEqual(100, card.usage_bar.value())
-        self.assertEqual("NO RETRY", card.status_label.text())
+        self.assertEqual("CLOCK RUNNING", card.status_label.text())
+        self.assertIn("unconfirmed", card.detail_label.text())
+        self.assertEqual("GUARDED", window.controller.states["codex"].outcome_category)
+        self.assertEqual("ANCHOR_NOT_VERIFIED", window.controller.states["codex"].last_action)
         self.assertTrue(card.action_button.isHidden())
         self.assertEqual("WAIT", automation_decision(state=state, enabled=True, now=1000,
             compatible_runtime_identity="runtime:1").action)

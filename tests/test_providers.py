@@ -13,6 +13,53 @@ from sentinel.provider_runtime import CodexOperationRunner, ProviderOperationRes
 
 
 class ProviderAdapterTests(unittest.TestCase):
+    def test_read_only_sync_confirms_clock_without_rewriting_uncertain_attempt(self):
+        from dataclasses import replace
+        from sentinel.app_state import AppSettings
+        from sentinel.presentation import operational_presentation
+
+        class Client:
+            def read_rate_limits(self):
+                return {"rateLimitsByLimitId": {"codex": {
+                    "limitId": "codex",
+                    "primary": {"usedPercent": 1, "windowDurationMins": 300, "resetsAt": 20_000},
+                    "secondary": {"usedPercent": 10, "windowDurationMins": 10080, "resetsAt": 500_000},
+                }}}
+
+            def drain_rate_limit_notifications(self):
+                return []
+
+        class Session:
+            client = Client()
+            codex_version = "synthetic"
+
+            def close(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            history = SafeHistory(Path(directory) / "history.jsonl")
+            attempt = history.reserve_trigger(mode="bootstrap", idempotency_key="bootstrap:review",
+                boundary_reset_at=None, model="gpt-5.6-luna", reasoning_effort="low", now=90)
+            history.transition_trigger(attempt.attempt_id, "launch_attempted", now=91)
+            history.transition_trigger(attempt.attempt_id, "failed_guarded", now=130)
+            before = history.trigger_attempts()
+            times = iter((200, 210, 220, 230))
+            runner = CodexOperationRunner(history, session_factory=Session,
+                clock=lambda: next(times), sleep=lambda _: None)
+            provider = CodexProvider(operation_runner=runner)
+            current = replace(ProviderViewState.waiting("codex", "Codex", installed=True,
+                runtime_identity="runtime:1"), reset_at=100, last_verified_at=50,
+                last_action="ANCHOR_NOT_VERIFIED", outcome_category="GUARDED")
+            result = provider.sync_usage(current_state=current)
+            view = operational_presentation(AppSettings(automation_enabled=True,
+                compatible_runtime_identities={"codex": "runtime:1"}), result.state, now=240)
+            self.assertEqual("SYNC_UPDATED", result.outcome)
+            self.assertFalse(result.request_possibly_sent)
+            self.assertEqual("ANCHORED", result.state.quota_state)
+            self.assertEqual("ANCHOR_NOT_VERIFIED", result.state.last_action)
+            self.assertEqual("active_window_guarded", view.kind)
+            self.assertEqual(before, history.trigger_attempts())
+
     def test_inconclusive_manual_sync_preserves_trusted_state_without_stranding(self):
         class Runner:
             def sync(self, runtime_identity):

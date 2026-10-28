@@ -118,6 +118,17 @@ def operational_presentation(
         "ANCHOR_NOT_VERIFIED", "VERIFICATION_UNAVAILABLE", "BOOTSTRAP_COOLDOWN",
         "ATTEMPT_ALREADY_RECORDED",
     }:
+        if (state.quota_state == "ANCHORED" and state.last_verified_at is not None
+                and state.reset_at is not None and state.reset_at > now):
+            # A later read-only check can prove a running clock without proving
+            # that the earlier request caused it. Never rewrite that attempt.
+            return make("active_window_guarded", tr("A five-hour window is running"),
+                        tr("Read-only observations confirmed this reset clock. The earlier start remains unconfirmed and will not be retried."),
+                        "info", tr("CLOCK RUNNING"), format_countdown(state.reset_at, now),
+                        tr("The earlier start is still unconfirmed. That attempt will not be retried."),
+                        tr("No retry for the uncertain start. Check Recent starts."),
+                        tray=tr("Clock running · {0} left · Earlier start unconfirmed").format(
+                            format_countdown(state.reset_at, now)))
         return make("guarded", tr("Start outcome is unconfirmed"),
                     tr("A request may have been sent. UsageLoop will not retry that attempt."),
                     "warning", tr("NO RETRY"), tr("Start not confirmed"), state.detail,

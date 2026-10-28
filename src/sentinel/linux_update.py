@@ -17,6 +17,7 @@ import sys
 import tarfile
 
 from .host import xdg_data_home, xdg_state_home
+from .i18n import tr
 from .product import PRODUCT, ProductMetadata
 
 
@@ -72,7 +73,7 @@ def update_log_path(product: ProductMetadata = PRODUCT) -> Path:
 
 
 def _rejected(reason: str) -> LinuxUpdateError:
-    return LinuxUpdateError(f"The downloaded archive was rejected: {reason}.")
+    return LinuxUpdateError(tr("The downloaded archive was rejected: {0}.").format(tr(reason)))
 
 
 def _safe_member_path(name: str) -> Path:
@@ -118,7 +119,7 @@ def extract_bundle(archive: Path, destination: Path, *, expected_bundle: str) ->
                 relative = _safe_member_path(member.name)
                 if relative.parts[:1] != (expected_bundle,):
                     raise _rejected(
-                        f"it did not unpack into a single {expected_bundle} folder"
+                        tr("it did not unpack into a single {0} folder").format(expected_bundle)
                     )
                 if member.issym() or member.islnk():
                     _check_symlink(member, relative)

@@ -22,6 +22,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from .host import is_windows
+from .i18n import tr
 from .product import PRODUCT, ProductMetadata
 
 
@@ -194,7 +195,7 @@ def parse_release(
             continue
         name = str(item["name"])
         if name in found:
-            raise UpdateError(f"The release included duplicate {name} files.")
+            raise UpdateError(tr("The release included duplicate {0} files.").format(name))
         found[name] = ReleaseAsset(name, _safe_download_url(item.get("browser_download_url")))
     page_url = _safe_download_url(payload.get("html_url"))
     if expected.difference(found):
@@ -203,7 +204,7 @@ def parse_release(
         # One of the pair present and the other missing is a broken release,
         # not a platform that has not shipped yet.
         raise UpdateError(
-            f"The release is missing its verified {artifact.description}."
+            tr("The release is missing its verified {0}.").format(tr(artifact.description))
         )
     return ReleaseInfo(
         version=version,
@@ -247,7 +248,7 @@ class GitHubReleaseUpdater:
             if exc.code == 404:
                 return UpdateCheckResult("no_release")
             raise UpdateError(
-                f"GitHub replied with an error ({exc.code}). Try again later."
+                tr("GitHub replied with an error ({0}). Try again later.").format(exc.code)
             ) from exc
         except (OSError, TimeoutError) as exc:
             raise UpdateError("GitHub could not be reached. Check your connection and try again.") from exc
@@ -295,13 +296,13 @@ class GitHubReleaseUpdater:
                     total += len(chunk)
                     if total > MAX_INSTALLER_BYTES:
                         raise UpdateError(
-                            f"The {artifact.description} download was unexpectedly large."
+                            tr("The {0} download was unexpectedly large.").format(tr(artifact.description))
                         )
                     digest.update(chunk)
                     output.write(chunk)
             if digest.hexdigest().lower() != expected:
                 raise UpdateError(
-                    f"The {artifact.description} checksum did not match the release."
+                    tr("The {0} checksum did not match the release.").format(tr(artifact.description))
                 )
             os.replace(partial, target)
             return VerifiedInstaller(target, expected)
@@ -311,7 +312,7 @@ class GitHubReleaseUpdater:
         except (OSError, TimeoutError) as exc:
             partial.unlink(missing_ok=True)
             raise UpdateError(
-                f"The {artifact.description} could not be downloaded. Try again."
+                tr("The {0} could not be downloaded. Try again.").format(tr(artifact.description))
             ) from exc
 
     def launch_installer(self, installer: VerifiedInstaller) -> None:
@@ -370,7 +371,7 @@ class GitHubReleaseUpdater:
         )
         if match is None:
             raise UpdateError(
-                f"The release checksum did not name the expected {artifact.description}."
+                tr("The release checksum did not name the expected {0}.").format(tr(artifact.description))
             )
         return match.group(1).lower()
 

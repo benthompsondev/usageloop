@@ -88,6 +88,14 @@ class UpdatePanelTests(unittest.TestCase):
         )
         self.assertEqual(QMessageBox.StandardButton.Yes, default)
 
+    def test_linux_confirmation_describes_restart_instead_of_windows_setup(self) -> None:
+        panel = self.make_panel(platform_name="Linux")
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Cancel) as question:
+            self.assertFalse(panel._confirm_install("1.4.0"))
+        self.assertIn("unpacked cleanly", question.call_args.args[2])
+        self.assertIn("1.4.0", question.call_args.args[2])
+        self.assertNotIn("setup window", question.call_args.args[2])
+
     def test_clicking_install_accepts_confirmation_launches_once_then_emits(self) -> None:
         updater = LaunchUpdater()
         confirmations = []
