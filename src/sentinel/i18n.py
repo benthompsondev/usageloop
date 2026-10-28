@@ -5,6 +5,7 @@ Language changes take effect on restart. Unknown strings fall back to English.
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from PySide6.QtCore import QLocale, QSettings, QTranslator
 from PySide6.QtWidgets import QApplication
 
@@ -72,5 +73,11 @@ def tr(text: str) -> str:
     if _language != "zh_CN" or not isinstance(text, str):
         return text
     return ZH_CN.get(text, text)
+
+
+def format_datetime(value: datetime, pattern: str) -> str:
+    """Keep 24-hour zeroes; English alone removes AM/PM-style padding."""
+    text = value.strftime(tr(pattern))
+    return text if current_language() == "zh_CN" else text.lstrip("0").replace(" 0", " ")
 
 

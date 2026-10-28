@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from .i18n import tr
+from .i18n import format_datetime, tr
 
 from .history import HistoryStateError, SafeHistory
 from .ui_components import StatusPill
@@ -45,7 +45,7 @@ START_OUTCOMES = {
 def activity_time(timestamp: float) -> str:
     """Absolute local dates remain understandable across restart and midnight."""
     try:
-        return datetime.fromtimestamp(timestamp).strftime(tr("%a, %b %d, %Y at %I:%M %p")).replace(" 0", " ")
+        return format_datetime(datetime.fromtimestamp(timestamp), "%a, %b %d, %Y at %I:%M %p")
     except (OSError, OverflowError, ValueError):
         return tr("Time unavailable")
 

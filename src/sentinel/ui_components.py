@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .i18n import current_language, tr
+from .i18n import current_language, format_datetime, tr
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
 from .history import SafeHistory, HistoryStateError
@@ -438,9 +438,10 @@ class ScheduleCard(QFrame):
     ) -> None:
         enabled = settings.automation_enabled
         if settings.schedule_mode == DAILY:
-            time_text = datetime(2000, 1, 1, settings.daily_start_hour, settings.daily_start_minute).strftime(
-                tr("%I:%M %p")
-            ).lstrip("0")
+            time_text = format_datetime(
+                datetime(2000, 1, 1, settings.daily_start_hour, settings.daily_start_minute),
+                "%I:%M %p",
+            )
             self.mode_label.setText(tr('At {0} each day').format(time_text))
             self.detail_label.setText(
                 tr("Starts only after the current window ends and this local time arrives.")
@@ -498,7 +499,7 @@ class ScheduleCard(QFrame):
 
 
 def pause_until_text(timestamp: float) -> str:
-    return datetime.fromtimestamp(timestamp).strftime(tr("%a, %b %d, %Y at %I:%M %p")).replace(" 0", " ")
+    return format_datetime(datetime.fromtimestamp(timestamp), "%a, %b %d, %Y at %I:%M %p")
 
 
 def automatic_start_history_copy(history: SafeHistory | None, *, now: float) -> str:
@@ -532,12 +533,12 @@ def _schedule_time(
         current = _local_datetime(now, timezone)
     except (OSError, OverflowError, ValueError):
         return tr("After the current reset")
-    time_text = local.strftime(tr("%I:%M %p")).lstrip("0")
+    time_text = format_datetime(local, "%I:%M %p")
     if local.date() == current.date():
         return (tr('Today at {0}').format(time_text))
     if local.date() == current.date() + timedelta(days=1):
         return (tr('Tomorrow at {0}').format(time_text))
-    return local.strftime(tr("%a, %b %d at %I:%M %p")).replace(" 0", " ")
+    return format_datetime(local, "%a, %b %d at %I:%M %p")
 
 
 def daily_schedule_example(
@@ -550,11 +551,7 @@ def daily_schedule_example(
 ) -> str:
     """Explain the selected daily schedule using the current cached reset."""
     current = time.time() if now is None else float(now)
-    selected = (
-        datetime(2000, 1, 1, hour, minute)
-        .strftime(tr("%I:%M %p"))
-        .lstrip("0")
-    )
+    selected = format_datetime(datetime(2000, 1, 1, hour, minute), "%I:%M %p")
     if reset_at is None:
         return (
             (tr('After the current window ends, UsageLoop will start the next one at {0}.').format(selected))
@@ -620,7 +617,7 @@ def weekly_schedule_preview_details(
     target = next_weekly_start_after(current, weekly_times, timezone=timezone)
 
     def clock(timestamp: float) -> str:
-        return _local_datetime(timestamp, timezone).strftime(tr("%I:%M %p")).lstrip("0")
+        return format_datetime(_local_datetime(timestamp, timezone), "%I:%M %p")
 
     target_local = _local_datetime(target, timezone)
     current_local = _local_datetime(current, timezone)
@@ -715,10 +712,10 @@ def _reset_copy(reset_at: int | None, *, now: float) -> str:
     except (OSError, OverflowError, ValueError):
         return tr("Reset time unavailable")
     if reset_at <= now:
-        return (tr('Previous window ended {0}').format(local.strftime(tr('%a at %I:%M %p')).replace(' 0', ' ')))
+        return (tr('Previous window ended {0}').format(format_datetime(local, "%a at %I:%M %p")))
     if local.date() == current.date():
-        return (tr('Resets at {0}').format(local.strftime(tr('%I:%M %p')).lstrip('0')))
-    return (tr('Resets {0}').format(local.strftime(tr('%a at %I:%M %p')).replace(' 0', ' ')))
+        return (tr('Resets at {0}').format(format_datetime(local, "%I:%M %p")))
+    return (tr('Resets {0}').format(format_datetime(local, "%a at %I:%M %p")))
 
 
 def _friendly_time(timestamp: float | None, *, now: float) -> str:
@@ -730,8 +727,8 @@ def _friendly_time(timestamp: float | None, *, now: float) -> str:
     except (OSError, OverflowError, ValueError):
         return tr("at an unknown time")
     if local.date() == current.date():
-        return local.strftime(tr("%I:%M %p")).lstrip("0")
-    return local.strftime(tr("%b %d at %I:%M %p")).replace(" 0", " ")
+        return format_datetime(local, "%I:%M %p")
+    return format_datetime(local, "%b %d at %I:%M %p")
 
 
 class ElidingLabel(QLabel):

@@ -39,9 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .i18n import tr
-
-from .i18n import LANGUAGES, language_preference, save_language, tr
+from .i18n import LANGUAGES, format_datetime, language_preference, save_language, tr
 
 from .app_controller import ApplicationController
 from .activity import RecentStartsDialog
@@ -692,10 +690,10 @@ class MainWindow(QMainWindow):
         self.weekly_day_times: list[TimeEntry] = []
         self.weekly_day_rows: list[QFrame] = []
         for index, day_name in enumerate(
-            (tr("Monday"), tr("Tuesday"), tr("Wednesday"), tr("Thursday"), tr("Friday"), tr("Saturday"), tr("Sunday"))
+            ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
         ):
-            editor = self._weekly_time_editor((tr('weekly{0}Time').format(day_name)))
-            editor.setAccessibleName(tr('{0} start time').format(day_name))
+            editor = self._weekly_time_editor(f"weekly{day_name}Time")
+            editor.setAccessibleName(tr('{0} start time').format(tr(day_name)))
             self.weekly_day_times.append(editor)
             row = QFrame()
             row.setObjectName("weeklyDayRow")
@@ -1092,9 +1090,7 @@ class MainWindow(QMainWindow):
             else:
                 try:
                     weekly_reset = (
-                        time.strftime(
-                            tr("%a %I:%M %p"), time.localtime(codex.weekly_reset_at)
-                        ).replace(" 0", " ")
+                        format_datetime(datetime.fromtimestamp(codex.weekly_reset_at), "%a %I:%M %p")
                         if codex.weekly_reset_at is not None
                         else tr("reset time unavailable")
                     )

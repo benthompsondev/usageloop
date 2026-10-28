@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from .i18n import tr
+from .i18n import format_datetime, tr
 
 from .app_state import AppSettings, ProviderViewState, format_countdown
 from .product import PRODUCT
@@ -231,19 +231,18 @@ def _time(timestamp: float | None, now: float) -> str:
         today = datetime.fromtimestamp(now).date()
     except (OSError, OverflowError, ValueError):
         return tr("when the schedule allows")
-    clock = target.strftime(tr("%I:%M %p")).lstrip("0")
+    clock = format_datetime(target, "%I:%M %p")
     if target.date() == today:
         return (tr('today at {0}').format(clock))
     if target.date() == today + timedelta(days=1):
         return (tr('tomorrow at {0}').format(clock))
-    return target.strftime(tr("%a, %b %d at %I:%M %p")).replace(" 0", " ")
+    return format_datetime(target, "%a, %b %d at %I:%M %p")
 
 
 def _absolute_time(timestamp: float | None) -> str:
     if timestamp is None:
         return tr("the saved time")
     try:
-        return datetime.fromtimestamp(timestamp).strftime(
-            tr("%a, %b %d, %Y at %I:%M %p")).replace(" 0", " ")
+        return format_datetime(datetime.fromtimestamp(timestamp), "%a, %b %d, %Y at %I:%M %p")
     except (OSError, OverflowError, ValueError):
         return tr("the saved time")

@@ -529,7 +529,6 @@ ZH_CN = {
     "the saved time": "已保存的时间",
     "today at {0}": "今天 {0}",
     "tomorrow at {0}": "明天 {0}",
-    "weekly{0}Time": "weekly{0}时间",
     "when the schedule allows": "计划允许时",
     "{0:g}% used · resets {1}": "{0:g}% 已使用 · 重置于 {1}",
     "{0} did not allow UsageLoop to copy the diagnostic summary. Try again after closing other clipboard tools.": "{0} 未允许 UsageLoop 复制诊断摘要，请关闭其他剪贴板工具后重试。",

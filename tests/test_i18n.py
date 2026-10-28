@@ -2,8 +2,11 @@
 from dataclasses import replace
 import os
 from pathlib import Path
+from datetime import datetime
 from string import Formatter
 import tempfile
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +16,8 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from sentinel import i18n
 from sentinel.app_state import AppSettings, ProviderViewState
 from sentinel.presentation import operational_presentation
+from sentinel.desktop import DesktopShell
+from sentinel.ui_components import _schedule_time, weekly_schedule_preview_details
 from sentinel.ui_components import TimeEntry, CHAIN_OUTCOME_COPY, _automatic_action_copy
 import test_desktop as desktop_fixtures
 
@@ -153,3 +158,57 @@ class LocalizationTests(unittest.TestCase):
         self.assertIsNone(translator.translate("Unrelated", "Cancel"))
         with patch.object(i18n, "_language", "en"):
             self.assertIsNone(translator.translate("QPlatformTheme", "Cancel"))
+
+    def test_chinese_midnight_survives_schedule_and_reset_formatting(self):
+        midnight = datetime(2030, 1, 16, 0, 0).timestamp()
+        now = midnight - 3600
+        self.assertEqual("明天 00:00", _schedule_time(midnight, now=now))
+        preview = weekly_schedule_preview_details(((0, 0),) * 7, now=now)
+        self.assertEqual("00:00", preview.first_start)
+        state = replace(ProviderViewState.waiting("codex", "Codex", installed=True),
+                        status="Ready", runtime_identity="runtime:1", reset_at=int(midnight),
+                        weekly_used_percent=20, quota_state="ANCHORED")
+        settings = AppSettings(automation_enabled=True,
+                              compatible_runtime_identities={"codex": "runtime:1"})
+        result = operational_presentation(settings, state, now=now)
+        self.assertIn("00:01", result.next_action)
+
+    def test_weekly_widget_identifiers_are_language_independent(self):
+        window, _ = self.make_window(ProviderViewState.waiting("codex", "Codex", installed=True))
+        self.assertEqual("weeklyMondayTime", window.weekly_day_times[0].objectName())
+        self.assertIn("星期一", window.weekly_day_times[0].accessibleName())
+
+    def test_tray_resume_survives_switch_to_continuous_during_pause(self):
+        window, provider = self.make_window(ProviderViewState.waiting("codex", "Codex", installed=True))
+        window.controller.settings = replace(window.controller.settings,
+            automation_enabled=True, schedule_mode="continuous", automation_paused_until=2000)
+        shell = DesktopShell(window)
+        self.addCleanup(shell.tray.hide)
+        shell.refresh_menu(now=1000)
+        self.assertTrue(shell.pause_action.isVisible())
+        self.assertEqual("恢复自动启动", shell.pause_action.text())
+        self.assertEqual(0, provider.action_calls)
+
+    def test_saved_language_is_applied_in_a_new_process(self):
+        # Use real Qt INI persistence without touching this user's registry.
+        with tempfile.TemporaryDirectory() as directory:
+            script = '''
+import sys
+from PySide6.QtCore import QSettings
+from sentinel import i18n
+i18n.QSettings = lambda *args: QSettings(sys.argv[1], QSettings.Format.IniFormat)
+i18n.QSettings.Status = QSettings.Status
+if sys.argv[2] == "save":
+    i18n.save_language("zh_CN")
+else:
+    i18n.configure_language()
+    assert i18n.current_language() == "zh_CN"
+    assert i18n.tr("Settings") == "设置"
+'''
+            environment = dict(os.environ)
+            environment.pop("USAGELOOP_LANGUAGE", None)
+            for action in ("save", "restart"):
+                result = subprocess.run([sys.executable, "-c", script,
+                    str(Path(directory) / "language.ini"), action],
+                    env=environment, capture_output=True, text=True, timeout=20)
+                self.assertEqual(0, result.returncode, result.stderr)

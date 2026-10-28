@@ -14,6 +14,10 @@ Language changes require a full exit and restart, including exiting the tray app
 
 The small `DialogTranslator` handles Qt standard confirmation buttons. Chinese time editors use a Chinese locale and a 24-hour display; English editors use an English locale and AM/PM, independent of the host's locale. Chinese styling prefers Microsoft YaHei UI or Noto CJK fonts when available; the application does not download fonts.
 
+Use `format_datetime()` for displayed dates and times. It keeps the leading
+zeroes in Chinese 24-hour times, including `00:00`. Widget object names stay
+English and stable; translate the visible label and accessible name instead.
+
 ## Validation
 
 ```powershell
