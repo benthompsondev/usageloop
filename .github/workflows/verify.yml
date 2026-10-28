@@ -65,7 +65,13 @@ jobs:
       - name: Install build tools
         run: python -m pip install --editable ".[build]"
       - name: Build Linux package
-        run: ./scripts/build-linux.sh
+        run: |
+          set -euo pipefail
+          ./scripts/build-linux.sh
+          cp dist/*.tar.gz.sha256 "$RUNNER_TEMP/linux-first-build.sha256"
+          ./scripts/build-linux.sh
+          cmp "$RUNNER_TEMP/linux-first-build.sha256" dist/*.tar.gz.sha256
+          echo 'Two clean Linux builds produced the same SHA-256.'
       - name: Verify the bundle starts and installs per-user
         env:
           QT_QPA_PLATFORM: offscreen
