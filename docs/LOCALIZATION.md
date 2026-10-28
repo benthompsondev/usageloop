@@ -76,6 +76,15 @@ installed fonts; use native Windows captures and run `test_languages.py` with
 
 ## Review status
 
+The packaged executable also accepts a hidden `--ui-acceptance OUTPUT_FOLDER`
+argument for release checks. It opens the actual pages using synthetic data,
+temporary settings, a fake updater and no production provider. It returns before
+the normal process lock, user settings and startup registration are opened.
+Windows installer CI runs it after fresh install and the 1.3.9 upgrade. Linux
+package CI runs it under Xvfb with the xcb backend and Noto CJK. Its JSON report
+and screenshots are Actions artifacts. This checks packaged widgets, not an
+interactive GNOME/KDE session or tray integration.
+
 The four new catalogues are generated text with engineering validation, not
 professional or native-reviewed localization. The original Chinese contribution
 was generated and tried by its contributor on Windows. Record a native review

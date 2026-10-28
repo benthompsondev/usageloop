@@ -28,6 +28,7 @@ def create_parser() -> argparse.ArgumentParser:
         help="Start in the system tray without opening the main window.",
     )
     parser.add_argument("--activation-smoke", help=argparse.SUPPRESS)
+    parser.add_argument("--ui-acceptance", type=Path, help=argparse.SUPPRESS)
     parser.add_argument(
         "--activation-smoke-auto-hide", action="store_true", help=argparse.SUPPRESS
     )
@@ -65,6 +66,11 @@ def _run_activation_smoke(
 def main(argv: list[str] | None = None) -> int:
     args = create_parser().parse_args(argv)
     application = QApplication.instance() or QApplication(sys.argv[:1])
+    if args.ui_acceptance:
+        # The installed bundle exercises its real pages with synthetic data.
+        # This path returns before production IPC, settings or providers exist.
+        from .packaged_acceptance import run_ui_acceptance
+        return run_ui_acceptance(application, args.ui_acceptance)
     if args.activation_smoke:
         return _run_activation_smoke(
             application,
