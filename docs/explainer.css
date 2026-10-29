@@ -1,0 +1,52 @@
+/* Reading layout; colors, navigation and focus states come from the main site. */
+.explainer {
+  width: min(calc(100% - 2.5rem), 780px);
+  margin: 3rem auto 5rem;
+}
+
+.explainer h1 {
+  max-width: 22ch;
+  font-size: clamp(2rem, 5.5vw, 3.3rem);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+.explainer h2 {
+  margin-top: 2.8rem;
+  font-size: clamp(1.35rem, 3vw, 1.8rem);
+  line-height: 1.3;
+}
+
+.explainer p,
+.explainer li {
+  overflow-wrap: anywhere;
+}
+
+.explainer .lede {
+  max-width: none;
+  font-size: 1.18rem;
+}
+
+.explainer li + li {
+  margin-top: 0.7rem;
+}
+
+.timing-example {
+  padding: 1.3rem 1.5rem 1.3rem 2.8rem;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+}
+
+html[lang="zh-CN"] .explainer {
+  line-height: 1.9;
+}
+
+html[lang="zh-CN"] .explainer h1 {
+  max-width: 18ch;
+}
+
+@media (max-width: 650px) {
+  .explainer {
+    margin-top: 2rem;
+  }
+}
