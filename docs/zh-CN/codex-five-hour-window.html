@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex 的 5 小时窗口何时开始？ | UsageLoop</title>
+  <meta name="description" content="说明 UsageLoop 观察到的 Codex 重置时间变化、如何检查窗口状态，以及提前启动正常窗口能做什么、不能做什么。">
+  <link rel="canonical" href="https://benthompsondev.github.io/usageloop/zh-CN/codex-five-hour-window.html">
+  <link rel="alternate" hreflang="en" href="https://benthompsondev.github.io/usageloop/codex-five-hour-window.html">
+  <link rel="alternate" hreflang="zh-CN" href="https://benthompsondev.github.io/usageloop/zh-CN/codex-five-hour-window.html">
+  <link rel="alternate" hreflang="x-default" href="https://benthompsondev.github.io/usageloop/codex-five-hour-window.html">
+  <meta name="theme-color" content="#08131f">
+  <link rel="icon" href="../favicon.ico" sizes="any">
+  <link rel="stylesheet" href="../styles.css?v=1.4.0-public">
+  <link rel="stylesheet" href="../explainer.css?v=2026-10-29">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <header class="site-header">
+    <a class="brand" href="../" aria-label="UsageLoop 首页">
+      <img src="../favicon.ico" width="38" height="38" alt="">
+      <span><strong>Usage<span>Loop</span></strong> <small>for Codex</small></span>
+    </a>
+    <nav aria-label="页面导航">
+      <a href="../">UsageLoop 首页</a>
+      <a class="nav-primary" href="../codex-five-hour-window.html" lang="en" hreflang="en">English</a>
+    </nav>
+  </header>
+  <main id="main" class="explainer">
+    <article aria-labelledby="page-title">
+      <p class="eyebrow">Codex 窗口计时说明</p>
+      <h1 id="page-title">Codex 的 5 小时窗口何时开始？</h1>
+      <p class="lede">对于提供 5 小时窗口的账号，UsageLoop 观察到：首个请求启动新窗口后，下一次重置时间才固定下来。仅仅到达上一个窗口的重置时间，并不一定会开始下一轮倒计时。</p>
+      <p class="small">内容核对日期：<time datetime="2026-10-29">2026 年 10 月 29 日</time>。依据是 UsageLoop 开发过程中记录的观察结果及 1.4.0 的应用行为。撰写本文未发送实际模型请求。这些观察结果不是 OpenAI 的保证；账号限制及其行为可能变化。</p>
+      <p class="small"><strong>翻译说明：</strong>本文简体中文由 AI 辅助翻译，尚未经中文母语使用者审校。<a href="../codex-five-hour-window.html" lang="en">英文原文</a>可供对照。</p>
+      <p class="boundary"><strong>提前启动不会增加额度，也不会绕过限制。</strong>启动操作是一次正常的 Codex 请求，会消耗订阅额度。如果账号没有 5 小时窗口，这种调度方式就不适用。</p>
+
+      <h2>不断后移的预估时间与正在运行的倒计时</h2>
+      <p>在窗口尚未启动时，多次只读观察可能显示：重置时间始终在大约 5 小时后，并不断向后移动。UsageLoop 将其称为<strong>未锚定</strong>。仅凭一个未来的重置时间，不能确认倒计时已经开始。</p>
+      <p>窗口启动后，多次观察可能显示同一个未来重置时间。UsageLoop 将其称为<strong>已锚定</strong>，并可据此显示倒计时。读取延迟、过时的观测数据以及时钟差异，都可能影响确认结果。</p>
+
+      <h2>提前启动会改变什么？</h2>
+      <ol class="timing-example" aria-label="示意时间表">
+        <li><strong>凌晨 1:00：</strong>上一个窗口结束。在此示例中，尚未有新请求。</li>
+        <li><strong>凌晨 4:00：</strong>一个小型定时请求启动下一个正常窗口。</li>
+        <li><strong>上午 7:00：</strong>你开始工作，此时窗口已运行约 3 小时。</li>
+        <li><strong>上午 9:00 左右：</strong>这个窗口重置。如果首个请求是在上午 7:00 发出，重置时间则会在中午左右。</li>
+      </ol>
+      <p>这只是示例，不是对重置时间的承诺。只要还有可用额度，两种情况下你都可以在上午 7:00 工作。提前启动只会影响下一次正常重置的预期时间；启动请求本身也会消耗一些额度。</p>
+
+      <h2>先检查自己的账号</h2>
+      <ol>
+        <li>打开 Codex 的用量页面，确认账号是否提供 5 小时限制。在 CLI 中，<code>/status</code> 会显示会话状态，并在可用时显示限额信息。OpenAI 的<a href="https://learn.chatgpt.com/docs/pricing">用量文档</a>提供当前用量面板的入口。</li>
+        <li>在 UsageLoop 1.4.0 中，使用<strong>同步用量</strong>刷新用量观测。同步是只读操作，不会发送模型请求。如果刷新失败，保留的是上次已知信息，并不代表它已更新。</li>
+        <li>分别查看当前倒计时和<strong>最近启动记录</strong>。正在运行的倒计时描述当前窗口；某次启动被标为已确认，则是 UsageLoop 对该次尝试所作的保守判断。</li>
+      </ol>
+      <p><strong>窗口正在运行，并不能证明它是由 UsageLoop 启动的。</strong>另一个 Codex 会话也可能启动窗口。如果较早的一次启动仍未确认，UsageLoop 会保留该结果，不会自动重试该次请求。不要仅仅为了得到“已确认”标签，就重复发送结果不确定的启动请求。可参阅<a href="https://github.com/benthompsondev/usageloop/blob/main/docs/1.4.0-review-follow-up.md#why-the-clock-formula-was-not-changed">确认限制及受控反例（英文）</a>。</p>
+
+      <h2>每周额度是另一项限制</h2>
+      <p>5 小时窗口重置不会重置每周额度。OpenAI 文档说明部分使用场景共享额度，并可能另有每周限制。UsageLoop 显示上次已知的每周用量信息，并在每周额度接近耗尽时阻止自动启动。它无法更改这些限制。请查阅适用于你所用方案的<a href="https://learn.chatgpt.com/docs/pricing">当前官方用量说明</a>。</p>
+
+      <h2>定时启动不等于使用储备重置次数</h2>
+      <p>UsageLoop 不会使用 Codex 的 banked resets（储备重置次数），也不会购买额度。它只会在符合条件时，发送一个小型请求来启动下一个正常窗口。它无法提前结束正在运行的窗口，也无法补充每周额度。关于 banked resets 这一独立账号功能，请参阅 <a href="https://help.openai.com/en/articles/20001498-how-banked-codex-resets-work">OpenAI 的说明</a>。</p>
+
+      <h2>什么时候定时命令就足够了？</h2>
+      <p>通过 cron 或 Windows 任务计划程序运行一个小型 Codex 命令，可能已经能满足需要。UsageLoop 额外提供发送前的窗口与每周额度检查、不确定结果后的禁止自动重试保护，以及可查看的结果记录。它支持 Windows 和 Linux，需要 Codex 已登录，并且电脑处于唤醒状态、应用正在运行。电脑关机或睡眠时，它无法发送请求。</p>
+      <p>可以查看 <a href="../#download">UsageLoop 下载与安装要求</a>。如果现有命令已满足需要，就不必再安装应用。</p>
+      <p class="small">你的账号表现不同？可以<a href="https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml">反馈观察到的窗口状态及“最近启动记录”结果</a>。请勿包含凭据、提示词或对话内容。</p>
+    </article>
+  </main>
+  <footer><p><a href="../">UsageLoop</a> 是独立开源项目。Codex 的限制由 OpenAI 决定。</p><a href="https://github.com/benthompsondev/usageloop">GitHub 源码</a></footer>
+</body>
+</html>

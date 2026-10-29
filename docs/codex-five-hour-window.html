@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>When does the Codex 5-hour window start? | UsageLoop</title>
+  <meta name="description" content="What UsageLoop has observed about Codex's sliding and fixed reset times, how to check your window, and what scheduling an early start can and cannot do.">
+  <link rel="canonical" href="https://benthompsondev.github.io/usageloop/codex-five-hour-window.html">
+  <link rel="alternate" hreflang="en" href="https://benthompsondev.github.io/usageloop/codex-five-hour-window.html">
+  <link rel="alternate" hreflang="zh-CN" href="https://benthompsondev.github.io/usageloop/zh-CN/codex-five-hour-window.html">
+  <link rel="alternate" hreflang="x-default" href="https://benthompsondev.github.io/usageloop/codex-five-hour-window.html">
+  <meta name="theme-color" content="#08131f">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="stylesheet" href="styles.css?v=1.4.0-public">
+  <link rel="stylesheet" href="explainer.css?v=2026-10-29">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="UsageLoop home">
+      <img src="favicon.ico" width="38" height="38" alt="">
+      <span><strong>Usage<span>Loop</span></strong> <small>for Codex</small></span>
+    </a>
+    <nav aria-label="Page navigation">
+      <a href="./">UsageLoop home</a>
+      <a class="nav-primary" href="zh-CN/codex-five-hour-window.html" lang="zh-CN" hreflang="zh-CN">简体中文</a>
+    </nav>
+  </header>
+  <main id="main" class="explainer">
+    <article aria-labelledby="page-title">
+      <p class="eyebrow">Codex window timing</p>
+      <h1 id="page-title">When does the Codex 5-hour window start?</h1>
+      <p class="lede">On accounts that expose a five-hour window, UsageLoop has observed the next reset clock becoming fixed after the first request starts a new window. Reaching the previous reset time alone does not necessarily start another countdown.</p>
+      <p class="small">Reviewed <time datetime="2026-10-29">October 29, 2026</time>. Based on observations recorded while developing UsageLoop and the 1.4.0 application's behavior. No live request was made for this article. These observations are not an OpenAI guarantee; account limits and behavior can change.</p>
+      <p class="boundary"><strong>Starting earlier does not add quota or bypass a limit.</strong> The start is a normal Codex request and uses subscription allowance. If your account shows no five-hour window, this scheduling approach does not apply.</p>
+
+      <h2>A moving estimate versus a running clock</h2>
+      <p>Before a window starts, repeated read-only observations can show a reset roughly five hours ahead that keeps moving forward. UsageLoop calls that <strong>unanchored</strong>. A single future reset timestamp is not enough to establish that a countdown is running.</p>
+      <p>After a window starts, repeated observations can show the same future reset time. UsageLoop calls that <strong>anchored</strong>. Its countdown can then run toward that time. Delays, stale observations and clock differences can complicate confirmation.</p>
+
+      <h2>What an earlier start changes</h2>
+      <ol class="timing-example" aria-label="Illustrative timing example">
+        <li><strong>1:00 AM:</strong> the old window ends. In this example, no new request arrives yet.</li>
+        <li><strong>4:00 AM:</strong> a small scheduled request starts the next normal window.</li>
+        <li><strong>7:00 AM:</strong> you begin work. The clock has already run for about three hours.</li>
+        <li><strong>Around 9:00 AM:</strong> that window resets, rather than around noon if its first request had been at 7:00 AM.</li>
+      </ol>
+      <p>This is an illustration, not a promised reset time. You can work at 7:00 AM in either case if allowance remains. Starting early only changes when the next normal reset is expected; the start itself consumes some allowance.</p>
+
+      <h2>Check your own account first</h2>
+      <ol>
+        <li>Open Codex's usage view and check whether your account actually has a five-hour limit. In the CLI, <code>/status</code> shows session and rate-limit information when available. OpenAI's <a href="https://learn.chatgpt.com/docs/pricing">usage documentation</a> links to the current usage dashboard.</li>
+        <li>In UsageLoop 1.4.0, use <strong>Sync usage</strong> to refresh usage observations. Sync is read-only and sends no model request. A failed refresh leaves the last-known information; it does not make stale values current.</li>
+        <li>Read the current clock and <strong>Recent starts</strong> separately. A running clock describes the window now. A confirmed start is UsageLoop's conservative assessment of a particular attempt.</li>
+      </ol>
+      <p><strong>A running window does not prove UsageLoop started it.</strong> Another Codex session can start the window. If an earlier attempt remains unconfirmed, UsageLoop preserves that outcome and does not automatically retry it. Do not repeat an uncertain send just to obtain a confirmed label. See the <a href="https://github.com/benthompsondev/usageloop/blob/main/docs/1.4.0-review-follow-up.md#why-the-clock-formula-was-not-changed">confirmation limitation and controlled counterexample</a>.</p>
+
+      <h2>The weekly limit is separate</h2>
+      <p>A five-hour reset does not reset a weekly allowance. OpenAI documents shared usage allowances and says weekly limits may also apply. UsageLoop displays last-known weekly information and blocks automatic starts when the weekly allowance is nearly exhausted. It cannot change those limits. Check the <a href="https://learn.chatgpt.com/docs/pricing">current official usage guidance</a> for your plan.</p>
+
+      <h2>Scheduled starts are not banked resets</h2>
+      <p>UsageLoop does not redeem banked Codex resets or buy credits. It sends a small request only when the next normal window is eligible to start. It cannot end an active window early or replenish weekly quota. For that separate account feature, use <a href="https://help.openai.com/en/articles/20001498-how-banked-codex-resets-work">OpenAI's banked-reset explanation</a>.</p>
+
+      <h2>When a scheduled command is enough</h2>
+      <p>A small Codex command in cron or Windows Task Scheduler may already do what you need. UsageLoop adds pre-send window and weekly-allowance checks, no automatic retry after an uncertain send, and a visible record of the result. It runs on Windows and Linux, requires Codex already signed in, and needs the computer awake with the app running. It cannot send while the computer is off or asleep.</p>
+      <p><a href="./#download">See UsageLoop's downloads and installation requirements</a>, or keep your existing command if it already meets your needs.</p>
+      <p class="small">Something differs on your account? <a href="https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml">Report the observed clock state and Recent starts outcome</a>. Leave out credentials, prompts and conversations.</p>
+    </article>
+  </main>
+  <footer><p><a href="./">UsageLoop</a> is an independent open-source project. OpenAI controls Codex limits.</p><a href="https://github.com/benthompsondev/usageloop">Source on GitHub</a></footer>
+</body>
+</html>
