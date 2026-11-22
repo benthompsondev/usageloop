@@ -88,6 +88,10 @@ class FakeThreadPool:
     def start(self, worker):
         self.workers.append(worker)
 
+    def run_next(self):
+        self.workers.pop(0).run()
+        QApplication.instance().processEvents()
+
 
 class FakeStartup:
     def __init__(self):
@@ -374,7 +378,9 @@ class DesktopTests(unittest.TestCase):
             "codex", "Codex", installed=True, runtime_identity="runtime:1"
         )
         window, provider = self.make_window(state)
+        window.thread_pool = FakeThreadPool()
         window.evaluate_automation(now=100)
+        window.thread_pool.run_next()
         self.assertEqual(0, provider.probe_calls)
         self.assertEqual(0, provider.action_calls)
 
@@ -913,7 +919,7 @@ class DesktopTests(unittest.TestCase):
         self.assertIn("after this window resets", window.schedule_card.next_label.text())
         self.assertNotIn("verified", window.schedule_card.next_label.text().lower())
 
-    def test_weekly_pause_starts_no_worker_and_due_rollover_starts_at_most_one(self):
+    def test_weekly_pause_starts_no_rollover_and_due_rollover_starts_at_most_one(self):
         reset = int(datetime(2026, 8, 30, 22, 0).timestamp())
         state = ProviderViewState.waiting(
             "codex", "Codex", installed=True, runtime_identity="runtime:1"
@@ -929,6 +935,7 @@ class DesktopTests(unittest.TestCase):
         window.evaluate_automation(
             now=datetime(2026, 8, 31, 3, 0).timestamp()
         )
+        window.thread_pool.run_next()
 
         self.assertEqual([], window.thread_pool.workers)
         self.assertEqual(0, provider.action_calls)
@@ -939,6 +946,8 @@ class DesktopTests(unittest.TestCase):
         window.evaluate_automation(
             now=datetime(2026, 8, 31, 4, 1).timestamp()
         )
+        self.assertEqual(1, len(window.thread_pool.workers))
+        window.thread_pool.run_next()
 
         self.assertEqual(1, len(window.thread_pool.workers))
         self.assertEqual("rollover", window.active_operations["codex"])
@@ -1022,6 +1031,8 @@ class DesktopTests(unittest.TestCase):
             window.recheck_button.click()
             window.recheck_compatibility()
             self.assertEqual(1, len(pool.workers))
+            pool.run_next()
+            self.assertEqual(1, len(pool.workers))
             self.assertFalse(window.recheck_button.isEnabled())
             self.assertEqual("CHECKING CONNECTION", window.provider_cards["codex"].status_label.text())
             self.assertIn("No model request", window.overall_detail.text())
@@ -1064,11 +1075,13 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual("NONE", window.controller.decisions(now=200)["codex"].action)
         window.thread_pool = FakeThreadPool()
         window.evaluate_automation(now=200)
+        window.thread_pool.run_next()
         self.assertEqual([], window.thread_pool.workers)
         with patch.object(provider, "probe", return_value=CompatibilityResult(
             True, "Waiting", "Compatibility confirmed.", "runtime:new"
         )):
             window.recheck_compatibility()
+            window.thread_pool.run_next()
             window.thread_pool.workers[0].run()
             self.app.processEvents()
         self.assertEqual(0, provider.action_calls)
@@ -1090,6 +1103,7 @@ class DesktopTests(unittest.TestCase):
             False, "Needs attention", "Sign in to Codex, then recheck.", "runtime:1"
         )):
             window.recheck_compatibility()
+            pool.run_next()
             pool.workers[0].run()
             self.app.processEvents()
         self.assertFalse(window.controller.states["codex"].automation_supported)

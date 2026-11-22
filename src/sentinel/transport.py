@@ -40,6 +40,11 @@ class CodexOverrideError(SentinelRuntimeError):
         )
 
 
+class CodexRuntimeChangedError(SentinelRuntimeError):
+    def __init__(self):
+        super().__init__("codex_runtime_changed", "The Codex runtime changed before the operation.")
+
+
 class AppServerUnavailableError(SentinelRuntimeError):
     def __init__(self, message: str = "The local Codex app-server is unavailable."):
         super().__init__("app_server_unavailable", message)

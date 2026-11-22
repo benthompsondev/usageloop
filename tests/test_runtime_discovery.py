@@ -1,13 +1,22 @@
 import os
 from pathlib import Path
 import tempfile
+from threading import Event, get_ident
+import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from sentinel.app_state import AppSettings
+from PySide6.QtCore import QThreadPool, QTimer
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
+
+from sentinel.app_controller import ApplicationController
+from sentinel.app_state import AppSettings, AppStateStore, ProviderViewState
 from sentinel.cli import connect
+from sentinel.desktop import MainWindow
 from sentinel.diagnostics import technical_summary
-from sentinel.providers import CodexProvider
+from sentinel.history import SafeHistory
+from sentinel.providers import CodexProvider, file_runtime_identity
 from sentinel.transport import (
     CODEX_EXECUTABLE_ENV,
     AppServerUnavailableError,
@@ -16,6 +25,7 @@ from sentinel.transport import (
     build_codex_command,
     discover_codex_runtime,
 )
+from test_desktop import FakeStartup
 
 
 class RuntimeDiscoveryTests(unittest.TestCase):
@@ -132,6 +142,89 @@ class RuntimeDiscoveryTests(unittest.TestCase):
             connect(expected_runtime_identity="previous-runtime")
         self.assertEqual("codex_runtime_changed", caught.exception.category)
         launch.assert_not_called()
+
+    def test_action_rejects_a_runtime_changed_since_the_scheduler_decision(self):
+        self.binary(self.path / "codex.exe")
+        runner = Mock()
+        provider = CodexProvider(
+            history=SafeHistory(self.root / "history.jsonl"), operation_runner=runner,
+        )
+        expected = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="previous-runtime",
+        )
+        with self.assertRaisesRegex(SentinelRuntimeError, "runtime changed"):
+            provider.run_action("rollover", current_state=expected)
+        runner.run.assert_not_called()
+
+    def test_slow_version_check_keeps_gui_responsive_and_gates_scheduled_starts(self):
+        app = QApplication.instance() or QApplication([])
+        stalled = self.binary(self.codex / "bin" / "0123456789abcdef" / "codex.exe")
+        fallback = self.binary(self.path / "codex.exe")
+        reading = Event()
+        release = Event()
+        version_threads = []
+
+        def read_version(executable, *, timeout):
+            version_threads.append(get_ident())
+            if executable == stalled:
+                reading.set()
+                release.wait(3)
+                raise AppServerUnavailableError("The Codex version check timed out.")
+            return self.version.return_value
+
+        def pump_until(predicate):
+            deadline = time.monotonic() + 2
+            while not predicate() and time.monotonic() < deadline:
+                QTest.qWait(10)
+            self.assertTrue(predicate())
+
+        self.version.side_effect = read_version
+        now = time.time()
+        runner = Mock()
+        history = SafeHistory(self.root / "history.jsonl")
+        provider = CodexProvider(history=history, operation_runner=runner)
+        previous = ProviderViewState.waiting(
+            "codex", "Codex", installed=True, runtime_identity="previous-runtime",
+        ).with_reset(int(now - 120), verified_at=now - 240)
+        store = AppStateStore(self.root / "state.json")
+        store.save(AppSettings(
+            automation_enabled=True, first_run_complete=True,
+            compatible_runtime_identities={"codex": "previous-runtime"},
+        ), {})
+        controller = ApplicationController([provider], store)
+        controller.start({"codex": previous})
+        self.assertEqual("ROLLOVER", controller.decisions(now=now)["codex"].action)
+        window = MainWindow(controller, {"codex": provider}, FakeStartup())
+        window.clock_timer.stop()
+        window.automation_timer.stop()
+        pool = QThreadPool()
+        window.thread_pool = pool
+        heartbeat = []
+        try:
+            window.evaluate_automation(now=now)
+            QTimer.singleShot(0, lambda: heartbeat.append(True))
+            pump_until(lambda: reading.is_set() and bool(heartbeat))
+            self.assertNotEqual(get_ident(), version_threads[0])
+            self.assertEqual("previous-runtime", controller.states["codex"].runtime_identity)
+            self.assertEqual({}, window.active_operations)
+            window.evaluate_automation(now=now)
+            runner.run.assert_not_called()
+
+            # Changes made while discovery is running must govern its result.
+            window.dashboard_automation_toggle.setChecked(False)
+            self.assertFalse(controller.settings.automation_enabled)
+            release.set()
+            pump_until(lambda: controller.states["codex"].runtime_identity == file_runtime_identity(fallback))
+            self.assertIn("PATH", controller.states["codex"].runtime_discovery)
+            self.assertIn("timed out", controller.states["codex"].runtime_discovery_warning)
+            self.assertEqual([], runner.mock_calls)
+            self.assertEqual([], history.trigger_attempts())
+            self.assertEqual([False, False], [thread == get_ident() for thread in version_threads])
+        finally:
+            release.set()
+            pool.waitForDone(4000)
+            app.processEvents()
+            window.close()
 
 
 if __name__ == "__main__":

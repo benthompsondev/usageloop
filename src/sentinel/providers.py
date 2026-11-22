@@ -11,7 +11,9 @@ from .app_state import ProviderViewState, preserve_verified_boundary
 from .classifier import classify
 from .history import SafeHistory
 from .quota import select_five_hour, select_weekly
-from .transport import CodexNotFoundError, CodexOverrideError, discover_codex_runtime
+from .transport import (
+    CodexNotFoundError, CodexOverrideError, CodexRuntimeChangedError, discover_codex_runtime,
+)
 
 
 ExecutableFinder = Callable[[], Path | None]
@@ -183,6 +185,8 @@ class CodexProvider:
 
     def run_action(self, mode: str, *, current_state: ProviderViewState | None = None):
         state = self.detect()
+        if current_state is not None and state.runtime_identity != current_state.runtime_identity:
+            raise CodexRuntimeChangedError()
         identity = state.runtime_identity or "unavailable"
         result = self._operation_runner().run(mode, runtime_identity=identity)
         result_state = result.state

@@ -26,6 +26,7 @@ from .transport import (
     CodexOverrideError,
     CodexProcessTransport,
     CodexRuntime,
+    CodexRuntimeChangedError,
     SentinelRuntimeError,
     discover_codex_runtime,
 )
@@ -125,9 +126,7 @@ def connect(*, expected_runtime_identity: str | None = None) -> RuntimeSession:
         from .providers import file_runtime_identity
 
         if file_runtime_identity(executable) != expected_runtime_identity:
-            raise SentinelRuntimeError(
-                "codex_runtime_changed", "The Codex runtime changed before the operation."
-            )
+            raise CodexRuntimeChangedError()
     transport = CodexProcessTransport(executable)
     client = AppServerClient(transport, client_version=__version__)
     try:

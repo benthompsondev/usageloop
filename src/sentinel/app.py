@@ -6,12 +6,12 @@ import argparse
 from pathlib import Path
 import sys
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QThreadPool, QTimer, Qt
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QWidget
 
 from .app_controller import ApplicationController
-from .app_state import AppStateStore
-from .desktop import DesktopShell, MainWindow
+from .app_state import AppStateStore, ProviderViewState
+from .desktop import DesktopShell, MainWindow, OperationWorker
 from .history import SafeHistory
 from .i18n import configure_language
 from .product import PRODUCT
@@ -94,36 +94,63 @@ def main(argv: list[str] | None = None) -> int:
     controller = ApplicationController(
         providers, AppStateStore(), error_history=history
     )
-    controller.start()
-    startup = create_startup_manager(str(Path(sys.executable).resolve()))
-    try:
-        normalized_startup = reconcile_startup_preference(
-            controller.settings.start_with_windows, startup
-        )
-        if normalized_startup != controller.settings.start_with_windows:
-            durable_startup = controller.settings.start_with_windows
-            if not controller.set_start_with_windows(normalized_startup):
-                startup.set_enabled(durable_startup)
-    except OSError:
-        # Startup registration is optional. The Settings control remains the
-        # visible recovery path if the session temporarily denies access.
-        pass
-    window = MainWindow(
-        controller,
-        {provider.provider_id: provider for provider in providers},
-        startup,
-    )
-    shell = DesktopShell(window)
-    activation_channel.activation_requested.connect(shell.restore_window)
-    tray_available = QSystemTrayIcon.isSystemTrayAvailable()
-    application.setQuitOnLastWindowClosed(not tray_available)
-    application._sentinel_window = window  # type: ignore[attr-defined]
-    application._sentinel_shell = shell  # type: ignore[attr-defined]
     application._sentinel_instance_guard = instance_guard  # type: ignore[attr-defined]
     application._sentinel_activation_channel = activation_channel  # type: ignore[attr-defined]
-    if not args.background or not tray_available:
-        window.show()
-    return application.exec()
+    foreground_requested = not args.background
+    shell: DesktopShell | None = None
+    startup_error: Exception | None = None
+
+    def activate() -> None:
+        nonlocal foreground_requested
+        foreground_requested = True
+        if shell is not None:
+            shell.restore_window()
+
+    def finish_startup(detections: dict[str, ProviderViewState]) -> None:
+        nonlocal shell
+        controller.start(detections)
+        startup = create_startup_manager(str(Path(sys.executable).resolve()))
+        try:
+            normalized_startup = reconcile_startup_preference(
+                controller.settings.start_with_windows, startup
+            )
+            if normalized_startup != controller.settings.start_with_windows:
+                durable_startup = controller.settings.start_with_windows
+                if not controller.set_start_with_windows(normalized_startup):
+                    startup.set_enabled(durable_startup)
+        except OSError:
+            # Startup registration is optional and can be retried in Settings.
+            pass
+        window = MainWindow(
+            controller,
+            {provider.provider_id: provider for provider in providers},
+            startup,
+        )
+        shell = DesktopShell(window)
+        tray_available = QSystemTrayIcon.isSystemTrayAvailable()
+        application.setQuitOnLastWindowClosed(not tray_available)
+        application._sentinel_window = window  # type: ignore[attr-defined]
+        application._sentinel_shell = shell  # type: ignore[attr-defined]
+        if foreground_requested or not tray_available:
+            window.show()
+
+    def on_detected(_provider_id: str, detections: dict[str, ProviderViewState]) -> None:
+        nonlocal startup_error
+        try:
+            finish_startup(detections)
+        except Exception as exc:
+            startup_error = exc
+            application.exit(1)
+
+    activation_channel.activation_requested.connect(activate)
+    worker = OperationWorker("codex", controller.detect_local_states)
+    worker.signals.completed.connect(on_detected, Qt.ConnectionType.QueuedConnection)
+    worker.signals.failed.connect(lambda *_: application.exit(1), Qt.ConnectionType.QueuedConnection)
+    QThreadPool.globalInstance().start(worker)
+    exit_code = application.exec()
+    if startup_error is not None:
+        raise startup_error
+    return exit_code
 
 
 if __name__ == "__main__":

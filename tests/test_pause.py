@@ -73,6 +73,7 @@ class PauseTests(unittest.TestCase):
         self.assertEqual("WAIT", fresh.decisions(now=self.now)["codex"].action)
         window = self.window()
         window.evaluate_automation(now=self.now)
+        window.thread_pool.run_next()
         self.assertEqual([], window.thread_pool.workers)
 
     def test_expiry_and_resume_return_to_existing_decision_without_side_effects(self):

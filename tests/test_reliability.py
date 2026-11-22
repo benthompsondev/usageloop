@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from PySide6.QtWidgets import QApplication
 
@@ -18,6 +19,7 @@ from sentinel.presentation import operational_presentation
 from sentinel.providers import CodexProvider, CompatibilityResult
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 from sentinel.desktop import MainWindow
+from sentinel.transport import TransportTimeoutError
 from test_desktop import FakeStartup, FakeThreadPool
 
 
@@ -403,6 +405,10 @@ class LateProbeTests(unittest.TestCase):
     def success(self):
         return CompatibilityResult(True, "Waiting", "Compatible.", "runtime:1")
 
+    def complete_probe(self, result=None, *, error=None):
+        with patch.object(self.provider, "probe", return_value=result, side_effect=error):
+            self.window.thread_pool.run_next()
+
     def test_automation_off_or_pause_discards_late_success(self):
         for stop in ("off", "pause"):
             with self.subTest(stop=stop):
@@ -412,7 +418,7 @@ class LateProbeTests(unittest.TestCase):
                 else:
                     self.controller.set_schedule_mode("daily")
                     self.controller.pause_until_tomorrow(now=time.time())
-                self.window._operation_completed("codex", self.success())
+                self.complete_probe(self.success())
                 self.assertNotIn("codex", self.controller.settings.compatible_runtime_identities)
                 self.assertEqual([], self.notices)
                 if stop == "off":
@@ -422,7 +428,7 @@ class LateProbeTests(unittest.TestCase):
         self.pending()
         current = self.controller.states["codex"]
         self.controller.update_provider_state(replace(current, runtime_identity="runtime:2"))
-        self.window._operation_completed("codex", self.success())
+        self.complete_probe(self.success())
         self.assertEqual("runtime:2", self.controller.states["codex"].runtime_identity)
         self.assertNotIn("codex", self.controller.settings.compatible_runtime_identities)
 
@@ -432,7 +438,7 @@ class LateProbeTests(unittest.TestCase):
         self.window.evaluate_automation(now=time.time())
         self.assertEqual("runtime:1", self.controller.states["codex"].runtime_identity)
         self.assertEqual(1, len(self.window.thread_pool.workers))
-        self.window._operation_completed("codex", self.success())
+        self.complete_probe(self.success())
         self.assertEqual("runtime:2", self.controller.states["codex"].runtime_identity)
         self.assertNotIn("codex", self.controller.settings.compatible_runtime_identities)
         self.assertEqual([], self.notices)
@@ -442,7 +448,7 @@ class LateProbeTests(unittest.TestCase):
         self.provider.state = replace(self.provider.state, runtime_identity="runtime:2")
         self.window.evaluate_automation(now=time.time())
         self.assertEqual(1, len(self.window.thread_pool.workers))
-        self.window._operation_failed("codex", "app_server_timeout")
+        self.complete_probe(error=TransportTimeoutError())
         self.assertEqual("runtime:2", self.controller.states["codex"].runtime_identity)
         self.assertIsNone(self.controller.states["codex"].compatibility_incident_id)
         self.assertEqual([], self.notices)
@@ -474,7 +480,7 @@ class LateProbeTests(unittest.TestCase):
     def test_late_failure_cannot_override_newer_compatibility_success(self):
         self.pending()
         self.controller.apply_compatibility("codex", self.success(), explicit=True)
-        self.window._operation_completed("codex", CompatibilityResult(
+        self.complete_probe(CompatibilityResult(
             False, "Needs attention", "Late failure.", "runtime:1",
             failure_category="app_server_timeout"))
         self.assertEqual("runtime:1", self.controller.settings.compatible_runtime_identities["codex"])
@@ -484,6 +490,9 @@ class LateProbeTests(unittest.TestCase):
         current = time.time()
         self.window.evaluate_automation(now=current)
         self.window.evaluate_automation(now=current + 1)
+        self.assertEqual(1, len(self.window.thread_pool.workers))
+        self.assertEqual({}, self.window.active_operations)
+        self.window.thread_pool.run_next()
         self.assertEqual(1, len(self.window.thread_pool.workers))
         self.assertEqual("probe", self.window.active_operations["codex"])
 
@@ -497,6 +506,6 @@ class LateProbeTests(unittest.TestCase):
         self.window._notify_compatibility("codex", "Action needed", "Check Codex.", kind="terminal")
         self.assertEqual(["Blocked", "Action needed"], [title for title, _ in self.notices])
         self.pending()
-        self.window._operation_completed("codex", self.success())
+        self.complete_probe(self.success())
         self.assertEqual("Codex connection restored", self.notices[-1][0])
         self.assertEqual(3, len(self.notices))

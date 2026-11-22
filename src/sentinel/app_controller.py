@@ -6,7 +6,7 @@ from dataclasses import replace
 import sys
 import time
 import uuid
-from typing import Iterable, Protocol, Collection, Sequence
+from typing import Iterable, Protocol, Collection, Mapping, Sequence
 
 from .app_state import (
     AppSettings,
@@ -35,6 +35,17 @@ class DetectingProvider(Protocol):
     def detect(self) -> ProviderViewState: ...
 
 
+def detect_provider(provider: DetectingProvider) -> ProviderViewState:
+    """Read local state without mutating controller state."""
+    try:
+        return provider.detect()
+    except Exception:
+        return ProviderViewState(
+            provider.provider_id, provider.provider_id.title(), False, False,
+            "Needs attention", "Provider detection failed safely.",
+        )
+
+
 class ErrorHistory(Protocol):
     def record_error(self, category: str) -> None: ...
 
@@ -54,7 +65,10 @@ class ApplicationController:
         self.states: dict[str, ProviderViewState] = {}
         self.persistence_error: str | None = None
 
-    def start(self) -> None:
+    def detect_local_states(self) -> dict[str, ProviderViewState]:
+        return {key: detect_provider(provider) for key, provider in self.providers.items()}
+
+    def start(self, detected_states: Mapping[str, ProviderViewState] | None = None) -> None:
         self.settings = self.store.load()
         active_provider_ids = set(self.providers)
         self.settings = replace(
@@ -74,18 +88,9 @@ class ApplicationController:
         checked = self.settings.checked_runtime_identities or {}
         compatible = self.settings.compatible_runtime_identities or {}
         detected: dict[str, ProviderViewState] = {}
-        for provider_id, provider in self.providers.items():
-            try:
-                state = provider.detect()
-            except Exception:
-                state = ProviderViewState(
-                    provider_id,
-                    provider_id.title(),
-                    False,
-                    False,
-                    "Needs attention",
-                    "Provider detection failed safely.",
-                )
+        for provider_id, state in (
+            self.detect_local_states() if detected_states is None else detected_states
+        ).items():
             previous = cached.get(provider_id)
             if (
                 previous is not None
@@ -288,22 +293,39 @@ class ApplicationController:
 
     def refresh_local_states(self, *, exclude: Collection[str] = ()) -> None:
         """Refresh executable identity and local caches without provider traffic."""
-        previous_states = dict(self.states)
-        changed = False
-        excluded = set(exclude)
+        detections = {}
         for provider_id, provider in self.providers.items():
-            if provider_id in excluded:
+            if provider_id in exclude:
                 continue
-            current = self.states.get(provider_id)
             try:
-                detected = provider.detect()
+                detections[provider_id] = provider.detect()
             except Exception:
                 continue
-            if current is None or current.runtime_identity != detected.runtime_identity:
+        self.apply_local_states(detections)
+
+    def apply_local_states(self, detections: Mapping[str, ProviderViewState]) -> None:
+        """Reconcile detected states on the controller's owning thread."""
+        previous_states = dict(self.states)
+        changed = False
+        for provider_id, detected in detections.items():
+            current = self.states.get(provider_id)
+            if (current is None or current.runtime_identity != detected.runtime_identity
+                    or not current.installed or not detected.installed):
+                if current == detected:
+                    continue
                 self.states[provider_id] = detected
                 changed = True
                 continue
             detected = preserve_verified_boundary(current, detected)
+            with_runtime_details = replace(
+                current,
+                runtime_version=detected.runtime_version,
+                runtime_discovery=detected.runtime_discovery,
+                runtime_discovery_warning=detected.runtime_discovery_warning,
+            )
+            if with_runtime_details != current:
+                self.states[provider_id] = with_runtime_details
+                changed = True
             if current.compatibility_incident_id and current.runtime_identity == detected.runtime_identity:
                 continue
             if current.status == "Needs attention" and not current.automation_supported:

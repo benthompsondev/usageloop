@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 import time
 from typing import Callable
@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
 
 from .i18n import LANGUAGES, format_datetime, language_preference, save_language, tr
 
-from .app_controller import ApplicationController
+from .app_controller import ApplicationController, detect_provider
 from .activity import RecentStartsDialog
 from .app_state import (
     AppSettings,
@@ -104,6 +104,28 @@ class OperationWorker(QRunnable):
         self.signals.completed.emit(self.provider_id, result)
 
 
+@dataclass(frozen=True)
+class _CheckedCompatibility:
+    result: CompatibilityResult
+    detected: ProviderViewState
+
+
+def _check_compatibility(provider, identity: str | None) -> _CheckedCompatibility:
+    try:
+        result = provider.probe()
+        if not isinstance(result, CompatibilityResult):
+            raise TypeError("Unexpected compatibility result")
+    except Exception as exc:
+        result = CompatibilityResult(
+            False, "Needs attention",
+            "The Codex compatibility check stopped safely. No request was sent.",
+            identity or "unavailable",
+            failure_category=str(getattr(exc, "category", "unexpected_error")),
+        )
+    # Installation changes invalidate both successful and failed probes.
+    return _CheckedCompatibility(result, detect_provider(provider))
+
+
 def tray_tooltip_text(
     settings: AppSettings,
     state: ProviderViewState | None,
@@ -144,6 +166,9 @@ class MainWindow(QMainWindow):
         self.confirm_bootstrap = confirm_bootstrap or self._confirm_bootstrap
         self.active_operations: dict[str, str] = {}
         self._probe_context: dict[str, tuple[ProviderViewState, ProviderViewState, bool]] = {}
+        self._detecting = False
+        self._explicit_recheck = False
+        self._evaluation_time: float | None = None
         self.thread_pool = QThreadPool.globalInstance()
         self.hide_on_close = False
         self.force_close = False
@@ -1086,6 +1111,10 @@ class MainWindow(QMainWindow):
                     operational=operational,
                 )
                 card.action_button.setVisible(self._can_start_loop(provider_id, now=current))
+                card.action_button.setEnabled(not self._detecting)
+                card.sync_button.setEnabled(
+                    not self._detecting and self.active_operations.get(provider_id) != "sync"
+                )
         codex = self.controller.states.get("codex")
         if codex is not None:
             operational = operational_presentation(
@@ -1215,20 +1244,51 @@ class MainWindow(QMainWindow):
         self.refresh_clock(now=current)
 
     def evaluate_automation(self, *, now: float | None = None) -> None:
-        current = time.time() if now is None else now
-        self.controller.refresh_local_states(exclude=self.active_operations)
-        for provider_id in self.controller.expire_compatibility(now=current):
+        self._start_detection(now=now)
+
+    def _start_detection(self, *, now: float | None = None) -> None:
+        if self._detecting or self.active_operations:
+            return
+        self._detecting = True
+        self._evaluation_time = now
+        worker = OperationWorker("codex", self.controller.detect_local_states)
+        worker.signals.completed.connect(self._detection_completed)
+        worker.signals.failed.connect(self._detection_failed)
+        self.thread_pool.start(worker)
+        self.refresh_clock(now=now)
+
+    def _detection_completed(self, _provider_id: str, detections: dict[str, ProviderViewState]) -> None:
+        self._detecting = False
+        explicit = self._explicit_recheck
+        self._explicit_recheck = False
+        self.controller.apply_local_states(detections)
+        current = time.time() if self._evaluation_time is None else self._evaluation_time
+        if explicit:
+            state = self.controller.states.get("codex")
+            if state is not None and state.installed and self.controller.persistence_error is None:
+                self._start_operation("codex", "probe")
+        else:
+            self._evaluate_verified_automation(now=current)
+        self.refresh_clock(now=current)
+
+    def _detection_failed(self, _provider_id: str, _category: str) -> None:
+        self._detecting = False
+        self._explicit_recheck = False
+        self.refresh_clock()
+
+    def _evaluate_verified_automation(self, *, now: float) -> None:
+        for provider_id in self.controller.expire_compatibility(now=now):
             self._notify_compatibility(provider_id,
                 tr("Codex connection needs attention"),
                 tr("Read-only retries ended. Automatic starts remain paused."), kind="terminal")
         for provider_id, state in self.controller.states.items():
             if state.compatibility_incident_id and self.controller.record_blocked_opportunity(
-                provider_id, now=current
+                provider_id, now=now
             ):
                 self._notify_compatibility(provider_id,
                     tr("Scheduled start blocked"),
                     tr("Codex needs a compatibility check. No start was sent."), kind="blocked")
-        for provider_id, decision in self.controller.decisions(now=current).items():
+        for provider_id, decision in self.controller.decisions(now=now).items():
             if provider_id in self.active_operations:
                 continue
             if decision.action == "PROBE":
@@ -1266,14 +1326,15 @@ class MainWindow(QMainWindow):
         )
 
     def start_bootstrap(self, provider_id: str) -> None:
-        if not self._can_start_loop(provider_id, now=time.time()) or not self.confirm_bootstrap():
+        if (self._detecting or not self._can_start_loop(provider_id, now=time.time())
+                or not self.confirm_bootstrap()):
             return
-        if not self._can_start_loop(provider_id, now=time.time()):
+        if self._detecting or not self._can_start_loop(provider_id, now=time.time()):
             return
         self._start_operation(provider_id, "bootstrap")
 
     def start_usage_sync(self, provider_id: str) -> None:
-        if provider_id in self.active_operations:
+        if provider_id in self.active_operations or self._detecting:
             return
         provider = self.providers.get(provider_id)
         state = self.controller.states.get(provider_id)
@@ -1297,12 +1358,8 @@ class MainWindow(QMainWindow):
         """One explicit read-only probe; never enable automation or run a turn."""
         if self.active_operations or self.controller.persistence_error is not None:
             return
-        self.controller.refresh_local_states()
-        state = self.controller.states.get("codex")
-        if state is None or not state.installed:
-            self.refresh_clock()
-            return
-        self._start_operation("codex", "probe")
+        self._explicit_recheck = True
+        self._start_detection()
 
     def _start_operation(self, provider_id: str, action: str, *, automatic: bool = False) -> None:
         provider = self.providers.get(provider_id)
@@ -1321,7 +1378,7 @@ class MainWindow(QMainWindow):
         if action == "probe":
             self._probe_context[provider_id] = (state, pending, automatic)
         operation = (
-            provider.probe
+            (lambda: _check_compatibility(provider, state.runtime_identity))
             if action == "probe"
             else lambda: provider.run_action(action, current_state=state)
         )
@@ -1331,30 +1388,20 @@ class MainWindow(QMainWindow):
         self.thread_pool.start(worker)
         self.refresh_clock()
 
-    def _probe_runtime_is_current(self, provider_id: str, expected_identity: str | None) -> bool:
-        """Recheck the local executable after an in-flight compatibility probe."""
-        try:
-            detected = self.providers[provider_id].detect()
-        except Exception:
-            return False
-        if detected.runtime_identity != expected_identity:
-            self.controller.refresh_local_states()
-            return False
-        return True
-
     def _operation_completed(self, provider_id: str, result: object) -> None:
         action = self.active_operations.pop(provider_id, None)
-        if isinstance(result, CompatibilityResult):
+        if isinstance(result, _CheckedCompatibility):
             context = self._probe_context.pop(provider_id, None)
             if action != "probe" or context is None:
                 self.refresh_clock()
                 return
             prior, pending, automatic = context
-            if not self._probe_runtime_is_current(provider_id, pending.runtime_identity):
+            if result.detected.runtime_identity != pending.runtime_identity:
                 if self.controller.states[provider_id] == pending:
-                    self.controller.update_provider_state(prior)
+                    self.controller.apply_local_states({provider_id: result.detected})
                 self.refresh_clock()
                 return
+            result = result.result
             current = self.controller.states[provider_id]
             if (current != pending or result.runtime_identity != pending.runtime_identity or
                     (automatic and (not self.controller.settings.automation_enabled
@@ -1399,28 +1446,10 @@ class MainWindow(QMainWindow):
         action = self.active_operations.pop(provider_id, None)
         if action == "probe":
             context = self._probe_context.pop(provider_id, None)
-            if context is None:
-                self.refresh_clock()
-                return
-            prior, pending, automatic = context
-            if not self._probe_runtime_is_current(provider_id, pending.runtime_identity):
+            if context is not None:
+                prior, pending, _automatic = context
                 if self.controller.states[provider_id] == pending:
                     self.controller.update_provider_state(prior)
-                self.refresh_clock()
-                return
-            current = self.controller.states[provider_id]
-            if (current == pending and
-                    (not automatic or (self.controller.settings.automation_enabled
-                                       and not self.controller.settings.pause_active(time.time())))):
-                failure = CompatibilityResult(False, "Needs attention",
-                    "The Codex compatibility check stopped safely. No request was sent.",
-                    prior.runtime_identity or "unavailable", failure_category=category)
-                if self.controller.apply_compatibility(provider_id, failure, explicit=not automatic):
-                    if self.controller.states[provider_id].compatibility_next_retry_at is None:
-                        self._notify_compatibility(provider_id, tr("Codex connection needs attention"),
-                            tr("Automatic starts are paused. Recheck Codex when ready."), kind="terminal")
-            elif current == pending:
-                self.controller.update_provider_state(prior)
             self.refresh_clock()
             return
         if action == "sync":
