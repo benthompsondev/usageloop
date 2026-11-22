@@ -14,12 +14,12 @@ from unittest import mock
 
 from sentinel.host import platform_label, xdg_home, xdg_runtime_dir
 from sentinel.product import PRODUCT
-from sentinel.providers import platform_file_version
 from sentinel.single_instance import SingleInstanceGuard
 from sentinel.startup import XdgStartupManager, reconcile_startup_preference
 from sentinel.transport import (
     CODEX_EXECUTABLE_ENV,
     CodexNotFoundError,
+    CodexOverrideError,
     _linux_desktop_app_roots,
     _linux_known_candidates,
     build_codex_command,
@@ -165,7 +165,8 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
                 "CODEX_HOME": str(codex_home),
                 CODEX_EXECUTABLE_ENV: str(override),
             }
-            with mock.patch.dict(os.environ, environment, clear=False):
+            with (mock.patch.dict(os.environ, environment, clear=False),
+                  mock.patch("sentinel.transport.is_windows", return_value=False)):
                 with mock.patch("sentinel.transport._LINUX_DESKTOP_PREFIXES", ()):
                     found = find_codex_executable(
                         path_value="",
@@ -173,8 +174,7 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
                     )
         self.assertEqual(override.resolve(), found)
 
-    def test_an_override_pointing_nowhere_falls_back_to_normal_discovery(self):
-        # The override is a fallback, never a switch that can break discovery.
+    def test_an_override_pointing_nowhere_blocks_normal_discovery(self):
         with tempfile.TemporaryDirectory() as directory:
             codex_home = Path(directory) / ".codex"
             native = make_executable(
@@ -184,13 +184,10 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
                 "CODEX_HOME": str(codex_home),
                 CODEX_EXECUTABLE_ENV: str(Path(directory) / "missing" / "codex"),
             }
-            with mock.patch.dict(os.environ, environment, clear=False):
-                with mock.patch("sentinel.transport._LINUX_DESKTOP_PREFIXES", ()):
-                    found = find_codex_executable(
-                        path_value="",
-                        known_candidates=_linux_known_candidates(path_value=""),
-                    )
-        self.assertEqual(native.resolve(), found)
+            with (mock.patch.dict(os.environ, environment, clear=False),
+                  mock.patch("sentinel.transport.is_windows", return_value=False),
+                  self.assertRaises(CodexOverrideError)):
+                find_codex_executable(path_value="", known_candidates=(native,))
 
     def test_an_empty_override_is_treated_as_unset(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -200,11 +197,7 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
             )
             environment = {"CODEX_HOME": str(codex_home), CODEX_EXECUTABLE_ENV: "   "}
             with mock.patch.dict(os.environ, environment, clear=False):
-                with mock.patch("sentinel.transport._LINUX_DESKTOP_PREFIXES", ()):
-                    found = find_codex_executable(
-                        path_value="",
-                        known_candidates=_linux_known_candidates(path_value=""),
-                    )
+                found = find_codex_executable(path_value="", known_candidates=(native,))
         self.assertEqual(native.resolve(), found)
 
     def test_the_override_never_names_a_directory_as_the_executable(self):
@@ -214,13 +207,9 @@ class LinuxCodexDiscoveryTests(unittest.TestCase):
                 codex_home / "plugins" / ".plugin-appserver" / "codex"
             )
             environment = {"CODEX_HOME": str(codex_home), CODEX_EXECUTABLE_ENV: directory}
-            with mock.patch.dict(os.environ, environment, clear=False):
-                with mock.patch("sentinel.transport._LINUX_DESKTOP_PREFIXES", ()):
-                    found = find_codex_executable(
-                        path_value="",
-                        known_candidates=_linux_known_candidates(path_value=""),
-                    )
-        self.assertEqual(native.resolve(), found)
+            with (mock.patch.dict(os.environ, environment, clear=False),
+                  self.assertRaises(CodexOverrideError)):
+                find_codex_executable(path_value="", known_candidates=(native,))
 
     def test_a_stale_desktop_bundle_does_not_shadow_a_newer_managed_binary(self):
         # Both installs expose the same executable, and either can be the newer
@@ -414,14 +403,6 @@ class HostHelperTests(unittest.TestCase):
 
     def test_the_platform_label_is_one_of_the_supported_hosts(self):
         self.assertIn(platform_label(), {"Windows", "Linux", "Desktop"})
-
-
-@unittest.skipIf(os.name == "nt", "Windows reads its own version resource")
-class PlatformVersionTests(unittest.TestCase):
-    def test_no_windows_version_resource_is_read_off_windows(self):
-        # runtime_identity (size and mtime) remains the compatibility key, so a
-        # missing version string only thins the diagnostic summary.
-        self.assertIsNone(platform_file_version(Path("/usr/lib/chatgpt/resources/codex")))
 
 
 if __name__ == "__main__":

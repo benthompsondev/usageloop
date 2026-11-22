@@ -258,6 +258,20 @@ normal install:
 USAGELOOP_CODEX_EXECUTABLE=/path/to/codex ./UsageLoop/UsageLoop
 ```
 
+On Windows, quit UsageLoop from the tray before launching it from the same
+PowerShell session that sets the override:
+
+```powershell
+$env:USAGELOOP_CODEX_EXECUTABLE = 'C:\Tools\My Codex\codex.exe'
+& "$env:LOCALAPPDATA\Programs\UsageLoop\UsageLoop.exe"
+```
+
+Windows discovery prefers the registered Codex desktop package or a repair
+runtime matching its package version. It then checks other desktop runtimes
+and PATH. On both platforms the explicit override takes precedence. An invalid
+override stops discovery and shows a reason in Technical details. To return to
+automatic discovery, clear the variable and restart UsageLoop.
+
 ## What UsageLoop does
 
 On accounts that expose a five-hour window, its clock normally starts when you

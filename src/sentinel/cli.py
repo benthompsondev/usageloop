@@ -16,16 +16,18 @@ from typing import Any, Sequence
 from . import __version__
 from .chain import ChainCoordinator, ChainPolicy, ChainResult
 from .classifier import Classification, classify
-from .history import SafeHistory, default_history_path
+from .history import SafeHistory
 from .models import TRIGGER_MODEL_PREFERENCE, select_trigger_model
 from .product import PRODUCT
 from .protocol import AppServerClient
 from .quota import QuotaSnapshot, QuotaWindow, normalize_rate_limits, select_five_hour
 from .transport import (
+    CodexNotFoundError,
+    CodexOverrideError,
     CodexProcessTransport,
+    CodexRuntime,
     SentinelRuntimeError,
-    find_codex_executable,
-    read_codex_version,
+    discover_codex_runtime,
 )
 from .trigger import (
     AppServerTrigger,
@@ -40,6 +42,7 @@ class RuntimeSession:
     codex_version: str
     client: AppServerClient
     platform_os: str
+    runtime: CodexRuntime
 
     def close(self) -> None:
         self.client.close()
@@ -115,9 +118,16 @@ def build_status_payload(
     }
 
 
-def connect() -> RuntimeSession:
-    executable = find_codex_executable()
-    codex_version = read_codex_version(executable)
+def connect(*, expected_runtime_identity: str | None = None) -> RuntimeSession:
+    runtime = discover_codex_runtime()
+    executable = runtime.executable
+    if expected_runtime_identity is not None:
+        from .providers import file_runtime_identity
+
+        if file_runtime_identity(executable) != expected_runtime_identity:
+            raise SentinelRuntimeError(
+                "codex_runtime_changed", "The Codex runtime changed before the operation."
+            )
     transport = CodexProcessTransport(executable)
     client = AppServerClient(transport, client_version=__version__)
     try:
@@ -125,7 +135,7 @@ def connect() -> RuntimeSession:
     except Exception:
         client.close()
         raise
-    return RuntimeSession(executable, codex_version, client, server.platform_os)
+    return RuntimeSession(executable, runtime.version, client, server.platform_os, runtime)
 
 
 def run_doctor() -> int:
@@ -134,7 +144,9 @@ def run_doctor() -> int:
         observed_at = time.time()
         snapshot = normalize_rate_limits(session.client.read_rate_limits(), observed_at)
         print(f"{PRODUCT.display_name}: {__version__} on Python {platform.python_version()} ({platform.system()})")
-        print(f"Codex executable: {session.executable}")
+        print(f"Codex runtime: {session.runtime.diagnostic}")
+        if session.runtime.skipped:
+            print(f"Skipped runtime candidates: {'; '.join(session.runtime.skipped)}")
         print(f"Codex version: {session.codex_version}")
         print(f"App-server handshake: OK ({session.platform_os})")
         print(f"Subscription rate limits: available ({len(snapshot.windows)} window(s))")
@@ -142,7 +154,6 @@ def run_doctor() -> int:
         print(f"Trigger model: {_describe_trigger_model(session)}")
         print(f"Model preference: {', then '.join(TRIGGER_MODEL_PREFERENCE)}")
         print("Model policy: listed lightweight models only; no unknown or default-model fallback")
-        print(f"Safe log: {default_history_path()}")
         print("Doctor boundary: read-only checks only; no model request was sent.")
         return 0
     finally:
@@ -354,6 +365,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("Stopped.")
         return 130
+    except (CodexNotFoundError, CodexOverrideError) as exc:
+        SafeHistory().record_error(exc.category)
+        print(str(exc), file=sys.stderr)
+        return 2
     except Exception as exc:
         category = _error_category(exc)
         SafeHistory().record_error(category)

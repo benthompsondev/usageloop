@@ -98,6 +98,8 @@ class ProviderViewState:
     compatibility_blocked_notified: bool = False
     compatibility_terminal_notified: bool = False
     compatibility_blocked_opportunity: str | None = None
+    runtime_discovery: str | None = None
+    runtime_discovery_warning: str | None = None
 
     @classmethod
     def waiting(
@@ -240,6 +242,8 @@ _TEXT_FIELDS = ("provider_id", "display_name", "status", "detail")
 _OPTIONAL_TEXT_FIELDS = (
     "runtime_identity",
     "runtime_version",
+    "runtime_discovery",
+    "runtime_discovery_warning",
     "last_action",
     "quota_state",
     "outcome_category",

@@ -151,6 +151,9 @@ class ApplicationController:
                     state = replace(
                         previous,
                         installed=True,
+                        runtime_version=state.runtime_version,
+                        runtime_discovery=state.runtime_discovery,
+                        runtime_discovery_warning=state.runtime_discovery_warning,
                         automation_supported=(
                             previous.automation_supported
                             if previous.compatibility_incident_id else state.automation_supported

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-import ctypes
 from pathlib import Path
 import time
 from typing import Callable
@@ -11,9 +10,8 @@ from typing import Callable
 from .app_state import ProviderViewState, preserve_verified_boundary
 from .classifier import classify
 from .history import SafeHistory
-from .host import is_windows
 from .quota import select_five_hour, select_weekly
-from .transport import find_codex_executable
+from .transport import CodexNotFoundError, CodexOverrideError, discover_codex_runtime
 
 
 ExecutableFinder = Callable[[], Path | None]
@@ -90,15 +88,28 @@ class CodexProvider:
         now: Callable[[], float] = time.time,
     ):
         self.history = history or SafeHistory()
-        self._find = executable_finder or find_codex_executable
+        self._find = executable_finder
         self._identity = identity_reader or file_runtime_identity
-        self._version = version_reader or platform_file_version
+        self._version = version_reader
         self._probe = capability_probe
         self._runner = operation_runner
         self._now = now
 
     def detect(self) -> ProviderViewState:
-        executable = self._find()
+        runtime = None
+        try:
+            if self._find is None:
+                runtime = discover_codex_runtime()
+                executable = runtime.executable
+            else:
+                executable = self._find()
+        except (CodexNotFoundError, CodexOverrideError) as exc:
+            return replace(
+                ProviderViewState.waiting(self.provider_id, self.display_name, installed=False),
+                automation_supported=False,
+                detail=str(exc),
+                runtime_discovery="Explicit override" if isinstance(exc, CodexOverrideError) else None,
+            )
         if executable is None:
             return ProviderViewState.waiting(
                 self.provider_id, self.display_name, installed=False
@@ -109,7 +120,12 @@ class CodexProvider:
             installed=True,
             runtime_identity=self._identity(executable),
         )
-        state = replace(state, runtime_version=self._version(executable))
+        state = replace(
+            state,
+            runtime_version=self._version(executable) if self._version else runtime.version if runtime else None,
+            runtime_discovery=runtime.diagnostic if runtime else None,
+            runtime_discovery_warning="; ".join(runtime.skipped) if runtime and runtime.skipped else None,
+        )
         snapshots = self.history.load_recent(now=self._now(), limit=4)
         if not snapshots:
             return state
@@ -144,15 +160,10 @@ class CodexProvider:
             "UNANCHORED": "The last check did not prove a fixed reset.",
             "EXHAUSTED": "The last check reported that this window was exhausted.",
         }.get(classification.state, "The last provider check was inconclusive.")
-        return ProviderViewState(
-            provider_id=state.provider_id,
-            display_name=state.display_name,
-            installed=True,
-            automation_supported=True,
+        return replace(
+            state,
             status=status,
             detail=detail,
-            runtime_identity=state.runtime_identity,
-            runtime_version=state.runtime_version,
             reset_at=selected.resets_at,
             last_verified_at=latest.observed_at if classification.state == "ANCHORED" else None,
             used_percent=selected.used_percent,
@@ -193,7 +204,7 @@ class CodexProvider:
             )
         return replace(
             result,
-            state=replace(result_state, runtime_version=state.runtime_version),
+            state=_with_runtime_details(result_state, state),
         )
 
     def sync_usage(self, *, current_state: ProviderViewState | None = None):
@@ -216,8 +227,7 @@ class CodexProvider:
             )
         else:
             synced_state = replace(
-                result.state,
-                runtime_version=detected.runtime_version,
+                _with_runtime_details(result.state, detected),
                 automation_supported=detected.automation_supported,
                 last_action=(
                     current_state.last_action
@@ -235,6 +245,15 @@ class CodexProvider:
 
             self._runner = CodexOperationRunner(self.history)
         return self._runner
+
+
+def _with_runtime_details(state: ProviderViewState, detected: ProviderViewState) -> ProviderViewState:
+    return replace(
+        state,
+        runtime_version=detected.runtime_version,
+        runtime_discovery=detected.runtime_discovery,
+        runtime_discovery_warning=detected.runtime_discovery_warning,
+    )
 
 
 def file_runtime_identity(executable: Path) -> str:
@@ -257,57 +276,3 @@ def _latest_trigger_action(history: SafeHistory) -> str | None:
         "failed_recoverable": "Start stopped before a request was sent",
         "failed_guarded": "Start not verified; no retry",
     }.get(attempts[-1].state)
-
-
-def windows_file_version(executable: Path) -> str | None:
-    class FixedFileInfo(ctypes.Structure):
-        _fields_ = [
-            ("signature", ctypes.c_uint32),
-            ("struct_version", ctypes.c_uint32),
-            ("file_version_ms", ctypes.c_uint32),
-            ("file_version_ls", ctypes.c_uint32),
-            ("product_version_ms", ctypes.c_uint32),
-            ("product_version_ls", ctypes.c_uint32),
-            ("file_flags_mask", ctypes.c_uint32),
-            ("file_flags", ctypes.c_uint32),
-            ("file_os", ctypes.c_uint32),
-            ("file_type", ctypes.c_uint32),
-            ("file_subtype", ctypes.c_uint32),
-            ("file_date_ms", ctypes.c_uint32),
-            ("file_date_ls", ctypes.c_uint32),
-        ]
-
-    try:
-        version = ctypes.WinDLL("version", use_last_error=True)
-        size = version.GetFileVersionInfoSizeW(str(executable), None)
-        if not size:
-            return None
-        buffer = ctypes.create_string_buffer(size)
-        if not version.GetFileVersionInfoW(str(executable), 0, size, buffer):
-            return None
-        pointer = ctypes.c_void_p()
-        length = ctypes.c_uint()
-        if not version.VerQueryValueW(buffer, "\\", ctypes.byref(pointer), ctypes.byref(length)):
-            return None
-        info = ctypes.cast(pointer, ctypes.POINTER(FixedFileInfo)).contents
-    except (AttributeError, OSError, ValueError):
-        return None
-    values = (
-        info.product_version_ms >> 16,
-        info.product_version_ms & 0xFFFF,
-        info.product_version_ls >> 16,
-        info.product_version_ls & 0xFFFF,
-    )
-    return ".".join(str(value) for value in values)
-
-
-def platform_file_version(executable: Path) -> str | None:
-    """Read the Windows version resource only on Windows.
-
-    A Linux Codex binary carries no equivalent resource. The compatibility
-    guard already keys on `runtime_identity`, which is size and mtime, so a
-    missing version string weakens the diagnostic summary and nothing else.
-    """
-    if not is_windows():
-        return None
-    return windows_file_version(executable)

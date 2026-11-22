@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from functools import lru_cache
 import os
 from pathlib import Path
 import queue
+import re
 import subprocess
 import threading
+import time
 from typing import Iterable
+
+from .host import is_windows
+from .windows_codex import package_version, registered_codex_packages
 
 
 class SentinelRuntimeError(RuntimeError):
@@ -17,8 +24,20 @@ class SentinelRuntimeError(RuntimeError):
 
 
 class CodexNotFoundError(SentinelRuntimeError):
-    def __init__(self):
-        super().__init__("codex_not_found", "A usable Codex executable was not found.")
+    def __init__(self, failures: tuple[str, ...] = ()):
+        detail = "A usable Codex executable was not found."
+        if failures:
+            detail += " " + "; ".join(failures) + "."
+        super().__init__("codex_not_found", detail)
+
+
+class CodexOverrideError(SentinelRuntimeError):
+    def __init__(self, reason: str):
+        super().__init__(
+            "codex_override_invalid",
+            f"{CODEX_EXECUTABLE_ENV} is set, but {reason} "
+            "Set it to a usable Codex executable or clear it and restart UsageLoop.",
+        )
 
 
 class AppServerUnavailableError(SentinelRuntimeError):
@@ -34,37 +53,109 @@ class TransportTimeoutError(SentinelRuntimeError):
 _EOF = object()
 
 
+@dataclass(frozen=True)
+class CodexRuntime:
+    executable: Path
+    source: str
+    version: str
+    skipped: tuple[str, ...] = ()
+
+    @property
+    def diagnostic(self) -> str:
+        return f"{self.source} ({_diagnostic_path(self.executable)})"
+
+
 def find_codex_executable(
     *,
     path_value: str | None = None,
     known_candidates: Iterable[Path] | None = None,
 ) -> Path:
-    """Prefer the installed native Codex binary, then PATH, then a command shim.
+    """Find an existing candidate without starting a child process."""
+    return _select_runtime(path_value, known_candidates, check_version=False).executable
 
-    The npm shim is often an older release than the native app binary. Sentinel
-    depends on evolving app-server behavior, so it must not silently run the
-    stale one: a locally installed shim measured five minor versions behind the
-    native executable it shadowed on PATH.
 
-    The same rule decides Linux. A Codex desktop install ships its own
-    `codex` and puts nothing on PATH, so a PATH-only search reports "not
-    installed" on a machine that plainly has Codex.
-    """
-    candidates = _default_known_candidates() if known_candidates is None else tuple(known_candidates)
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
+def discover_codex_runtime() -> CodexRuntime:
+    """Resolve a runtime and verify its CLI can report a version."""
+    return _select_runtime(None, None, check_version=True)
 
+
+def _path_candidates(path_value: str | None) -> Iterable[tuple[str, Path]]:
     search_path = os.environ.get("PATH", "") if path_value is None else path_value
-    names = ("codex.exe", "codex.cmd") if os.name == "nt" else ("codex",)
+    names = ("codex.exe", "codex.cmd") if is_windows() else ("codex",)
     for name in names:
         for directory in search_path.split(os.pathsep):
-            if not directory:
+            if directory:
+                yield "PATH", Path(directory.strip('"')) / name
+
+
+def _select_runtime(
+    path_value: str | None,
+    known_candidates: Iterable[Path] | None,
+    *,
+    check_version: bool,
+) -> CodexRuntime:
+    override = os.environ.get(CODEX_EXECUTABLE_ENV, "").strip()
+    if override:
+        try:
+            executable = Path(override).expanduser().resolve(strict=True)
+            if not executable.is_file():
+                raise ValueError
+        except (OSError, RuntimeError, ValueError):
+            raise CodexOverrideError("the path does not name an accessible file.") from None
+        if is_windows() and executable.suffix.lower() not in {".exe", ".cmd", ".bat"}:
+            raise CodexOverrideError("the file is not an .exe, .cmd, or .bat executable.")
+        try:
+            version = _runtime_version(executable) if check_version else ""
+        except (OSError, SentinelRuntimeError) as exc:
+            reason = str(exc) if isinstance(exc, SentinelRuntimeError) else "The file is inaccessible."
+            raise CodexOverrideError(f"the executable failed its version check. {reason}") from None
+        return CodexRuntime(executable, "Explicit override", version)
+
+    failures: list[str] = []
+    seen: set[Path] = set()
+    for source, candidate in _runtime_candidates(path_value, known_candidates):
+        try:
+            if not candidate.is_file():
                 continue
-            candidate = Path(directory.strip('"')) / name
-            if candidate.is_file():
-                return candidate.resolve()
-    raise CodexNotFoundError()
+            executable = candidate.resolve(strict=True)
+            if executable in seen:
+                continue
+            seen.add(executable)
+            version = _runtime_version(executable) if check_version else ""
+        except (OSError, RuntimeError, ValueError) as exc:
+            reason = str(exc) if isinstance(exc, SentinelRuntimeError) else "File inaccessible."
+            failure = f"{source}: {reason.rstrip('.')}"
+            if failure not in failures:
+                failures.append(failure)
+            continue
+        return CodexRuntime(executable, source, version, tuple(failures))
+    raise CodexNotFoundError(tuple(failures))
+
+
+def _runtime_version(executable: Path) -> str:
+    metadata = executable.stat()
+    version, error = _checked_version(
+        executable, metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns,
+        int(time.monotonic() // 60),
+    )
+    if error:
+        raise AppServerUnavailableError(error)
+    return version
+
+
+@lru_cache(maxsize=16)
+def _checked_version(
+    executable: Path, size: int, modified: int, changed: int, minute: int
+) -> tuple[str, str]:
+    # Bound repeated subprocess launches on the desktop polling path. Retry a
+    # failure next minute or right away if an installer replaces the file.
+    try:
+        version = read_codex_version(executable, timeout=2.0)
+    except AppServerUnavailableError as exc:
+        return "", str(exc)
+    if not re.fullmatch(r"codex(?:-cli)? [0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)?", version):
+        return "", "Codex returned an unrecognized version string."
+    return version, ""
 
 
 def read_codex_version(executable: Path, timeout: float = 10.0) -> str:
@@ -79,10 +170,12 @@ def read_codex_version(executable: Path, timeout: float = 10.0) -> str:
             check=False,
             creationflags=_creation_flags(),
         )
+    except subprocess.TimeoutExpired as exc:
+        raise AppServerUnavailableError("The Codex version check timed out.") from exc
     except (OSError, subprocess.SubprocessError) as exc:
-        raise AppServerUnavailableError("Codex was found but its version could not be read.") from exc
+        raise AppServerUnavailableError("The Codex version command could not be started.") from exc
     if result.returncode != 0 or not result.stdout.strip():
-        raise AppServerUnavailableError("Codex was found but its version command failed.")
+        raise AppServerUnavailableError("The Codex version command returned an error or no version.")
     return result.stdout.strip()
 
 
@@ -212,43 +305,67 @@ _LINUX_DESKTOP_LAUNCHERS = ("chatgpt",)
 #: installed anywhere else is reached through `CODEX_EXECUTABLE_ENV`.
 _LINUX_DESKTOP_PREFIXES = ("/usr/lib/chatgpt",)
 
-#: Last-resort override for a Codex this module cannot derive, such as a Nix,
-#: Flatpak or hand-built layout. Automatic discovery is the normal path; this
-#: is read, never written, and never required when Codex is installed normally.
+#: Process-local override for installations that automatic discovery cannot derive.
 CODEX_EXECUTABLE_ENV = "USAGELOOP_CODEX_EXECUTABLE"
 
 
-def _default_known_candidates() -> tuple[Path, ...]:
-    if os.name == "nt":
-        return _windows_known_candidates()
-    return _linux_known_candidates()
+def _runtime_candidates(
+    path_value: str | None, known_candidates: Iterable[Path] | None
+) -> Iterable[tuple[str, Path]]:
+    if known_candidates is not None:
+        yield from (("Native runtime", path) for path in known_candidates)
+    elif is_windows():
+        yield from _windows_runtime_candidates()
+    else:
+        yield from (("Linux native runtime", path) for path in _linux_known_candidates(path_value=path_value))
+    yield from _path_candidates(path_value)
 
 
-def _windows_known_candidates() -> tuple[Path, ...]:
+def _windows_runtime_candidates() -> Iterable[tuple[str, Path]]:
     local_app_data = os.environ.get("LOCALAPPDATA")
-    if not local_app_data:
-        return ()
-    bin_root = Path(local_app_data) / "OpenAI" / "Codex" / "bin"
-    if not bin_root.is_dir():
-        return ()
-    return _newest_first(bin_root.glob("*/codex.exe"))
+    root = Path(local_app_data) / "OpenAI" / "Codex" if local_app_data else None
+    manual = root / "manual-cli" if root is not None else None
+    for version, package in registered_codex_packages():
+        # Desktop repairs are stored by desktop package version. A repair
+        # for a different package must not shadow the registered bundle.
+        if manual is not None and package_version(version):
+            yield "Desktop repair matching MSIX", manual / version / "codex.exe"
+        yield "Registered Codex MSIX", package / "app" / "resources" / "codex.exe"
+    if root is not None and manual is not None:
+        repaired = (path for path in manual.glob("*/codex.exe") if package_version(path.parent.name))
+        for path in sorted(repaired, key=lambda path: package_version(path.parent.name), reverse=True):
+            yield "Versioned desktop repair", path
+        yield "Unversioned desktop repair", manual / "codex.exe"
+        yield from (("Managed Codex bin", path) for path in _newest_first((root / "bin").glob("*/codex.exe")))
+
+
+def _diagnostic_path(executable: Path) -> str:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if is_windows() and local_app_data:
+        root = Path(local_app_data) / "OpenAI" / "Codex"
+        if executable.is_relative_to(root):
+            parts = executable.relative_to(root).parts
+            if (
+                parts == ("manual-cli", "codex.exe")
+                or len(parts) == 3 and parts[2] == "codex.exe" and (
+                    parts[0] == "manual-cli" and package_version(parts[1])
+                    or parts[0] == "bin" and re.fullmatch(r"[0-9a-f]{8,64}", parts[1])
+                )
+            ):
+                return "%LOCALAPPDATA%\\OpenAI\\Codex\\" + "\\".join(parts)
+    if executable.name.lower() in {"codex", "codex.exe", "codex.cmd", "codex.bat"}:
+        return f"<path hidden>/{executable.name}"
+    return "<path hidden>"
 
 
 def _linux_known_candidates(*, path_value: str | None = None) -> tuple[Path, ...]:
-    """Return an explicit override first, then installed binaries, newest first.
+    """Return installed Linux binaries, newest first.
 
     Both supported Linux installs expose the same executable, byte for byte.
     The Codex CLI manages one under `CODEX_HOME`, and the Codex desktop app
     ships an identical one inside its package. Neither is guaranteed to be on
     PATH under the name `codex`, so PATH alone is not a sufficient search.
     """
-    override = os.environ.get(CODEX_EXECUTABLE_ENV, "").strip()
-    leading: tuple[Path, ...] = ()
-    if override:
-        candidate = Path(override).expanduser()
-        if candidate.is_file():
-            leading = (candidate,)
-
     codex_home = os.environ.get("CODEX_HOME", "").strip()
     home = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
     discovered = [home / "plugins" / ".plugin-appserver" / "codex"]
@@ -259,7 +376,7 @@ def _linux_known_candidates(*, path_value: str | None = None) -> tuple[Path, ...
     discovered.extend(
         Path(prefix) / "resources" / "codex" for prefix in _LINUX_DESKTOP_PREFIXES
     )
-    return leading + _newest_first(discovered)
+    return _newest_first(discovered)
 
 
 def _linux_desktop_app_roots(*, path_value: str | None = None) -> tuple[Path, ...]:

@@ -281,8 +281,9 @@ class TechnicalSummaryTests(unittest.TestCase):
     def test_summary_names_where_codex_is_looked_for(self):
         # The first question on a "Codex not found" report is where it looked.
         text = self.summary()
-        expected = "installed Codex app binary" if is_windows() else "$CODEX_HOME/plugins"
+        expected = "registered Codex MSIX" if is_windows() else "installed Linux Codex runtimes"
         self.assertIn(f"Discovery: ", text)
+        self.assertIn("explicit override", text)
         self.assertIn(expected, text)
         self.assertNotIn(str(Path.home()), text)
 

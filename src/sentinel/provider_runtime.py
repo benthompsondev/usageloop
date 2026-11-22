@@ -100,18 +100,21 @@ class CodexOperationRunner:
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.history = history
-        if session_factory is None:
-            from .cli import connect
-
-            session_factory = connect
         self._session_factory = session_factory
         self._clock = clock
         self._sleep = sleep
 
+    def _connect(self, runtime_identity: str) -> RuntimeSession:
+        if self._session_factory is not None:
+            return self._session_factory()
+        from .cli import connect
+
+        return connect(expected_runtime_identity=runtime_identity)
+
     def probe(self, runtime_identity: str) -> CompatibilityResult:
         session = None
         try:
-            session = self._session_factory()
+            session = self._connect(runtime_identity)
             observations: list[QuotaSnapshot] = []
             for index in range(4):
                 observed_at = self._clock()
@@ -159,7 +162,7 @@ class CodexOperationRunner:
 
     def sync(self, runtime_identity: str) -> ProviderOperationResult:
         """Refresh quota evidence without discovering models or starting a turn."""
-        session = self._session_factory()
+        session = self._connect(runtime_identity)
         try:
             observations: list[QuotaSnapshot] = []
             for index in range(4):
@@ -229,7 +232,7 @@ class CodexOperationRunner:
     def run(self, mode: str, *, runtime_identity: str) -> ProviderOperationResult:
         if mode not in {"bootstrap", "rollover"}:
             raise ValueError("Unsupported Codex operation mode.")
-        session = self._session_factory()
+        session = self._connect(runtime_identity)
         all_observations: list[QuotaSnapshot] = []
         try:
             trigger = AppServerTrigger(

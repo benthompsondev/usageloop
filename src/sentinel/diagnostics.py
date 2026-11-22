@@ -297,7 +297,7 @@ def technical_summary(
         version = state.runtime_version or "version unavailable"
         if not state.automation_supported:
             compatibility = "not applicable"
-        elif compatible.get(provider_id) == state.runtime_identity:
+        elif state.runtime_identity is not None and compatible.get(provider_id) == state.runtime_identity:
             compatibility = "passed"
         else:
             compatibility = "not confirmed"
@@ -307,6 +307,7 @@ def technical_summary(
                 state.display_name,
                 f"  Installed: {'yes' if state.installed else 'no'}",
                 f"  Version: {version}",
+                f"  Runtime: {state.runtime_discovery or 'not recorded'}",
                 f"  Compatibility: {compatibility}",
                 f"  Raw state: {state.status}",
                 f"  Outcome category: {state.outcome_category or 'not recorded'}",
@@ -315,6 +316,8 @@ def technical_summary(
                 f"  Detail: {state.detail}",
             ]
         )
+        if state.runtime_discovery_warning:
+            lines.append(f"  Skipped runtime candidates: {state.runtime_discovery_warning}")
     lines.extend(
         [
             "",
@@ -376,5 +379,5 @@ def _discovery_order() -> str:
     so it adds no state and expands no path from the user's home directory.
     """
     if is_windows():
-        return "installed Codex app binary, then PATH"
-    return "$CODEX_HOME/plugins, then a Codex desktop install, then PATH"
+        return "explicit override, registered Codex MSIX or its matching repair, other desktop runtimes, then PATH"
+    return "explicit override, installed Linux Codex runtimes, then PATH"
