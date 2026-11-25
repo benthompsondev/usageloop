@@ -138,6 +138,22 @@ class AppServerProtocolTests(unittest.TestCase):
         self.assertEqual("authentication_unavailable", caught.exception.category)
         self.assertNotIn("chatgpt", str(caught.exception).lower())
 
+    def test_rate_read_distinguishes_backend_failure_from_protocol_rejection(self):
+        for code, category in ((-32603, "rate_limits_unavailable"),
+                               (-32601, "protocol_unsupported"), (-32602, "protocol_unsupported")):
+            with self.subTest(code=code):
+                fixture = messages()
+                transport = MemoryTransport([
+                    fixture["initialize_result"],
+                    {"id": 2, "error": {"code": code, "message": "private details"}},
+                ])
+                client = AppServerClient(transport, client_version="test")
+                client.initialize()
+                with self.assertRaises(AppServerProtocolError) as caught:
+                    client.read_rate_limits()
+                self.assertEqual(category, caught.exception.category)
+                self.assertNotIn("private details", str(caught.exception))
+
     def test_protocol_emits_only_observation_safe_methods(self):
         fixture = messages()
         transport = MemoryTransport([fixture["initialize_result"], fixture["rate_response"]])

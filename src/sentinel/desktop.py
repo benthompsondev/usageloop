@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
         self.confirm_enable = confirm_enable or self._confirm_enable
         self.confirm_bootstrap = confirm_bootstrap or self._confirm_bootstrap
         self.active_operations: dict[str, str] = {}
-        self._probe_context: dict[str, tuple[ProviderViewState, ProviderViewState, bool]] = {}
+        self._probe_context: dict[str, tuple[ProviderViewState, ProviderViewState, bool, bool]] = {}
         self._detecting = False
         self._explicit_recheck = False
         self._evaluation_time: float | None = None
@@ -1295,6 +1295,8 @@ class MainWindow(QMainWindow):
                 self._start_operation(provider_id, "probe", automatic=True)
             elif decision.action == "ROLLOVER":
                 self._start_operation(provider_id, "rollover")
+            elif decision.action == "NONE" and self.controller.claim_recovery_opportunity(provider_id, now=now):
+                self._start_operation(provider_id, "probe", automatic=True, opportunity=True)
 
     def _can_start_loop(self, provider_id: str, *, now: float) -> bool:
         state = self.controller.states.get(provider_id)
@@ -1361,7 +1363,9 @@ class MainWindow(QMainWindow):
         self._explicit_recheck = True
         self._start_detection()
 
-    def _start_operation(self, provider_id: str, action: str, *, automatic: bool = False) -> None:
+    def _start_operation(
+        self, provider_id: str, action: str, *, automatic: bool = False, opportunity: bool = False,
+    ) -> None:
         provider = self.providers.get(provider_id)
         if provider is None:
             return
@@ -1376,7 +1380,7 @@ class MainWindow(QMainWindow):
             return
         self.active_operations[provider_id] = action
         if action == "probe":
-            self._probe_context[provider_id] = (state, pending, automatic)
+            self._probe_context[provider_id] = (state, pending, automatic, opportunity)
             def check_if_current() -> _CheckedCompatibility | None:
                 settings = self.controller.settings
                 if automatic and (
@@ -1401,7 +1405,7 @@ class MainWindow(QMainWindow):
             if action != "probe" or context is None:
                 self.refresh_clock()
                 return
-            prior, pending, automatic = context
+            prior, pending, automatic, opportunity = context
             if result.detected.runtime_identity != pending.runtime_identity:
                 if self.controller.states[provider_id] == pending:
                     self.controller.apply_local_states({provider_id: result.detected})
@@ -1417,8 +1421,9 @@ class MainWindow(QMainWindow):
                 self.refresh_clock()
                 return
             notified = prior.compatibility_notified
-            saved = self.controller.apply_compatibility(provider_id, result,
-                                                          explicit=not automatic)
+            saved = self.controller.apply_compatibility(
+                provider_id, result, explicit=not automatic, opportunity=opportunity,
+            )
             if saved and result.compatible and notified:
                 self.notification_requested.emit(tr("Codex connection restored"),
                     tr("UsageLoop can follow the saved schedule again. Safety checks still apply."))
@@ -1452,7 +1457,7 @@ class MainWindow(QMainWindow):
     def _restore_pending_probe(self, provider_id: str) -> None:
         context = self._probe_context.pop(provider_id, None)
         if context is not None:
-            prior, pending, _automatic = context
+            prior, pending, _automatic, _opportunity = context
             if self.controller.states[provider_id] == pending:
                 self.controller.update_provider_state(prior)
 
@@ -1470,14 +1475,17 @@ class MainWindow(QMainWindow):
             return
         if action in {"bootstrap", "rollover"}:
             state = self.controller.states[provider_id]
+            runtime_changed = category == "codex_runtime_changed"
             self.controller.apply_compatibility(
                 provider_id,
                 CompatibilityResult(
                     False, "Needs attention",
+                    "The start check stopped before a request was sent." if runtime_changed else
                     "A request may have been sent. UsageLoop will not retry that attempt.",
                     state.runtime_identity or "unavailable", failure_category=category,
+                    failure_stage="connect" if runtime_changed else None,
                 ),
-                failure_origin="unknown_start",
+                failure_origin="pre_send" if runtime_changed else "unknown_start",
             )
         self.refresh_clock()
 

@@ -124,6 +124,95 @@ class RecoveryTests(unittest.TestCase):
         self.assertIsNone(c.states["codex"].compatibility_next_retry_at)
         self.assertEqual("WAIT", c.decisions(now=later + 2)["codex"].action)
 
+    def test_only_quota_backend_errors_receive_bounded_pre_send_retries(self):
+        for category, stage, origin, expect_retry in (
+            ("rate_limits_unavailable", "quota_read", "pre_send", True),
+            ("rate_limits_unavailable", "quota_read", None, True),
+            ("rate_limits_unavailable", None, "pre_send", False),
+            ("rate_limits_unavailable", "quota_read", "unknown_start", False),
+            ("authentication_unavailable", "quota_read", "pre_send", False),
+            ("protocol_unsupported", "quota_read", "pre_send", False),
+        ):
+            with self.subTest(category=category, stage=stage, origin=origin):
+                c = self.start_controller()
+                c.apply_compatibility("codex", self.success(), now=99)
+                failure = replace(self.failure(category), failure_stage=stage)
+                self.assertTrue(c.apply_compatibility("codex", failure, now=100,
+                                                      explicit=True, failure_origin=origin))
+                actual = c.states["codex"].compatibility_next_retry_at
+                self.assertEqual(160 if expect_retry else None, actual)
+
+    def test_exhausted_recovery_rechecks_once_at_a_later_slot_in_each_schedule(self):
+        now = datetime(2026, 11, 25, 12).timestamp()
+        for mode in ("continuous", "daily", "weekly"):
+            with self.subTest(mode=mode):
+                c = self.start_controller()
+                c.set_schedule_mode(mode)
+                state = self.provider.state.with_reset(int(now - 120), verified_at=now - 240)
+                self.provider.state = state
+                c.update_provider_state(state)
+                failure = replace(self.failure("rate_limits_unavailable"), failure_stage="quota_read")
+                c.apply_compatibility("codex", failure, now=now, explicit=True, failure_origin="pre_send")
+                c.expire_compatibility(now=now + 3600)
+                self.assertFalse(c.claim_recovery_opportunity("codex", now=now + 3600))
+                late = now + 3 * 86400
+                if mode == "continuous":
+                    late = now + 5 * 3600
+                self.assertTrue(c.claim_recovery_opportunity("codex", now=late))
+                c.apply_compatibility("codex", failure, now=late, opportunity=True)
+                self.assertIsNone(c.states["codex"].compatibility_next_retry_at)
+                c = self.start_controller()
+                self.assertFalse(c.claim_recovery_opportunity("codex", now=late + 15))
+                self.assertEqual(state.reset_at, c.states["codex"].reset_at)
+                self.assertTrue(c.claim_recovery_opportunity("codex", now=late + 86400))
+
+    def test_later_opportunity_respects_pause_off_and_unknown_send(self):
+        now = datetime(2026, 11, 25, 12).timestamp()
+        c = self.start_controller()
+        c.set_schedule_mode("daily")
+        state = self.provider.state.with_reset(int(now - 120), verified_at=now - 240)
+        self.provider.state = state
+        c.update_provider_state(state)
+        c.apply_compatibility("codex", self.failure(), now=now, failure_origin="pre_send")
+        c.expire_compatibility(now=now + 3600)
+        late = now + 3 * 86400
+        self.assertTrue(c.pause_until_tomorrow(now=late))
+        self.assertFalse(c.claim_recovery_opportunity("codex", now=late + 60))
+        c.set_automation_enabled(False)
+        self.assertFalse(c.claim_recovery_opportunity("codex", now=late + 86400))
+        c.apply_compatibility("codex", self.failure(), now=late, explicit=True,
+                              failure_origin="unknown_start")
+        c.set_automation_enabled(True)
+        self.assertFalse(c.claim_recovery_opportunity("codex", now=late + 86400))
+
+    def test_stranded_v140_migrates_to_one_read_only_probe_with_same_runtime(self):
+        now = 2_000_000_000
+        old = replace(
+            self.provider.state.with_reset(now - 120, verified_at=now - 240),
+            status="Needs attention", last_action="ANCHOR_VERIFIED", outcome_category="READY",
+            detail="The check stopped safely (app_server_timeout). Nothing was retried. See Settings for detail.",
+        )
+        settings = replace(self.controller.settings, compatible_runtime_identities={"codex": "runtime:1"},
+                           checked_runtime_identities={"codex": "runtime:1"})
+        self.store.save(settings, {"codex": old})
+        attempt = self.history.reserve_trigger(
+            mode="rollover", idempotency_key=f"rollover:{old.reset_at}",
+            boundary_reset_at=old.reset_at, model="gpt-6-luna", reasoning_effort="low", now=now - 45,
+        )
+        self.history.transition_trigger(attempt.attempt_id, "launch_attempted", now=now - 40)
+        self.history.transition_trigger(attempt.attempt_id, "request_possibly_sent", now=now - 35)
+        guarded = self.history.trigger_attempts()
+        migrated = self.start_controller()
+        state = migrated.states["codex"]
+        self.assertEqual("PROBE", migrated.decisions(now=now)["codex"].action)
+        self.assertEqual(old.reset_at, state.reset_at)
+        self.assertEqual(old.last_action, state.last_action)
+        self.assertEqual("unknown_start", state.compatibility_failure_origin)
+        self.assertEqual(guarded, self.history.trigger_attempts())
+        self.assertEqual("request_possibly_sent", guarded[-1].state)
+        self.assertTrue(migrated.apply_compatibility("codex", self.failure(), now=now))
+        self.assertIsNone(migrated.states["codex"].compatibility_next_retry_at)
+
     def test_expiration_is_actionable_once_and_preserves_history(self):
         c = self.controller
         self.assertTrue(c.apply_compatibility("codex", self.failure(), now=100))
@@ -488,6 +577,31 @@ class LateProbeTests(unittest.TestCase):
         self.assertEqual([], self.window.thread_pool.workers)
         self.assertIsNone(self.controller.states["codex"].compatibility_next_retry_at)
         self.assertEqual("NONE", self.controller.decisions(now=now + 1000)["codex"].action)
+
+    def test_later_opportunity_queues_only_a_probe_and_failure_does_not_restart_the_episode(self):
+        now = time.time()
+        ready = self.provider.state.with_reset(int(now - 120), verified_at=now - 240)
+        self.provider.state = replace(ready, quota_state="ANCHORED")
+        self.controller.update_provider_state(self.provider.state)
+        failure = CompatibilityResult(
+            False, "Needs attention", "No request sent.", "runtime:1",
+            failure_category="rate_limits_unavailable", failure_stage="quota_read",
+        )
+        for instant in (now, now + 60, now + 180, now + 480, now + 1080, now + 1980):
+            self.controller.apply_compatibility("codex", failure, now=instant,
+                                                failure_origin="pre_send")
+        later = now + 5 * 3600
+        self.window._evaluate_verified_automation(now=later)
+        self.assertEqual({"codex": "probe"}, self.window.active_operations)
+        with patch("sentinel.desktop.time.time", return_value=later):
+            self.complete_probe(failure)
+        state = self.controller.states["codex"]
+        self.assertEqual("Needs attention", state.status)
+        self.assertIsNone(state.compatibility_next_retry_at)
+        self.assertEqual(now, state.compatibility_started_at)
+        self.window._evaluate_verified_automation(now=later + 15)
+        self.assertEqual([], self.window.thread_pool.workers)
+        self.assertEqual([], self.controller.error_history.trigger_attempts())
 
     def test_pause_cancels_pending_pre_send_recovery_across_restart(self):
         now = time.time()

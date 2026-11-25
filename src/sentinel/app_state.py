@@ -96,6 +96,7 @@ class ProviderViewState:
     compatibility_attempts: int = 0
     compatibility_started_at: float | None = None
     compatibility_next_retry_at: float | None = None
+    compatibility_last_opportunity_check_at: float | None = None
     compatibility_notified: bool = False
     compatibility_blocked_notified: bool = False
     compatibility_terminal_notified: bool = False
@@ -272,6 +273,7 @@ _FLOAT_FIELDS = (
     "recovery_not_before",
     "compatibility_started_at",
     "compatibility_next_retry_at",
+    "compatibility_last_opportunity_check_at",
 )
 
 

@@ -222,3 +222,33 @@ def schedule_summary(
         weekly_times or (),
         timezone=timezone,
     )
+
+
+def recovery_opportunity_at(
+    mode: str,
+    *,
+    boundary_reset_at: float,
+    now: float,
+    hour: int,
+    minute: int,
+    weekly_times: Sequence[tuple[int, int]] | None,
+    timezone: tzinfo | None = None,
+) -> float | None:
+    """Find the latest due read-only recovery slot without moving the saved boundary."""
+    summary = schedule_summary(
+        mode, boundary_reset_at=boundary_reset_at, now=now, hour=hour,
+        minute=minute, weekly_times=weekly_times, timezone=timezone,
+    )
+    due = summary.next_action_at
+    if not summary.due or due is None:
+        return None
+    if mode == CONTINUOUS:
+        return due + ((now - due) // FIVE_HOUR_WINDOW_SECONDS) * FIVE_HOUR_WINDOW_SECONDS
+    if mode == DAILY:
+        day = datetime.fromtimestamp(now, timezone).date()
+        latest = _local_candidate(day, hour, minute, timezone)
+        if latest > now:
+            latest = _local_candidate(day - timedelta(days=1), hour, minute, timezone)
+        return max(due, latest)
+    # Weekly already advances to the latest routine start and excludes overnight.
+    return due
