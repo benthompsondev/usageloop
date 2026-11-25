@@ -348,16 +348,20 @@ def _diagnostic_path(executable: Path) -> str:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if is_windows() and local_app_data:
         root = Path(local_app_data) / "OpenAI" / "Codex"
-        if executable.is_relative_to(root):
-            parts = executable.relative_to(root).parts
-            if (
-                parts == ("manual-cli", "codex.exe")
-                or len(parts) == 3 and parts[2] == "codex.exe" and (
-                    parts[0] == "manual-cli" and package_version(parts[1])
-                    or parts[0] == "bin" and re.fullmatch(r"[0-9a-f]{8,64}", parts[1])
-                )
-            ):
-                return "%LOCALAPPDATA%\\OpenAI\\Codex\\" + "\\".join(parts)
+        # The resolver already canonicalized the executable. Windows may give
+        # LOCALAPPDATA in short-path form, so resolve the known root as well.
+        try:
+            parts = executable.relative_to(root.resolve()).parts
+        except (OSError, RuntimeError, ValueError):
+            parts = ()
+        if (
+            parts == ("manual-cli", "codex.exe")
+            or len(parts) == 3 and parts[2] == "codex.exe" and (
+                parts[0] == "manual-cli" and package_version(parts[1])
+                or parts[0] == "bin" and re.fullmatch(r"[0-9a-f]{8,64}", parts[1])
+            )
+        ):
+            return "%LOCALAPPDATA%\\OpenAI\\Codex\\" + "\\".join(parts)
     if executable.name.lower() in {"codex", "codex.exe", "codex.cmd", "codex.bat"}:
         return f"<path hidden>/{executable.name}"
     return "<path hidden>"

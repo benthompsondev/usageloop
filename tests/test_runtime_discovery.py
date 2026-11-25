@@ -108,6 +108,16 @@ class RuntimeDiscoveryTests(unittest.TestCase):
         self.assertEqual(current, runtime.executable)
         self.assertIn(r"%LOCALAPPDATA%\OpenAI\Codex\manual-cli\26.9.5.0\codex.exe", runtime.diagnostic)
 
+    def test_known_repair_is_redacted_when_local_app_data_has_an_alias(self):
+        repair = self.binary(self.codex / "manual-cli" / "26.9.5.0" / "codex.exe")
+        self.registered.return_value = (("26.9.5.0", self.package),)
+        os.environ["LOCALAPPDATA"] = str(self.local / ".." / self.local.name)
+        runtime = discover_codex_runtime()
+        self.assertEqual(repair, runtime.executable)
+        self.assertIn(r"%LOCALAPPDATA%\OpenAI\Codex\manual-cli\26.9.5.0\codex.exe",
+                      runtime.diagnostic)
+        self.assertNotIn(str(self.root.resolve()), runtime.diagnostic)
+
     def test_broken_matching_repair_falls_back_to_registered_install(self):
         self.registered.return_value = (("26.9.5.0", self.package),)
         repair = self.binary(self.codex / "manual-cli" / "26.9.5.0" / "codex.exe")
