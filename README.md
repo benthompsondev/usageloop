@@ -24,7 +24,7 @@ It does not redeem banked resets, buy credits, or reset an active window or
 your weekly allowance.
 
 **[Download for Windows](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe)**
-· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.4.0/UsageLoop-1.4.0-linux-x86_64.tar.gz)**
+· **[Download for Linux x86_64](https://github.com/benthompsondev/usageloop/releases/download/v1.4.1/UsageLoop-1.4.1-linux-x86_64.tar.gz)**
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
@@ -159,7 +159,7 @@ Download the latest stable per-user installer and its matching checksum:
 - [UsageLoop-Setup.exe.sha256](https://github.com/benthompsondev/usageloop/releases/latest/download/UsageLoop-Setup.exe.sha256)
 
 The installer does not need administrator rights or change the global PATH.
-Already installed? In 1.4.0, open **About** to find **Updates** at the top.
+Already installed? In 1.4.0 and newer, open **About** to find **Updates** at the top.
 In 1.3.9 and earlier versions, open **Settings** and scroll to
 **Updates**. Choose **Check for updates**. Checks and installation are manual; UsageLoop does not
 update itself in the background.
@@ -198,15 +198,15 @@ alone would report Codex as missing on a machine that clearly has it.
 
 Download the archive and matching checksum:
 
-- [UsageLoop-1.4.0-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.4.0/UsageLoop-1.4.0-linux-x86_64.tar.gz)
-- [UsageLoop-1.4.0-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.4.0/UsageLoop-1.4.0-linux-x86_64.tar.gz.sha256)
+- [UsageLoop-1.4.1-linux-x86_64.tar.gz](https://github.com/benthompsondev/usageloop/releases/download/v1.4.1/UsageLoop-1.4.1-linux-x86_64.tar.gz)
+- [UsageLoop-1.4.1-linux-x86_64.tar.gz.sha256](https://github.com/benthompsondev/usageloop/releases/download/v1.4.1/UsageLoop-1.4.1-linux-x86_64.tar.gz.sha256)
 
 From the folder containing both downloads:
 
 ```bash
-sha256sum -c UsageLoop-1.4.0-linux-x86_64.tar.gz.sha256
-tar -xzf UsageLoop-1.4.0-linux-x86_64.tar.gz
-cd UsageLoop-1.4.0-linux-x86_64
+sha256sum -c UsageLoop-1.4.1-linux-x86_64.tar.gz.sha256
+tar -xzf UsageLoop-1.4.1-linux-x86_64.tar.gz
+cd UsageLoop-1.4.1-linux-x86_64
 ./UsageLoop/UsageLoop
 ```
 
@@ -242,7 +242,7 @@ does not ship one by default; without an AppIndicator extension UsageLoop runs
 as a normal window, and closing the window exits the app. Pause, Recent starts,
 and Sync are all on the Dashboard, so nothing is tray-only.
 
-**Updates.** In 1.4.0, open **About** and press **Check for updates** at the top.
+**Updates.** In 1.4.0 and newer, open **About** and press **Check for updates** at the top.
 In 1.3.9 and earlier, Updates is at the bottom of Settings. UsageLoop asks
 GitHub only when you press it, shows what changed, downloads the Linux archive,
 and checks its SHA-256 against the published checksum before doing anything with
