@@ -1697,6 +1697,7 @@ class MainWindow(QMainWindow):
                 self.controller.settings,
                 persistence_error=self.controller.persistence_error is not None,
                 compatibility_events=events,
+                now=now,
             ))
         )
 

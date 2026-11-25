@@ -240,6 +240,54 @@ class TechnicalSummaryTests(unittest.TestCase):
         self.assertIn("Quota state: ANCHORED", text)
         self.assertIn("Last start outcome: ANCHOR_NOT_VERIFIED", text)
 
+    def test_summary_distinguishes_failed_compatibility_and_pre_send_recovery(self):
+        for origin, status in [(None, "Compatibility check failed"),
+                               ("pre_send", "Start check failed before send")]:
+            with self.subTest(origin=origin):
+                text = technical_summary({"codex": state(
+                    automation_supported=False, compatibility_failure_origin=origin,
+                    compatibility_failure_category="app_server_timeout",
+                    compatibility_failure_stage="quota_read",
+                    compatibility_next_retry_at=NOW + 60,
+                )}, AppSettings(automation_enabled=True), now=NOW)
+                self.assertIn(f"Check status: {status} (quota read; app_server_timeout)", text)
+                self.assertIn("No start request sent.", text)
+                self.assertIn("Next safe action: Wait for the read-only recheck", text)
+
+    def test_summary_keeps_unconfirmed_attempt_separate_from_fresh_quota(self):
+        text = technical_summary({"codex": state(
+            quota_state="ANCHORED", last_action="VERIFICATION_UNAVAILABLE",
+            usage_checked_at=NOW - 60, reset_at=int(NOW + 120),
+        )}, AppSettings(automation_enabled=True), now=NOW)
+        self.assertIn("Start unconfirmed; this attempt will not be retried.", text)
+        self.assertIn("local (snapshot)", text)
+        self.assertIn("Next safe action: Review Recent starts.", text)
+
+    def test_summary_explains_missing_stale_and_inconclusive_readings(self):
+        for provider, expected in [
+            (state(), "not checked"),
+            (state(usage_checked_at=NOW - 60, reset_at=int(NOW - 1)), "stale"),
+            (state(usage_checked_at=NOW - 60, quota_state="UNKNOWN"), "inconclusive"),
+        ]:
+            with self.subTest(reading=expected):
+                text = technical_summary({"codex": provider}, AppSettings(), now=NOW)
+                self.assertIn("Last quota reading: ", text)
+                self.assertIn(expected, text)
+                self.assertIn("Next safe action: Use Sync usage", text)
+
+    def test_failure_summary_never_echoes_raw_stage_category_or_runtime_identity(self):
+        text = technical_summary({"codex": state(
+            automation_supported=False,
+            compatibility_failure_origin="unknown_start",
+            compatibility_failure_category="private_account",
+            compatibility_failure_stage="C:/private/auth.json",
+            runtime_identity="secret@example.test",
+        )}, AppSettings(), now=NOW)
+        self.assertIn("Start unconfirmed; send status unknown (unknown)", text)
+        self.assertIn("This attempt will not be retried.", text)
+        for private_text in ("private_account", "auth.json", "secret@example.test"):
+            self.assertNotIn(private_text, text)
+
     def test_summary_reports_sanitized_persistence_failure(self):
         text = technical_summary(
             {"codex": state()},
