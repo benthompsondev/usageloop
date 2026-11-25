@@ -101,6 +101,21 @@ class CodexOperationRunnerTests(unittest.TestCase):
                 self.assertEqual((0, 0, 0), (client.model_calls, client.thread_calls, client.turn_calls))
                 self.assertEqual(stage == "quota_read", session.closed)
 
+    def test_failed_quota_batch_preserves_an_explicit_denial(self):
+        with tempfile.TemporaryDirectory() as directory:
+            history = SafeHistory(Path(directory) / "history.jsonl")
+            client = FakeClient([])
+            runner = CodexOperationRunner(
+                history, session_factory=lambda: FakeSession(client), sleep=lambda _: None,
+            )
+            with patch.object(client, "read_rate_limits", side_effect=[
+                dict(payload(18_000), ordinaryUsageAllowed=False), TransportTimeoutError(),
+            ]):
+                result = runner.run("rollover", runtime_identity="runtime:1")
+            self.assertEqual("PREFLIGHT_FAILED", result.outcome)
+            self.assertTrue(SafeHistory(history.path).usage_policy_blocked())
+            self.assertEqual(0, client.turn_calls)
+
     def test_timeout_during_verification_keeps_the_same_opportunity_guarded_after_restart(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "history.jsonl"

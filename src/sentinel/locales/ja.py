@@ -341,6 +341,7 @@ MESSAGES = {
     "Start not confirmed": "開始は未確認",
     "Start not verified; no retry": "開始は未確認。再試行しません",
     "The start check stopped before a request was sent.": "開始チェックはリクエストの送信前に停止しました。",
+    "Codex usage policy blocked the start.": "Codex の利用ポリシーにより開始がブロックされました。",
     "Start outcome is unconfirmed": "開始結果は未確認です",
     "Start outcome unclear · No retry": "開始結果が不明 · 再試行なし",
     "Start outcome unclear; no retry": "開始結果が不明です。再試行しません",

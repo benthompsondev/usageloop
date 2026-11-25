@@ -141,6 +141,41 @@ class ChainCoordinatorTests(unittest.TestCase):
         self.assertEqual("ALREADY_ANCHORED", result.status)
         self.assertEqual(0, trigger.calls)
 
+    def test_explicit_policy_denial_blocks_bootstrap_and_rollover_without_reserving(self):
+        for field, value in (("ordinary_usage_allowed", False), ("spend_control_reached", True)):
+            with self.subTest(field=field):
+                observations = unanchored()
+                observations[0] = replace(observations[0], **{field: value})
+                trigger = FakeTrigger()
+                coordinator = self.coordinator(trigger)
+                for run in (coordinator.run,
+                            lambda samples, verify: coordinator.run_bootstrap(samples, verify,
+                                                                             confirmed=True)):
+                    result = run(observations, lambda: anchored())
+                    self.assertEqual("USAGE_POLICY_BLOCKED", result.status)
+                self.assertEqual(0, trigger.calls)
+                self.assertEqual([], self.history.trigger_attempts())
+
+    def test_missing_policy_fields_cannot_clear_denial_persisted_across_restart(self):
+        classification = Classification("UNANCHORED", "high", "fixture", {})
+        denial = replace(unanchored()[0], ordinary_usage_allowed=False, spend_control_reached=True)
+        self.history.record_observation(denial, classification, "codex-cli test")
+        history = SafeHistory(self.history.path)
+        for sample in unanchored():
+            history.record_observation(sample, classification, "codex-cli test")
+        trigger = FakeTrigger()
+        coordinator = ChainCoordinator(trigger, history, ChainPolicy())
+        self.assertEqual("USAGE_POLICY_BLOCKED", coordinator.run(unanchored(), anchored).status)
+        self.assertEqual(0, trigger.calls)
+        self.assertEqual([], history.trigger_attempts())
+        history.record_observation(replace(denial, spend_control_reached=False, ordinary_usage_allowed=None),
+                                   classification, "codex-cli test")
+        self.assertTrue(history.usage_policy_blocked())
+        history.record_observation(replace(denial, ordinary_usage_allowed=True, spend_control_reached=None),
+                                   classification, "codex-cli test")
+        self.assertEqual("ANCHOR_VERIFIED", coordinator.run(unanchored(), anchored).status)
+        self.assertEqual(1, trigger.calls)
+
     def test_ordinary_chain_rollover_still_triggers_once(self):
         trigger = FakeTrigger()
         result = self.coordinator(trigger).run(unanchored(), lambda: anchored())

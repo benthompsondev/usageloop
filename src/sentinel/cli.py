@@ -199,6 +199,7 @@ def run_sample(*, count: int, interval: float) -> int:
     try:
         for index in range(count):
             snapshot, received = _read_snapshot(session)
+            history.record_usage_policy_denial(snapshot)
             observations.append(snapshot)
             notification_count += received
             selection = select_five_hour(snapshot)
@@ -303,6 +304,7 @@ def _run_trigger_command(
         observations: list[QuotaSnapshot] = []
         for index in range(4):
             snapshot, _notification_count = _read_snapshot(session)
+            history.record_usage_policy_denial(snapshot)
             observations.append(snapshot)
             print(f"{label} [{index + 1}/4]", file=output)
             if index < 3:
@@ -462,6 +464,7 @@ def _chain_exit_code(result: ChainResult) -> int:
         "BOOTSTRAP_COOLDOWN",
         "WEEKLY_UNAVAILABLE",
         "WEEKLY_EXHAUSTED",
+        "USAGE_POLICY_BLOCKED",
         "ROLLOVER_BOUNDARY_UNKNOWN",
         "RESET_BUFFER",
         "ATTEMPT_ALREADY_RECORDED",

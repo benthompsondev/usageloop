@@ -52,6 +52,7 @@ _RECOVERABLE_OUTCOMES = {
     "NOT_ELIGIBLE",
 }
 _PROTECTED_OUTCOMES = {
+    "USAGE_POLICY_BLOCKED",
     "WEEKLY_UNAVAILABLE",
     "WEEKLY_EXHAUSTED",
     "BOOTSTRAP_USAGE_UNSUITABLE",
@@ -123,7 +124,9 @@ class CodexOperationRunner:
                 observed_at = self._clock()
                 raw = session.client.read_rate_limits()
                 session.client.drain_rate_limit_notifications()
-                observations.append(normalize_rate_limits(raw, observed_at))
+                snapshot = normalize_rate_limits(raw, observed_at)
+                self.history.record_usage_policy_denial(snapshot)
+                observations.append(snapshot)
                 if index < 3:
                     self._sleep(10.0)
             stage = "model_catalog"
@@ -178,7 +181,9 @@ class CodexOperationRunner:
                 observed_at = self._clock()
                 raw = session.client.read_rate_limits()
                 session.client.drain_rate_limit_notifications()
-                observations.append(normalize_rate_limits(raw, observed_at))
+                snapshot = normalize_rate_limits(raw, observed_at)
+                self.history.record_usage_policy_denial(snapshot)
+                observations.append(snapshot)
                 if index < 3:
                     self._sleep(10.0)
             classification = classify(observations)
@@ -253,7 +258,9 @@ class CodexOperationRunner:
                     observed_at = self._clock()
                     raw = session.client.read_rate_limits()
                     session.client.drain_rate_limit_notifications()
-                    observations.append(normalize_rate_limits(raw, observed_at))
+                    snapshot = normalize_rate_limits(raw, observed_at)
+                    self.history.record_usage_policy_denial(snapshot)
+                    observations.append(snapshot)
                     if index < 3:
                         self._sleep(10.0)
                 stage = "local_history"

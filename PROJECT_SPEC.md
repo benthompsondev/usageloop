@@ -70,8 +70,16 @@ local app-server observation
   outcomes are permanently guarded for that opportunity.
 - Turn lifecycle events are diagnostic. Only a newly anchored fixed reset is
   success, in the same five-hour bucket after the send.
-- Temporary transport failures get spaced read-only compatibility retries for
-  at most one hour. Other compatibility failures need an explicit recheck.
+- Temporary transport and quota-read failures get spaced read-only compatibility
+  retries within a one-hour episode. If recovery stops, a later due schedule
+  slot can get one read-only recheck. Continuous mode uses five-hour slots
+  counted from the last due boundary for these checks, Daily uses its selected
+  time, and Weekly uses its saved routine and overnight pause. Missed slots are
+  coalesced. These slots do not establish a reset or permission to send.
+- Automation off and an active pause block these rechecks. Unknown send outcomes
+  and terminal compatibility failures still require explicit attention.
+- An explicit denial of ordinary usage or a reached spend control blocks starts.
+  An unavailable field does not clear a previously recorded denial.
 - Automation off performs no compatibility probe, quota read, or trigger.
 - Manual Sync is explicitly user-started, collects four read-only rate-limit
   observations, and never discovers models or starts a thread or turn.

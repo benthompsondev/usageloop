@@ -57,5 +57,29 @@ class QuotaNormalizationTests(unittest.TestCase):
         self.assertEqual((), snapshot.windows)
 
 
+class UsagePolicyNormalizationTests(unittest.TestCase):
+    def test_explicit_policy_flags_are_normalized_without_account_data(self):
+        for allowed in (True, False, None):
+            with self.subTest(allowed=allowed):
+                snapshot = normalize_rate_limits({
+                    "ordinaryUsageAllowed": allowed,
+                    "accountId": "private-account",
+                    "rateLimits": {"limitId": "codex", "spendControlReached": True},
+                    "rateLimitsByLimitId": {"codex": {"spendControlReached": False}},
+                }, 20)
+                self.assertIs(allowed, snapshot.ordinary_usage_allowed)
+                self.assertIs(snapshot.spend_control_reached, True)
+                self.assertNotIn("private-account", repr(snapshot))
+
+    def test_unrelated_bucket_and_non_boolean_fields_do_not_authorize_or_clear(self):
+        snapshot = normalize_rate_limits({
+            "ordinaryUsageAllowed": 1,
+            "rateLimitsByLimitId": {"codex_other": {"spendControlReached": True},
+                                    "codex": {"spendControlReached": None}},
+        }, 20)
+        self.assertIsNone(snapshot.ordinary_usage_allowed)
+        self.assertIsNone(snapshot.spend_control_reached)
+
+
 if __name__ == "__main__":
     unittest.main()

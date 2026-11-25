@@ -341,6 +341,7 @@ MESSAGES = {
     "Start not confirmed": "Início não confirmado",
     "Start not verified; no retry": "Início não verificado; sem nova tentativa",
     "The start check stopped before a request was sent.": "A verificação de início foi interrompida antes de enviar uma solicitação.",
+    "Codex usage policy blocked the start.": "A política de uso do Codex bloqueou o início.",
     "Start outcome is unconfirmed": "O resultado do início não está confirmado",
     "Start outcome unclear · No retry": "Resultado do início incerto · Sem nova tentativa",
     "Start outcome unclear; no retry": "Resultado do início incerto; sem nova tentativa",

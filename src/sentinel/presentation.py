@@ -133,6 +133,11 @@ def operational_presentation(
                     tr("A request may have been sent. UsageLoop will not retry that attempt."),
                     "warning", tr("NO RETRY"), tr("Start not confirmed"), state.detail,
                     tr("No retry for the uncertain start. Check Recent starts."), tray=tr("Start not confirmed"))
+    if state.status == "Protected" and state.last_action == "USAGE_POLICY_BLOCKED":
+        return make("usage_policy_blocked", tr("Codex usage policy blocked the start."),
+                    tr("Codex usage policy blocked the start."), "warning",
+                    tr("Start blocked"), tr("Start blocked"), tr("Sync usage to check Codex again."),
+                    tr("Sync usage to check Codex"), tray=tr("Start blocked"))
     if state.weekly_used_percent is not None and state.weekly_used_percent >= 99:
         return make("weekly_protected", tr("Weekly allowance protected"),
                     tr("UsageLoop will not start another window while weekly use is this high."),

@@ -433,6 +433,8 @@ def _safe_next_action(
         return "Use Recheck Codex compatibility. Sign in to Codex first if needed."
     if unconfirmed:
         return "Review Recent starts. Sync usage can refresh the clock without retrying this attempt."
+    if state.last_action == "USAGE_POLICY_BLOCKED":
+        return "Check your Codex usage controls. Sync usage can refresh the reading without sending a start."
     if refresh_needed:
         return "Use Sync usage to refresh the reading without starting a window."
     return "Follow the saved schedule." if settings.automation_enabled else "Automation is off."

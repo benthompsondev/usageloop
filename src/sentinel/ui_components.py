@@ -40,6 +40,7 @@ CHAIN_OUTCOME_COPY = {
     "RESET_BUFFER": "Waiting briefly after the reset",
     "NOT_ELIGIBLE": "No automatic start needed yet",
     "WEEKLY_UNAVAILABLE": "Weekly limit could not be checked · No request sent",
+    "USAGE_POLICY_BLOCKED": "Codex usage policy blocked the start.",
     "WEEKLY_EXHAUSTED": "Weekly limit protected your quota · No request sent",
     "BOOTSTRAP_USAGE_UNSUITABLE": "First window was not safe to start",
     "ATTEMPT_ALREADY_RECORDED": "Start already handled safely",

@@ -341,6 +341,7 @@ MESSAGES = {
     "Start not confirmed": "Démarrage non confirmé",
     "Start not verified; no retry": "Démarrage non vérifié ; aucun nouvel essai",
     "The start check stopped before a request was sent.": "La vérification de démarrage s’est arrêtée avant l’envoi d’une requête.",
+    "Codex usage policy blocked the start.": "La politique d’utilisation de Codex a bloqué le démarrage.",
     "Start outcome is unconfirmed": "Le résultat du démarrage n’est pas confirmé",
     "Start outcome unclear · No retry": "Résultat du démarrage incertain · Aucun nouvel essai",
     "Start outcome unclear; no retry": "Résultat du démarrage incertain ; aucun nouvel essai",
