@@ -15,7 +15,7 @@ from sentinel.protocol import (
 )
 from sentinel.transport import (
     _linux_known_candidates,
-    _windows_known_candidates,
+    _windows_runtime_candidates,
     AppServerUnavailableError,
     CodexNotFoundError,
     CodexProcessTransport,
@@ -137,6 +137,22 @@ class AppServerProtocolTests(unittest.TestCase):
 
         self.assertEqual("authentication_unavailable", caught.exception.category)
         self.assertNotIn("chatgpt", str(caught.exception).lower())
+
+    def test_rate_read_distinguishes_backend_failure_from_protocol_rejection(self):
+        for code, category in ((-32603, "rate_limits_unavailable"),
+                               (-32601, "protocol_unsupported"), (-32602, "protocol_unsupported")):
+            with self.subTest(code=code):
+                fixture = messages()
+                transport = MemoryTransport([
+                    fixture["initialize_result"],
+                    {"id": 2, "error": {"code": code, "message": "private details"}},
+                ])
+                client = AppServerClient(transport, client_version="test")
+                client.initialize()
+                with self.assertRaises(AppServerProtocolError) as caught:
+                    client.read_rate_limits()
+                self.assertEqual(category, caught.exception.category)
+                self.assertNotIn("private details", str(caught.exception))
 
     def test_protocol_emits_only_observation_safe_methods(self):
         fixture = messages()
@@ -291,10 +307,11 @@ class NativePreferenceTests(unittest.TestCase):
                 return original_stat(path, *args, **kwargs)
 
             with mock.patch.dict(os.environ, {"LOCALAPPDATA": str(local_app_data)}):
-                with mock.patch.object(Path, "stat", replacement_race):
+                with (mock.patch.object(Path, "stat", replacement_race),
+                      mock.patch("sentinel.transport.registered_codex_packages", return_value=())):
                     try:
                         found = find_codex_executable(
-                            path_value="", known_candidates=_windows_known_candidates()
+                            path_value="", known_candidates=(path for _, path in _windows_runtime_candidates())
                         )
                     except OSError as exc:
                         self.fail(f"one stale candidate aborted discovery: {type(exc).__name__}")

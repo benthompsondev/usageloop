@@ -340,6 +340,8 @@ MESSAGES = {
     "Start my first window now?": "¿Iniciar mi primera ventana ahora?",
     "Start not confirmed": "Inicio sin confirmar",
     "Start not verified; no retry": "Inicio sin verificar; no se repetirá",
+    "The start check stopped before a request was sent.": "La comprobación de inicio se detuvo antes de enviar una solicitud.",
+    "Codex usage policy blocked the start.": "La política de uso de Codex impidió el inicio.",
     "Start outcome is unconfirmed": "El resultado del inicio no está confirmado",
     "Start outcome unclear · No retry": "Resultado del inicio incierto · No se repetirá",
     "Start outcome unclear; no retry": "Resultado del inicio incierto; no se repetirá",

@@ -270,6 +270,7 @@ def technical_summary(
     app_version: str = PRODUCT.version,
     persistence_error: bool = False,
     compatibility_events: Sequence[Mapping[str, object]] = (),
+    now: float | None = None,
 ) -> str:
     """The raw detail, kept for troubleshooting and for the copy button.
 
@@ -277,6 +278,7 @@ def technical_summary(
     because this text is meant to be pasted into a bug report.
     """
     compatible = settings.compatible_runtime_identities or {}
+    now = datetime.now().timestamp() if now is None else now
     local_data = (
         rf"%LOCALAPPDATA%\{PRODUCT.app_data_folder}"
         if is_windows()
@@ -295,19 +297,35 @@ def technical_summary(
     ]
     for provider_id, state in states.items():
         version = state.runtime_version or "version unavailable"
-        if not state.automation_supported:
+        if state.compatibility_failure_origin == "pre_send":
+            compatibility = "recheck required after a pre-send failure"
+        elif state.compatibility_failure_origin == "unknown_start":
+            compatibility = "recheck required after an unconfirmed start"
+        elif state.compatibility_failure_category:
+            compatibility = "failed"
+        elif not state.automation_supported:
             compatibility = "not applicable"
-        elif compatible.get(provider_id) == state.runtime_identity:
+        elif state.runtime_identity is not None and compatible.get(provider_id) == state.runtime_identity:
             compatibility = "passed"
         else:
             compatibility = "not confirmed"
+        quota_reading, refresh_needed = _quota_reading(state, now)
+        check, unconfirmed = _check_status(state)
+        next_action = _safe_next_action(
+            state, settings, now=now, unconfirmed=unconfirmed,
+            refresh_needed=refresh_needed, persistence_error=persistence_error,
+        )
         lines.extend(
             [
                 "",
                 state.display_name,
                 f"  Installed: {'yes' if state.installed else 'no'}",
                 f"  Version: {version}",
+                f"  Runtime: {state.runtime_discovery or 'not recorded'}",
                 f"  Compatibility: {compatibility}",
+                f"  Check status: {check}",
+                f"  Last quota reading: {quota_reading}",
+                f"  Next safe action: {next_action}",
                 f"  Raw state: {state.status}",
                 f"  Outcome category: {state.outcome_category or 'not recorded'}",
                 f"  Quota state: {state.quota_state or 'not recorded'}",
@@ -315,6 +333,8 @@ def technical_summary(
                 f"  Detail: {state.detail}",
             ]
         )
+        if state.runtime_discovery_warning:
+            lines.append(f"  Skipped runtime candidates: {state.runtime_discovery_warning}")
     lines.extend(
         [
             "",
@@ -328,6 +348,96 @@ def technical_summary(
     if event_lines:
         lines.extend(["", "Recent connection events", *event_lines])
     return "\n".join(lines)
+
+
+_FAILURE_STAGES = {
+    "connect": "app-server connection or handshake",
+    "quota_read": "quota read",
+    "model_catalog": "model catalog",
+    "quota_evidence": "quota evidence",
+    "local_history": "saving local quota observations",
+}
+
+_FAILURE_CATEGORIES = {
+    "app_server_timeout", "app_server_unavailable", "app_server_rejected",
+    "authentication_unavailable", "capability_unavailable", "rate_limits_unavailable",
+    "protocol_unsupported", "not_initialized", "invalid_json", "codex_not_found",
+    "codex_override_invalid", "codex_runtime_changed", "history_corrupt",
+    "history_unavailable", "local_io", "unexpected_error",
+}
+
+
+def _check_status(state: ProviderViewState) -> tuple[str, bool]:
+    unconfirmed = (
+        state.compatibility_failure_origin == "unknown_start"
+        or state.last_action in {
+            "ANCHOR_NOT_VERIFIED", "VERIFICATION_UNAVAILABLE",
+            "Start outcome unclear; no retry", "Start not verified; no retry",
+        }
+    )
+    if state.compatibility_failure_origin == "pre_send":
+        message = "Start check failed before send"
+    elif state.compatibility_failure_origin == "unknown_start":
+        message = "Start unconfirmed; send status unknown"
+    elif state.compatibility_failure_category:
+        message = "Compatibility check failed"
+    elif unconfirmed:
+        return "Start unconfirmed; this attempt will not be retried.", True
+    elif state.last_action == "TRIGGER_NOT_SENT":
+        return "Start request was not sent.", False
+    else:
+        return "No failure recorded.", False
+
+    stage = _FAILURE_STAGES.get(state.compatibility_failure_stage)
+    category = state.compatibility_failure_category
+    if category not in _FAILURE_CATEGORIES:
+        category = "unknown"
+    detail = f"{stage}; {category}" if stage else category
+    if state.compatibility_failure_origin == "unknown_start":
+        return f"{message} ({detail}). This attempt will not be retried.", True
+    if unconfirmed:
+        return f"{message} ({detail}). No new start sent. The earlier attempt will not be retried.", True
+    return f"{message} ({detail}). No start request sent.", False
+
+
+def _quota_reading(state: ProviderViewState, now: float) -> tuple[str, bool]:
+    checked = _local_event_time(state.usage_checked_at)
+    if checked is None:
+        return "not checked", True
+    if state.quota_state in {"UNKNOWN", "ABSENT"} and state.quota_evidence != "valid_weekly_only":
+        return f"{checked} local (inconclusive)", True
+    if any(
+        reset is not None and state.usage_checked_at < reset <= now
+        for reset in (state.reset_at, state.weekly_reset_at)
+    ):
+        return f"{checked} local (stale; a saved reset has passed)", True
+    return f"{checked} local (snapshot)", False
+
+
+def _safe_next_action(
+    state: ProviderViewState, settings: AppSettings, *, now: float,
+    unconfirmed: bool, refresh_needed: bool, persistence_error: bool,
+) -> str:
+    if persistence_error:
+        return "Resolve the local state write error before starting a window."
+    if not state.installed:
+        return "Check the Codex install or executable override."
+    if state.compatibility_failure_category or not state.automation_supported:
+        if (state.compatibility_next_retry_at is not None
+                and settings.automation_enabled and not settings.pause_active(now)):
+            retry_at = _local_event_time(state.compatibility_next_retry_at)
+            if retry_at is not None:
+                return f"Wait for the read-only recheck at {retry_at} local."
+        if unconfirmed:
+            return "Review Recent starts, then use Recheck Codex compatibility to check the connection."
+        return "Use Recheck Codex compatibility. Sign in to Codex first if needed."
+    if unconfirmed:
+        return "Review Recent starts. Sync usage can refresh the clock without retrying this attempt."
+    if state.last_action == "USAGE_POLICY_BLOCKED":
+        return "Check your Codex usage controls. Sync usage can refresh the reading without sending a start."
+    if refresh_needed:
+        return "Use Sync usage to refresh the reading without starting a window."
+    return "Follow the saved schedule." if settings.automation_enabled else "Automation is off."
 
 
 def _compatibility_event_line(row: Mapping[str, object]) -> str | None:
@@ -376,5 +486,5 @@ def _discovery_order() -> str:
     so it adds no state and expands no path from the user's home directory.
     """
     if is_windows():
-        return "installed Codex app binary, then PATH"
-    return "$CODEX_HOME/plugins, then a Codex desktop install, then PATH"
+        return "explicit override, registered Codex MSIX or its matching repair, other desktop runtimes, then PATH"
+    return "explicit override, installed Linux Codex runtimes, then PATH"

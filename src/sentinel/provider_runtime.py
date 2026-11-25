@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import time
 from typing import Callable, Protocol
 
@@ -31,6 +31,7 @@ class ProviderOperationResult:
     outcome: str
     state: ProviderViewState
     request_possibly_sent: bool
+    preflight_failure: CompatibilityResult | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ _RECOVERABLE_OUTCOMES = {
     "NOT_ELIGIBLE",
 }
 _PROTECTED_OUTCOMES = {
+    "USAGE_POLICY_BLOCKED",
     "WEEKLY_UNAVAILABLE",
     "WEEKLY_EXHAUSTED",
     "BOOTSTRAP_USAGE_UNSUITABLE",
@@ -100,50 +102,63 @@ class CodexOperationRunner:
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.history = history
-        if session_factory is None:
-            from .cli import connect
-
-            session_factory = connect
         self._session_factory = session_factory
         self._clock = clock
         self._sleep = sleep
 
+    def _connect(self, runtime_identity: str) -> RuntimeSession:
+        if self._session_factory is not None:
+            return self._session_factory()
+        from .cli import connect
+
+        return connect(expected_runtime_identity=runtime_identity)
+
     def probe(self, runtime_identity: str) -> CompatibilityResult:
         session = None
+        stage = "connect"
         try:
-            session = self._session_factory()
+            session = self._connect(runtime_identity)
+            stage = "quota_read"
             observations: list[QuotaSnapshot] = []
             for index in range(4):
                 observed_at = self._clock()
                 raw = session.client.read_rate_limits()
                 session.client.drain_rate_limit_notifications()
-                observations.append(normalize_rate_limits(raw, observed_at))
+                snapshot = normalize_rate_limits(raw, observed_at)
+                self.history.record_usage_policy_denial(snapshot)
+                observations.append(snapshot)
                 if index < 3:
                     self._sleep(10.0)
+            stage = "model_catalog"
             models = session.client.list_models()
             choice = select_trigger_model(models)
+            stage = "local_history"
             classification = classify(observations)
             for snapshot in observations:
                 self.history.record_observation(
                     snapshot, classification, session.codex_version
                 )
-            return CompatibilityResult.from_capabilities(
+            quota_available = all(
+                snapshot.valid_structure
+                and select_weekly(snapshot) is not None
+                and select_five_hour(snapshot).status != "ambiguous"
+                for snapshot in observations
+            )
+            result = CompatibilityResult.from_capabilities(
                 runtime_identity=runtime_identity,
                 initialized=True,
-                rate_limits_available=all(
-                    snapshot.valid_structure
-                    and select_weekly(snapshot) is not None
-                    and select_five_hour(snapshot).status != "ambiguous"
-                    for snapshot in observations
-                ),
+                rate_limits_available=quota_available,
                 model_catalog_available=bool(models),
                 suitable_model_available=choice is not None,
             )
+            if result.compatible:
+                return result
+            return replace(result, failure_stage="model_catalog" if quota_available else "quota_evidence")
         except (SentinelRuntimeError, AppServerProtocolError, HistoryStateError) as exc:
             return CompatibilityResult(
                 False, "Needs attention",
                 "The Codex compatibility check stopped safely. No automatic request was sent.",
-                runtime_identity, failure_category=exc.category,
+                runtime_identity, failure_category=exc.category, failure_stage=stage,
             )
         except Exception:
             return CompatibilityResult(
@@ -151,7 +166,7 @@ class CodexOperationRunner:
                 "Needs attention",
                 "The Codex compatibility check failed safely. No automatic request was sent.",
                 runtime_identity,
-                failure_category="unexpected_error",
+                failure_category="unexpected_error", failure_stage=stage,
             )
         finally:
             if session is not None:
@@ -159,14 +174,16 @@ class CodexOperationRunner:
 
     def sync(self, runtime_identity: str) -> ProviderOperationResult:
         """Refresh quota evidence without discovering models or starting a turn."""
-        session = self._session_factory()
+        session = self._connect(runtime_identity)
         try:
             observations: list[QuotaSnapshot] = []
             for index in range(4):
                 observed_at = self._clock()
                 raw = session.client.read_rate_limits()
                 session.client.drain_rate_limit_notifications()
-                observations.append(normalize_rate_limits(raw, observed_at))
+                snapshot = normalize_rate_limits(raw, observed_at)
+                self.history.record_usage_policy_denial(snapshot)
+                observations.append(snapshot)
                 if index < 3:
                     self._sleep(10.0)
             classification = classify(observations)
@@ -229,25 +246,24 @@ class CodexOperationRunner:
     def run(self, mode: str, *, runtime_identity: str) -> ProviderOperationResult:
         if mode not in {"bootstrap", "rollover"}:
             raise ValueError("Unsupported Codex operation mode.")
-        session = self._session_factory()
+        session = None
+        stage = "connect"
         all_observations: list[QuotaSnapshot] = []
         try:
-            trigger = AppServerTrigger(
-                session.client,
-                dedicated_trigger_workspace(self.history.path),
-                TriggerConfig(),
-                clock=self._clock,
-            )
-
             def collect() -> list[QuotaSnapshot]:
+                nonlocal stage
+                stage = "quota_read"
                 observations: list[QuotaSnapshot] = []
                 for index in range(4):
                     observed_at = self._clock()
                     raw = session.client.read_rate_limits()
                     session.client.drain_rate_limit_notifications()
-                    observations.append(normalize_rate_limits(raw, observed_at))
+                    snapshot = normalize_rate_limits(raw, observed_at)
+                    self.history.record_usage_policy_denial(snapshot)
+                    observations.append(snapshot)
                     if index < 3:
                         self._sleep(10.0)
+                stage = "local_history"
                 classification = classify(observations)
                 for snapshot in observations:
                     self.history.record_observation(
@@ -256,7 +272,30 @@ class CodexOperationRunner:
                 all_observations.extend(observations)
                 return observations
 
-            preflight = collect()
+            try:
+                session = self._connect(runtime_identity)
+                preflight = collect()
+            except (SentinelRuntimeError, AppServerProtocolError, HistoryStateError, OSError) as exc:
+                failure = CompatibilityResult(
+                    False, "Needs attention", "The start check stopped before a request was sent.",
+                    runtime_identity, failure_category=getattr(exc, "category", "local_io"),
+                    failure_stage=stage,
+                )
+                return ProviderOperationResult(
+                    "PREFLIGHT_FAILED",
+                    ProviderViewState.waiting("codex", "Codex", installed=True,
+                                              runtime_identity=runtime_identity),
+                    False, preflight_failure=failure,
+                )
+
+            # Dispatch and its durable send guard belong to the coordinator.
+            trigger = AppServerTrigger(
+                session.client,
+                dedicated_trigger_workspace(self.history.path),
+                TriggerConfig(),
+                clock=self._clock,
+            )
+
             def collect_after_settling() -> list[QuotaSnapshot]:
                 self._sleep(10.0)
                 return collect()
@@ -278,7 +317,8 @@ class CodexOperationRunner:
                 result.status, state, result.request_possibly_sent
             )
         finally:
-            session.close()
+            if session is not None:
+                session.close()
 
     @staticmethod
     def _state_from_result(

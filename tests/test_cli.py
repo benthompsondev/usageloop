@@ -1,11 +1,13 @@
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 from sentinel.classifier import Classification
 from sentinel.cli import build_status_payload, create_parser, run_doctor
 from sentinel.quota import QuotaSnapshot, QuotaWindow
+from sentinel.transport import CodexRuntime
 
 
 class CliShapeTests(unittest.TestCase):
@@ -21,6 +23,7 @@ class CliShapeTests(unittest.TestCase):
             executable = "fixture-codex"
             codex_version = "fixture"
             platform_os = "windows"
+            runtime = CodexRuntime(Path("fixture-codex"), "PATH", "fixture")
 
             def __init__(self, catalog):
                 self.client = self
@@ -50,6 +53,7 @@ class CliShapeTests(unittest.TestCase):
                       redirect_stdout(output)):
                     self.assertEqual(0, run_doctor())
                 rendered = output.getvalue()
+                self.assertIn("Codex runtime: PATH (<path hidden>)", rendered)
                 self.assertIn(f"Trigger model: {selected}", rendered)
                 self.assertIn("Model preference: gpt-6-luna, then gpt-5.6-luna", rendered)
                 self.assertIn("Model policy: listed lightweight models only; no unknown or default-model fallback", rendered)

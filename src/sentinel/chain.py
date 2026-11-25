@@ -114,6 +114,14 @@ class ChainCoordinator:
     ) -> ChainResult:
         preflight = classify(observations)
         description = self.trigger.describe()
+        if any(
+            item.ordinary_usage_allowed is False or item.spend_control_reached is True
+            for item in observations
+        ):
+            return self._result(
+                "USAGE_POLICY_BLOCKED", "Codex usage policy blocked the start.",
+                preflight, mode, False, None, description,
+            )
         if preflight.state == "ANCHORED":
             return self._result(
                 "ALREADY_ANCHORED",
@@ -217,6 +225,11 @@ class ChainCoordinator:
             idempotency_key = f"bootstrap:{uuid.uuid4().hex}"
 
         with self.history.trigger_reservation_guard():
+            if self.history.usage_policy_blocked():
+                return self._result(
+                    "USAGE_POLICY_BLOCKED", "Codex usage policy blocked the start.",
+                    preflight, mode, False, boundary, description,
+                )
             blocking = (
                 self._blocking_rollover_attempt(idempotency_key, boundary, current.observed_at)
                 if mode == "rollover" and boundary is not None

@@ -129,6 +129,8 @@ class AppServerClient:
             message = error.get("message")
             if isinstance(message, str) and "authentication required" in message.lower():
                 raise AuthenticationUnavailableError()
+            if isinstance(code := error.get("code"), int) and code in PRE_DISPATCH_ERROR_CODES:
+                raise AppServerProtocolError("protocol_unsupported", "Codex rejected the quota-read method or parameters.")
             raise AppServerProtocolError("rate_limits_unavailable", "Codex could not return subscription rate limits.")
         result = response.get("result")
         if not isinstance(result, dict) or not (

@@ -31,6 +31,8 @@ class QuotaSnapshot:
     windows: tuple[QuotaWindow, ...]
     valid_structure: bool = False
     valid_weekly_only: bool = False
+    ordinary_usage_allowed: bool | None = None
+    spend_control_reached: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -44,12 +46,24 @@ def normalize_rate_limits(payload: dict[str, Any], observed_at: float) -> QuotaS
     if not isinstance(payload, dict):
         return QuotaSnapshot(observed_at=observed_at, windows=())
 
+    compatibility = payload.get("rateLimits")
     by_limit_id = payload.get("rateLimitsByLimitId")
     if isinstance(by_limit_id, dict) and by_limit_id:
         buckets = tuple(by_limit_id.items())
     else:
-        compatibility = payload.get("rateLimits")
         buckets = (("codex", compatibility),) if isinstance(compatibility, dict) else ()
+
+    # Codex reports workspace spend control on its canonical bucket. Honor a
+    # denial in either view even if one omits the flag or the views disagree.
+    spend_flags = [
+        bucket.get("spendControlReached")
+        for key, bucket in (*buckets, ("codex", compatibility))
+        if isinstance(bucket, dict)
+        and (key == "codex" or bucket.get("limitId") == "codex")
+    ]
+    spend_reached = (True if any(flag is True for flag in spend_flags)
+                     else False if any(flag is False for flag in spend_flags) else None)
+    ordinary_allowed = payload.get("ordinaryUsageAllowed")
 
     windows: list[QuotaWindow] = []
     for map_key, bucket in buckets:
@@ -72,7 +86,11 @@ def normalize_rate_limits(payload: dict[str, Any], observed_at: float) -> QuotaS
         valid and select_weekly(snapshot) is not None
         and select_five_hour(snapshot).status == "absent"
     )
-    return QuotaSnapshot(observed_at, tuple(windows), valid, weekly_only)
+    return QuotaSnapshot(
+        observed_at, tuple(windows), valid, weekly_only,
+        ordinary_usage_allowed=ordinary_allowed if isinstance(ordinary_allowed, bool) else None,
+        spend_control_reached=spend_reached,
+    )
 
 
 def _valid_payload_structure(payload: Any, buckets: tuple, observed_at: float) -> bool:

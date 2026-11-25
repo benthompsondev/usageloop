@@ -91,13 +91,18 @@ class ProviderViewState:
     quota_evidence: str | None = None
     compatibility_incident_id: str | None = None
     compatibility_failure_category: str | None = None
+    compatibility_failure_origin: str | None = None
+    compatibility_failure_stage: str | None = None
     compatibility_attempts: int = 0
     compatibility_started_at: float | None = None
     compatibility_next_retry_at: float | None = None
+    compatibility_last_opportunity_check_at: float | None = None
     compatibility_notified: bool = False
     compatibility_blocked_notified: bool = False
     compatibility_terminal_notified: bool = False
     compatibility_blocked_opportunity: str | None = None
+    runtime_discovery: str | None = None
+    runtime_discovery_warning: str | None = None
 
     @classmethod
     def waiting(
@@ -240,6 +245,8 @@ _TEXT_FIELDS = ("provider_id", "display_name", "status", "detail")
 _OPTIONAL_TEXT_FIELDS = (
     "runtime_identity",
     "runtime_version",
+    "runtime_discovery",
+    "runtime_discovery_warning",
     "last_action",
     "quota_state",
     "outcome_category",
@@ -247,6 +254,8 @@ _OPTIONAL_TEXT_FIELDS = (
     "quota_evidence",
     "compatibility_incident_id",
     "compatibility_failure_category",
+    "compatibility_failure_origin",
+    "compatibility_failure_stage",
     "compatibility_blocked_opportunity",
 )
 _BOOL_FIELDS = (
@@ -264,6 +273,7 @@ _FLOAT_FIELDS = (
     "recovery_not_before",
     "compatibility_started_at",
     "compatibility_next_retry_at",
+    "compatibility_last_opportunity_check_at",
 )
 
 

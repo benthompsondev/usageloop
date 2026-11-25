@@ -145,6 +145,7 @@ class LocalizationTests(unittest.TestCase):
         window, _ = self.make_window(state)
         window.thread_pool = desktop_fixtures.FakeThreadPool()
         window.recheck_compatibility()
+        window.thread_pool.run_next()
         self.assertEqual("Checking", window.controller.states["codex"].status)
         self.assertEqual("正在检查 Codex 连接", window.overall_title.text())
         self.assertEqual(1, len(window.thread_pool.workers))

@@ -340,6 +340,8 @@ ZH_CN = {
     "Start my first window now?": "立即启动首个窗口？",
     "Start not confirmed": "启动未确认",
     "Start not verified; no retry": "启动未验证；不会重试",
+    "The start check stopped before a request was sent.": "启动检查已停止，未发送启动请求。",
+    "Codex usage policy blocked the start.": "Codex 用量策略阻止了启动。",
     "Start outcome is unconfirmed": "启动结果未确认",
     "Start outcome unclear · No retry": "启动结果不明确 · 不会重试",
     "Start outcome unclear; no retry": "启动结果不明确；不会重试",

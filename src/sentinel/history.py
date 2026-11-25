@@ -115,7 +115,35 @@ class SafeHistory:
             "confidence": classification.confidence,
             "evidence": _safe_evidence(classification.evidence),
         }
+        if isinstance(snapshot.ordinary_usage_allowed, bool):
+            row["ordinary_usage_allowed"] = snapshot.ordinary_usage_allowed
+        if isinstance(snapshot.spend_control_reached, bool):
+            row["spend_control_reached"] = snapshot.spend_control_reached
         self._append(row)
+
+    def record_usage_policy_denial(self, snapshot: QuotaSnapshot) -> None:
+        """Preserve a denial even if the remaining samples in a batch fail."""
+        row: dict[str, Any] = {"event": "usage_policy"}
+        if snapshot.ordinary_usage_allowed is False:
+            row["ordinary_usage_allowed"] = False
+        if snapshot.spend_control_reached is True:
+            row["spend_control_reached"] = True
+        if len(row) > 1:
+            self._append(row)
+
+    def usage_policy_blocked(self) -> bool:
+        """A missing field in a later read cannot clear an explicit denial."""
+        ordinary_allowed = spend_reached = None
+        for row in reversed(self._read_rows(strict=True)):
+            if row.get("event") not in {"observation", "usage_policy"}:
+                continue
+            if ordinary_allowed is None and isinstance(value := row.get("ordinary_usage_allowed"), bool):
+                ordinary_allowed = value
+            if spend_reached is None and isinstance(value := row.get("spend_control_reached"), bool):
+                spend_reached = value
+            if ordinary_allowed is not None and spend_reached is not None:
+                break
+        return ordinary_allowed is False or spend_reached is True
 
     def record_error(self, category: str) -> None:
         safe_category = category if _SAFE_CATEGORY.fullmatch(category) else "unexpected_error"

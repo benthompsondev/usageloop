@@ -28,9 +28,10 @@ your weekly allowance.
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
-Version **1.4.0** adds six interface languages and puts Updates at the top of
-About. See the [release notes](docs/1.4.0-release-notes.md) and
-[language previews](docs/1.4.0-multilingual-validation.md).
+See [what changes in 1.4.1](docs/1.4.1-release-notes.md) for Windows runtime
+discovery, recovery after failed quota checks, and clearer Technical details.
+See the [language previews](docs/1.4.0-multilingual-validation.md) for all six
+interface languages.
 
 No API key needed. Requires Codex already installed and signed in, through the
 ChatGPT desktop app in Codex mode or the Codex CLI. Your computer must be awake and signed in,
@@ -257,6 +258,20 @@ normal install:
 ```bash
 USAGELOOP_CODEX_EXECUTABLE=/path/to/codex ./UsageLoop/UsageLoop
 ```
+
+On Windows, quit UsageLoop from the tray before launching it from the same
+PowerShell session that sets the override:
+
+```powershell
+$env:USAGELOOP_CODEX_EXECUTABLE = 'C:\Tools\My Codex\codex.exe'
+& "$env:LOCALAPPDATA\Programs\UsageLoop\UsageLoop.exe"
+```
+
+Windows discovery prefers the registered Codex desktop package or a repair
+runtime matching its package version. It then checks other desktop runtimes
+and PATH. On both platforms the explicit override takes precedence. An invalid
+override stops discovery and shows a reason in Technical details. To return to
+automatic discovery, clear the variable and restart UsageLoop.
 
 ## What UsageLoop does
 
