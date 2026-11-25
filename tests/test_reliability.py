@@ -17,6 +17,7 @@ from sentinel.classifier import Classification
 from sentinel.history import SafeHistory
 from sentinel.presentation import operational_presentation
 from sentinel.providers import CodexProvider, CompatibilityResult
+from sentinel.provider_runtime import ProviderOperationResult
 from sentinel.quota import QuotaSnapshot, QuotaWindow
 from sentinel.desktop import MainWindow
 from sentinel.transport import TransportTimeoutError
@@ -423,6 +424,80 @@ class LateProbeTests(unittest.TestCase):
                 self.assertEqual([], self.notices)
                 if stop == "off":
                     self.controller.set_automation_enabled(True)
+
+    def test_rollover_failure_cannot_be_cleared_by_cached_quota_on_poll_or_restart(self):
+        now = time.time()
+        ready = self.provider.state.with_reset(int(now - 120), verified_at=now - 240)
+        self.provider.state = replace(ready, quota_state="ANCHORED", usage_checked_at=now - 240)
+        self.controller.update_provider_state(self.provider.state)
+        self.controller.apply_compatibility("codex", self.success(), now=now)
+        self.controller.refresh_local_states()
+        self.assertEqual("ROLLOVER", self.controller.decisions(now=now)["codex"].action)
+
+        # An exception from the whole worker cannot prove it occurred before send.
+        with patch.object(self.provider, "run_action", create=True, side_effect=TransportTimeoutError()):
+            self.window._start_operation("codex", "rollover")
+            self.window.thread_pool.run_next()
+        self.window.evaluate_automation(now=now + 15)
+        self.window.thread_pool.run_next()
+        self.assertEqual([], self.window.thread_pool.workers)
+        self.assertEqual("NONE", self.controller.decisions(now=now + 15)["codex"].action)
+
+        restarted = ApplicationController([self.provider], self.controller.store)
+        restarted.start()
+        self.assertEqual("NONE", restarted.decisions(now=now + 60)["codex"].action)
+
+    def test_rollover_pre_send_timeout_only_queues_a_delayed_read_only_probe(self):
+        now = time.time()
+        ready = self.provider.state.with_reset(int(now - 120), verified_at=now - 240)
+        self.provider.state = replace(ready, quota_state="ANCHORED", usage_checked_at=now - 240)
+        self.controller.update_provider_state(self.provider.state)
+        self.controller.apply_compatibility("codex", self.success(), now=now)
+        result = ProviderOperationResult(
+            "PREFLIGHT_FAILED", self.provider.state, False,
+            preflight_failure=CompatibilityResult(
+                False, "Needs attention", "No request sent.", "runtime:1",
+                failure_category="app_server_timeout", failure_stage="quota_read",
+            ),
+        )
+
+        with patch.object(self.provider, "run_action", create=True, return_value=result):
+            with patch("sentinel.desktop.time.time", return_value=now):
+                self.window._start_operation("codex", "rollover")
+                self.window.thread_pool.run_next()
+        state = self.controller.states["codex"]
+        self.assertEqual("pre_send", state.compatibility_failure_origin)
+        self.assertEqual("quota_read", state.compatibility_failure_stage)
+        self.assertEqual("WAIT", self.controller.decisions(now=now + 15)["codex"].action)
+        restarted = ApplicationController([self.provider], self.controller.store)
+        restarted.start()
+        self.assertEqual("WAIT", restarted.decisions(now=now + 15)["codex"].action)
+        self.assertEqual("PROBE", restarted.decisions(now=now + 60)["codex"].action)
+
+        self.window.evaluate_automation(now=now + 60)
+        self.window.thread_pool.run_next()
+        self.assertEqual({"codex": "probe"}, self.window.active_operations)
+        self.assertTrue(self.controller.set_automation_enabled(False))
+        self.complete_probe(self.success())
+        self.assertEqual([], self.window.thread_pool.workers)
+        self.assertIsNone(self.controller.states["codex"].compatibility_next_retry_at)
+        self.assertEqual("NONE", self.controller.decisions(now=now + 1000)["codex"].action)
+
+    def test_pause_cancels_pending_pre_send_recovery_across_restart(self):
+        now = time.time()
+        self.controller.set_schedule_mode("daily")
+        self.controller.apply_compatibility(
+            "codex", CompatibilityResult(
+                False, "Needs attention", "No request sent.", "runtime:1",
+                failure_category="app_server_timeout", failure_stage="quota_read",
+            ), now=now, failure_origin="pre_send",
+        )
+        self.assertTrue(self.controller.pause_until_tomorrow(now=now + 1))
+        restarted = ApplicationController([self.provider], self.controller.store)
+        restarted.start()
+        self.assertIsNone(restarted.states["codex"].compatibility_next_retry_at)
+        self.assertEqual("WAIT", restarted.decisions(now=now + 60)["codex"].action)
+        self.assertEqual("NONE", restarted.decisions(now=now + 172800)["codex"].action)
 
     def test_obsolete_identity_and_newer_compatibility_state_win(self):
         self.pending()

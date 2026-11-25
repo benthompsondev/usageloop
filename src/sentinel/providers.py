@@ -35,6 +35,7 @@ class CompatibilityResult:
     detail: str
     runtime_identity: str
     failure_category: str | None = None
+    failure_stage: str | None = None
 
     @classmethod
     def from_capabilities(

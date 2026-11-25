@@ -2,9 +2,11 @@ from pathlib import Path
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from sentinel.history import SafeHistory
 from sentinel.provider_runtime import CodexOperationRunner
+from sentinel.transport import TransportTimeoutError
 
 
 def payload(reset_at, *, used=0):
@@ -80,6 +82,60 @@ class FakeSession:
 
 
 class CodexOperationRunnerTests(unittest.TestCase):
+    def test_connect_or_quota_timeout_is_definitely_before_send(self):
+        for stage in ("connect", "quota_read"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                history = SafeHistory(Path(directory) / "history.jsonl")
+                client = FakeClient([payload(18_000)])
+                session = FakeSession(client)
+                runner = CodexOperationRunner(history, session_factory=lambda: session)
+                target = runner if stage == "connect" else client
+                method = "_connect" if stage == "connect" else "read_rate_limits"
+                with patch.object(target, method, side_effect=TransportTimeoutError()):
+                    result = runner.run("rollover", runtime_identity="runtime:1")
+                self.assertEqual("PREFLIGHT_FAILED", result.outcome)
+                self.assertEqual("app_server_timeout", result.preflight_failure.failure_category)
+                self.assertEqual(stage, result.preflight_failure.failure_stage)
+                self.assertFalse(result.request_possibly_sent)
+                self.assertEqual([], history.trigger_attempts())
+                self.assertEqual((0, 0, 0), (client.model_calls, client.thread_calls, client.turn_calls))
+                self.assertEqual(stage == "quota_read", session.closed)
+
+    def test_timeout_during_verification_keeps_the_same_opportunity_guarded_after_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "history.jsonl"
+            history = SafeHistory(path)
+            observation_time = [100.0]
+
+            class TimeoutAfterSend(FakeClient):
+                def read_rate_limits(self):
+                    if self.turn_calls:
+                        raise TransportTimeoutError()
+                    self.read_calls += 1
+                    return payload(int(observation_time[0] + 18_000))
+
+            def runner(history, client):
+                def sleep(seconds):
+                    observation_time[0] += seconds
+                return CodexOperationRunner(
+                    history, session_factory=lambda: FakeSession(client),
+                    clock=lambda: observation_time[0], sleep=sleep,
+                )
+
+            client = TimeoutAfterSend([])
+            first = runner(history, client).run("bootstrap", runtime_identity="runtime:1")
+            self.assertEqual("VERIFICATION_UNAVAILABLE", first.outcome)
+            self.assertTrue(first.request_possibly_sent)
+            self.assertIsNone(first.preflight_failure)
+            self.assertEqual(1, client.turn_calls)
+
+            reopened = SafeHistory(path)
+            self.assertEqual("failed_guarded", reopened.trigger_attempts()[-1].state)
+            after_restart = TimeoutAfterSend([])
+            second = runner(reopened, after_restart).run("bootstrap", runtime_identity="runtime:1")
+            self.assertEqual("BOOTSTRAP_COOLDOWN", second.outcome)
+            self.assertEqual((0, 0), (after_restart.thread_calls, after_restart.turn_calls))
+
     def test_weekly_only_automatic_check_remains_read_only_and_calm(self):
         with tempfile.TemporaryDirectory() as directory:
             weekly_only = payload(18_000)

@@ -1423,7 +1423,11 @@ class MainWindow(QMainWindow):
             if result.state.runtime_identity != self.controller.states[provider_id].runtime_identity:
                 self.refresh_clock()
                 return
-            if action == "sync":
+            if action in {"bootstrap", "rollover"} and result.preflight_failure is not None:
+                self.controller.apply_compatibility(
+                    provider_id, result.preflight_failure, failure_origin="pre_send",
+                )
+            elif action == "sync":
                 saved = self.controller.apply_sync_result(result.state)
             else:
                 self.controller.apply_operation_result(
@@ -1458,14 +1462,17 @@ class MainWindow(QMainWindow):
                 card.set_sync_state("inconclusive")
             self.refresh_clock()
             return
-        state = self.controller.states[provider_id]
-        self.controller.update_provider_state(
-            replace(
-                state,
-                status="Needs attention",
-                detail=(tr('The check stopped safely ({0}). Nothing was retried. See Settings for detail.').format(category)),
+        if action in {"bootstrap", "rollover"}:
+            state = self.controller.states[provider_id]
+            self.controller.apply_compatibility(
+                provider_id,
+                CompatibilityResult(
+                    False, "Needs attention",
+                    "A request may have been sent. UsageLoop will not retry that attempt.",
+                    state.runtime_identity or "unavailable", failure_category=category,
+                ),
+                failure_origin="unknown_start",
             )
-        )
         self.refresh_clock()
 
     def _notify_compatibility(self, provider_id: str, title: str, message: str, *, kind: str) -> None:

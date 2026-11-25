@@ -98,26 +98,7 @@ class ApplicationController:
                 and previous.runtime_identity == state.runtime_identity
             ):
                 state = preserve_verified_boundary(previous, state)
-                if (
-                    state.usage_checked_at is not None
-                    and (
-                        previous.usage_checked_at is None
-                        or state.usage_checked_at > previous.usage_checked_at
-                        or (
-                            state.usage_checked_at == previous.usage_checked_at
-                            and (
-                                (
-                                    state.quota_state == "EXHAUSTED"
-                                    and previous.quota_state is None
-                                )
-                                or (
-                                    previous.status == "Needs attention"
-                                    and state.status != "Needs attention"
-                                )
-                            )
-                        )
-                    )
-                ):
+                if _has_new_usage(previous, state):
                     same_evidence = _provider_evidence(state) == _provider_evidence(previous)
                     state = replace(
                         state,
@@ -125,6 +106,8 @@ class ApplicationController:
                         automation_blocked_until=previous.automation_blocked_until,
                         compatibility_incident_id=previous.compatibility_incident_id,
                         compatibility_failure_category=previous.compatibility_failure_category,
+                        compatibility_failure_origin=previous.compatibility_failure_origin,
+                        compatibility_failure_stage=previous.compatibility_failure_stage,
                         compatibility_attempts=previous.compatibility_attempts,
                         compatibility_started_at=previous.compatibility_started_at,
                         compatibility_next_retry_at=previous.compatibility_next_retry_at,
@@ -330,26 +313,7 @@ class ApplicationController:
                 continue
             if current.status == "Needs attention" and not current.automation_supported:
                 continue
-            if (
-                detected.usage_checked_at is not None
-                and (
-                    current.usage_checked_at is None
-                    or detected.usage_checked_at > current.usage_checked_at
-                    or (
-                        detected.usage_checked_at == current.usage_checked_at
-                        and (
-                            (
-                                detected.quota_state == "EXHAUSTED"
-                                and current.quota_state is None
-                            )
-                            or (
-                                current.status == "Needs attention"
-                                and detected.status != "Needs attention"
-                            )
-                        )
-                    )
-                )
-            ):
+            if _has_new_usage(current, detected):
                 same_evidence = _provider_evidence(detected) == _provider_evidence(current)
                 self.states[provider_id] = replace(
                     detected,
@@ -373,6 +337,7 @@ class ApplicationController:
     def apply_compatibility(
         self, provider_id: str, result: CompatibilityResult, *,
         now: float | None = None, explicit: bool = False,
+        failure_origin: str | None = None,
     ) -> bool:
         current_time = time.time() if now is None else now
         previous_settings = self.settings
@@ -391,7 +356,10 @@ class ApplicationController:
                    if incident_id == state.compatibility_incident_id and state.compatibility_started_at is not None
                    else current_time)
         category = result.failure_category or "capability_unavailable"
-        retryable = category in TRANSIENT_COMPATIBILITY_FAILURES
+        origin = failure_origin or state.compatibility_failure_origin
+        retryable = (
+            category in TRANSIENT_COMPATIBILITY_FAILURES and origin != "unknown_start"
+        )
         next_retry = None
         if (not result.compatible and retryable and self.settings.automation_enabled
                 and not self.settings.pause_active(current_time)
@@ -424,6 +392,8 @@ class ApplicationController:
             runtime_identity=result.runtime_identity,
             compatibility_incident_id=None if result.compatible else incident_id,
             compatibility_failure_category=None if result.compatible else category,
+            compatibility_failure_origin=None if result.compatible else origin,
+            compatibility_failure_stage=None if result.compatible else result.failure_stage,
             compatibility_attempts=0 if result.compatible else attempts,
             compatibility_started_at=None if result.compatible else started,
             compatibility_next_retry_at=next_retry,
@@ -632,6 +602,25 @@ class ApplicationController:
                 print("UsageLoop: state_write_failed", file=sys.stderr)
         except Exception:
             pass
+
+
+def _has_new_usage(previous: ProviderViewState, detected: ProviderViewState) -> bool:
+    if previous.compatibility_incident_id or detected.usage_checked_at is None:
+        return False
+    if previous.usage_checked_at is None or detected.usage_checked_at > previous.usage_checked_at:
+        return True
+    if detected.usage_checked_at != previous.usage_checked_at:
+        return False
+    # Older versions saved these known, safe outcomes as stranded cached states.
+    return (
+        (detected.quota_state == "EXHAUSTED" and previous.quota_state is None)
+        or (
+            previous.status == "Needs attention"
+            and previous.last_action == "Trigger Not Sent"
+            and previous.detail == "Codex did not launch, so this opportunity remains recoverable."
+            and detected.status != "Needs attention"
+        )
+    )
 
 
 def _recovery_signature(outcome: str, state: ProviderViewState) -> str:

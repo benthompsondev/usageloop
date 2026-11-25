@@ -91,6 +91,8 @@ class ProviderViewState:
     quota_evidence: str | None = None
     compatibility_incident_id: str | None = None
     compatibility_failure_category: str | None = None
+    compatibility_failure_origin: str | None = None
+    compatibility_failure_stage: str | None = None
     compatibility_attempts: int = 0
     compatibility_started_at: float | None = None
     compatibility_next_retry_at: float | None = None
@@ -251,6 +253,8 @@ _OPTIONAL_TEXT_FIELDS = (
     "quota_evidence",
     "compatibility_incident_id",
     "compatibility_failure_category",
+    "compatibility_failure_origin",
+    "compatibility_failure_stage",
     "compatibility_blocked_opportunity",
 )
 _BOOL_FIELDS = (
