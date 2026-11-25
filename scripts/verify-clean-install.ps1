@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', '1.1.2', '1.1.3', '1.1.4', '1.2.0', '1.3.0', '1.3.2', '1.3.3', '1.3.8', '1.3.9', 'recent-chain', 'legacy-chain', 'broken-registration')]
+    [ValidateSet('fresh', '0.9.1', '1.0.0', '1.0.1', '1.0.2', '1.1.2', '1.1.3', '1.1.4', '1.2.0', '1.3.0', '1.3.2', '1.3.3', '1.3.8', '1.3.9', '1.4.0', 'recent-chain', 'legacy-chain', 'broken-registration')]
     [string]$Scenario = 'fresh',
     [string[]]$PreviousInstallers = @(),
     [switch]$SkipDesktopActivation
@@ -28,6 +28,7 @@ $shortcutDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$($
 $shortcut = Join-Path $shortcutDir "$($product.display_name).lnk"
 $legacyStartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$($product.legacy_install_folder)"
 $fixtureMarker = 'windows_install_acceptance_fixture'
+$verifyEnabledAutomation = $Scenario -in @('1.3.9', '1.4.0')
 $evidenceDir = Join-Path $repoRoot 'artifacts\install-acceptance'
 
 # This destructive acceptance test belongs on an empty disposable Windows user.
@@ -163,7 +164,7 @@ New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
 }
 '@ | Set-Content -LiteralPath $stateFile -Encoding utf8
 # Exercise an enabled preference without ever starting its real scheduler.
-if ($Scenario -eq '1.3.9') {
+if ($verifyEnabledAutomation) {
     (Get-Content -LiteralPath $stateFile -Raw).Replace('"automation_enabled": false', '"automation_enabled": true') |
         Set-Content -LiteralPath $stateFile -Encoding utf8
 }
@@ -287,7 +288,7 @@ if ($PreviousInstallers.Count -gt 0) {
 }
 
 $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
-if ($state.settings.automation_enabled -ne ($Scenario -eq '1.3.9')) { throw 'Automation setting was not preserved.' }
+if ($state.settings.automation_enabled -ne $verifyEnabledAutomation) { throw 'Automation setting was not preserved.' }
 if ($state.settings.start_with_windows -ne $true) { throw 'Startup preference was not preserved.' }
 if ($state.settings.schedule_mode -ne 'daily') { throw 'Daily schedule mode was not preserved.' }
 if ($state.settings.daily_start_hour -ne 6 -or $state.settings.daily_start_minute -ne 45) {
@@ -297,7 +298,7 @@ if (-not (Select-String -LiteralPath $historyFile -Pattern $fixtureMarker -Quiet
     throw 'Safe history was not preserved.'
 }
 
-if ($Scenario -in @('fresh', '1.3.9')) {
+if ($Scenario -eq 'fresh' -or $verifyEnabledAutomation) {
     $uiEvidence = Join-Path $evidenceDir 'packaged-ui'
     $env:QT_QPA_PLATFORM = 'offscreen'
     $acceptance = Start-Process -FilePath $canonicalExe -WindowStyle Hidden -PassThru -ArgumentList @(
@@ -315,7 +316,7 @@ if ($Scenario -in @('fresh', '1.3.9')) {
 
 # The enabled preference has already been verified byte-for-byte. Disable only
 # this synthetic fixture before the normal shortcut launch, preventing traffic.
-if ($Scenario -eq '1.3.9') {
+if ($verifyEnabledAutomation) {
     $state.settings.automation_enabled = $false
     $state | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $stateFile -Encoding utf8
     Write-Output 'Disabled the synthetic automation fixture before normal app launch.'
