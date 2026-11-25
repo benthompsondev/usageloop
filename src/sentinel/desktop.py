@@ -1377,12 +1377,18 @@ class MainWindow(QMainWindow):
         self.active_operations[provider_id] = action
         if action == "probe":
             self._probe_context[provider_id] = (state, pending, automatic)
-        operation = (
-            (lambda: _check_compatibility(provider, state.runtime_identity))
-            if action == "probe"
-            else lambda: provider.run_action(action, current_state=state)
-        )
-        worker = OperationWorker(provider_id, operation)
+            def check_if_current() -> _CheckedCompatibility | None:
+                settings = self.controller.settings
+                if automatic and (
+                    not settings.automation_enabled or settings.pause_active(time.time())
+                    or self.controller.states.get(provider_id) != pending
+                ):
+                    return None
+                return _check_compatibility(provider, state.runtime_identity)
+
+            worker = OperationWorker(provider_id, check_if_current)
+        else:
+            worker = OperationWorker(provider_id, lambda: provider.run_action(action, current_state=state))
         worker.signals.completed.connect(self._operation_completed)
         worker.signals.failed.connect(self._operation_failed)
         self.thread_pool.start(worker)
@@ -1439,21 +1445,21 @@ class MainWindow(QMainWindow):
                     if saved and result.outcome == "SYNC_UPDATED"
                     else "inconclusive"
                 )
-        else:
-            if action == "probe":
-                self._probe_context.pop(provider_id, None)
-            self.refresh_clock()
-            return
+        elif action == "probe":
+            self._restore_pending_probe(provider_id)
         self.refresh_clock()
+
+    def _restore_pending_probe(self, provider_id: str) -> None:
+        context = self._probe_context.pop(provider_id, None)
+        if context is not None:
+            prior, pending, _automatic = context
+            if self.controller.states[provider_id] == pending:
+                self.controller.update_provider_state(prior)
 
     def _operation_failed(self, provider_id: str, category: str) -> None:
         action = self.active_operations.pop(provider_id, None)
         if action == "probe":
-            context = self._probe_context.pop(provider_id, None)
-            if context is not None:
-                prior, pending, _automatic = context
-                if self.controller.states[provider_id] == pending:
-                    self.controller.update_provider_state(prior)
+            self._restore_pending_probe(provider_id)
             self.refresh_clock()
             return
         if action == "sync":

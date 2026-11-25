@@ -414,12 +414,16 @@ class LateProbeTests(unittest.TestCase):
         for stop in ("off", "pause"):
             with self.subTest(stop=stop):
                 self.pending()
-                if stop == "off":
-                    self.controller.set_automation_enabled(False)
-                else:
-                    self.controller.set_schedule_mode("daily")
-                    self.controller.pause_until_tomorrow(now=time.time())
-                self.complete_probe(self.success())
+                def finish_after_stop():
+                    if stop == "off":
+                        self.controller.set_automation_enabled(False)
+                    else:
+                        self.controller.set_schedule_mode("daily")
+                        self.controller.pause_until_tomorrow(now=time.time())
+                    return self.success()
+
+                with patch.object(self.provider, "probe", side_effect=finish_after_stop):
+                    self.window.thread_pool.run_next()
                 self.assertNotIn("codex", self.controller.settings.compatible_runtime_identities)
                 self.assertEqual([], self.notices)
                 if stop == "off":
@@ -478,7 +482,9 @@ class LateProbeTests(unittest.TestCase):
         self.window.thread_pool.run_next()
         self.assertEqual({"codex": "probe"}, self.window.active_operations)
         self.assertTrue(self.controller.set_automation_enabled(False))
-        self.complete_probe(self.success())
+        with patch.object(self.provider, "probe", return_value=self.success()) as probe:
+            self.window.thread_pool.run_next()
+        probe.assert_not_called()
         self.assertEqual([], self.window.thread_pool.workers)
         self.assertIsNone(self.controller.states["codex"].compatibility_next_retry_at)
         self.assertEqual("NONE", self.controller.decisions(now=now + 1000)["codex"].action)
