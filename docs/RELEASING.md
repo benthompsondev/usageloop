@@ -2,6 +2,11 @@
 
 ## Windows
 
+Keep the README and website download links on published files until the new
+release is live. After publishing, update the Linux archive name and checksum
+links together, and update the website's version metadata. Keep screenshot
+captions tied to the version shown.
+
 From a clean `main` checkout:
 
 ```powershell

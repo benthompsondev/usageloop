@@ -28,9 +28,10 @@ your weekly allowance.
 · [Release notes](https://github.com/benthompsondev/usageloop/releases/latest)
 · [Report a problem](https://github.com/benthompsondev/usageloop/issues/new?template=bug_report.yml)
 
-Version **1.4.0** adds six interface languages and puts Updates at the top of
-About. See the [release notes](docs/1.4.0-release-notes.md) and
-[language previews](docs/1.4.0-multilingual-validation.md).
+See [what changes in 1.4.1](docs/1.4.1-release-notes.md) for Windows runtime
+discovery, recovery after failed quota checks, and clearer Technical details.
+See the [language previews](docs/1.4.0-multilingual-validation.md) for all six
+interface languages.
 
 No API key needed. Requires Codex already installed and signed in, through the
 ChatGPT desktop app in Codex mode or the Codex CLI. Your computer must be awake and signed in,
