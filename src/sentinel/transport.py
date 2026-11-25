@@ -155,7 +155,8 @@ def _checked_version(
     # Bound repeated subprocess launches on the desktop polling path. Retry a
     # failure next minute or right away if an installer replaces the file.
     try:
-        version = read_codex_version(executable, timeout=2.0)
+        # The Windows 0.172.0 CLI took about 2.8 s to answer on a real host.
+        version = read_codex_version(executable, timeout=5.0)
     except AppServerUnavailableError as exc:
         return "", str(exc)
     if not re.fullmatch(r"codex(?:-cli)? [0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)?", version):
